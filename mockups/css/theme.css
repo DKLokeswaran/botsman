@@ -1,0 +1,62 @@
+/* Shared color tokens. System theme unless data-theme is set. */
+:root {
+  color-scheme: light;
+  --bg: #ffffff;
+  --bg-2: #f6f6f6;
+  --bg-3: #ececec;
+  --bg-user: #f2f2f2;
+  --bg-composer: #ffffff;
+  --fg: #111111;
+  --fg-2: #4a4a4a;
+  --fg-3: #6a6a6a;
+  --line: #e6e6e6;
+  --line-2: #cfcfcf;
+  --fill: #111111;
+  --fill-fg: #ffffff;
+  --shadow: 0 16px 48px rgba(0, 0, 0, 0.12);
+  --font: "Segoe UI", system-ui, -apple-system, Roboto, "Helvetica Neue", Arial, sans-serif;
+  --mono: "Cascadia Code", "Cascadia Mono", "Segoe UI Mono", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  --sidebar: 300px;
+  --measure: 720px;
+}
+
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --bg: #000000;
+  --bg-2: #141414;
+  --bg-3: #1c1c1c;
+  --bg-user: #1a1a1a;
+  --bg-composer: #141414;
+  --fg: #f3f3f3;
+  --fg-2: #c6c6c6;
+  --fg-3: #9a9a9a;
+  --line: #262626;
+  --line-2: #3a3a3a;
+  --fill: #f3f3f3;
+  --fill-fg: #0a0a0a;
+  --shadow: 0 16px 48px rgba(0, 0, 0, 0.45);
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    color-scheme: dark;
+    --bg: #000000;
+    --bg-2: #141414;
+    --bg-3: #1c1c1c;
+    --bg-user: #1a1a1a;
+    --bg-composer: #141414;
+    --fg: #f3f3f3;
+    --fg-2: #c6c6c6;
+    --fg-3: #9a9a9a;
+    --line: #262626;
+    --line-2: #3a3a3a;
+    --fill: #f3f3f3;
+    --fill-fg: #0a0a0a;
+    --shadow: 0 16px 48px rgba(0, 0, 0, 0.45);
+  }
+}
+
+::selection {
+  background: var(--fill);
+  color: var(--fill-fg);
+}
