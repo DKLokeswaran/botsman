@@ -69,7 +69,7 @@ Typing `/` opens the command menu. It filters on the command name and the hint, 
 - Archived chats sit behind Show archived on that bot.
 - Reading width is about 720 pixels. The phone has an Android status bar. The desktop window has a caption bar.
 - Model names in the picker are samples.
-- Zoetrik is the only look. Dark matches the spec. Light uses the Drafting Table scheme. System follows the device.
+- Zoetrik is the only look. Dark matches the spec. Light uses the Drafting Table scheme, with the orange darkened to `#b73208` so the small uppercase labels stay readable on the paper background. System follows the device.
 
 ## Changes after the second review
 
@@ -95,4 +95,4 @@ Typing `/` opens the command menu. It filters on the command name and the hint, 
 13. Is a cost line under every reply too noisy?
 14. Are archived chats in the right place (behind Show archived, still inside that bot)?
 15. Steer adds a note and does not stop the turn. Stop ends it. A queued message waits. Is that the right trio?
-16. Is the Drafting Table light variant acceptable beside the Zoetrik dark spec, or should Light be a closer invert of the dark tokens?
+16. The light accent is a darker orange than the Drafting Table swatch, so 12px labels clear the paper background. Is that acceptable?
