@@ -1,0 +1,132 @@
+/* Zoetrik component treatment. Tokens live in theme.css. */
+
+body { letter-spacing: 0.01em; }
+.column { background: var(--bg-2); }
+.sidebar,
+.login,
+.list-page { background: var(--bg); }
+.wordmark,
+.brand,
+h1,
+h2,
+.bot-name,
+.who,
+.topbar-text strong,
+.login-card h1 {
+  font-family: var(--font-display);
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.01em;
+  color: var(--bright);
+}
+.wordmark,
+.brand { letter-spacing: 0.12em; font-weight: 500; }
+.side-label,
+.group-label,
+.kicker,
+.lbl,
+.field label,
+.primary,
+.ghost,
+.choice,
+.text-btn,
+.model-chip,
+.seg button,
+.foot-btn,
+.phone-links button,
+.slash-btn,
+.slash button b,
+.handoff .route {
+  font-family: var(--font-label);
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  font-size: 12px;
+}
+.side-label,
+.group-label,
+.kicker { color: var(--accent); font-size: 12px; }
+.msg-body,
+.lede,
+.bot-sub,
+.meta,
+p { color: var(--fg-2); }
+.bubble { background: var(--bg); color: var(--fg); border: 1px solid var(--hair); }
+.bubble .msg-body,
+.bubble p { color: var(--fg); }
+.primary,
+.ghost,
+.choice,
+.opt,
+.send,
+.day,
+.seg button.on {
+  background: var(--btn);
+  color: var(--btn-fg);
+  border: 1px solid var(--hair);
+  box-shadow: none;
+}
+.opt.on,
+.day.on,
+.seg button.on {
+  background: var(--fg);
+  color: var(--bg);
+  border-color: var(--fg);
+}
+.text-btn { background: transparent; border: 0; color: var(--fg); }
+.card,
+.r-card,
+.routine-card,
+.composer-box,
+.modal,
+.pop,
+.code,
+.diff,
+.todos,
+.handoff-msg {
+  background: var(--bg);
+  border: 1px solid var(--hair);
+  box-shadow: none;
+}
+.card.alert { border-color: var(--accent); }
+.bars,
+.code pre,
+.cmd {
+  background: #000;
+  color: #71ff19;
+  border: 1px solid var(--hair);
+  padding: 12px;
+}
+.bar { background: #71ff19; border-radius: 0; }
+.meter i { background: var(--mint); }
+.diff-line.add { color: var(--green); background: color-mix(in srgb, var(--green) 12%, transparent); }
+.diff-line.del { color: var(--error); background: color-mix(in srgb, var(--error) 12%, transparent); }
+.err { color: var(--error); }
+.anchor.flash {
+  outline: 1px solid var(--accent);
+  background: color-mix(in srgb, var(--accent) 8%, transparent);
+}
+.status { border-bottom: 1px solid var(--hair); }
+.titlebar {
+  border-bottom: 1px solid var(--hair);
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  font-family: var(--font-label);
+}
+.handoff { background: transparent; border: 0; }
+.handoff .route { color: var(--fg); letter-spacing: 0.08em; }
+.note-card { border-color: var(--hair); background: var(--bg); }
+.note-card b {
+  font-family: var(--font-label);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  font-size: 12px;
+}
+@media (prefers-reduced-motion: no-preference) {
+  .primary:hover,
+  .ghost:hover,
+  .choice:hover,
+  .send:hover {
+    background: color-mix(in srgb, var(--btn) 88%, var(--fg));
+  }
+}

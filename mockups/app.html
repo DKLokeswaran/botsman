@@ -1,0 +1,32 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Hermes Bots</title>
+  <script>
+    (function () {
+      try {
+        localStorage.removeItem("hb-flavor");
+        document.documentElement.removeAttribute("data-flavor");
+        var t = localStorage.getItem("hb-theme");
+        if (t === "light" || t === "dark") document.documentElement.setAttribute("data-theme", t);
+      } catch (e) {}
+      var q = new URLSearchParams(location.search);
+      var d = q.get("device");
+      if (d !== "phone" && d !== "desktop") d = window.innerWidth < 820 ? "phone" : "desktop";
+      document.documentElement.setAttribute("data-device", d);
+    })();
+  </script>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;500;700;900&family=Tomorrow:wght@500;600&family=Inter:wght@400;500;600&family=Fragment+Mono&display=swap">
+  <link rel="stylesheet" href="css/theme.css">
+  <link rel="stylesheet" href="css/app.css">
+  <link rel="stylesheet" href="css/flavors.css">
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%23111'/%3E%3Ccircle cx='16' cy='16' r='5' fill='none' stroke='%23fff' stroke-width='2'/%3E%3C/svg%3E">
+</head>
+<body>
+  <div id="app"></div>
+  <script src="js/data.js"></script>
+  <script src="js/app.js"></script>
+</body>
+</html>
