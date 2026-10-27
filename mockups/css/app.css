@@ -180,6 +180,7 @@ input:focus-visible, textarea:focus-visible, select:focus-visible { outline: non
 .banner .text-btn { margin-left: auto; }
 
 .thread { max-width: var(--measure); margin: 0 auto; padding: 16px 16px 8px; }
+.anchor { display: block; width: 100%; min-width: 0; }
 .msg { margin: 0 0 20px; }
 .msg-user { display: flex; flex-direction: column; align-items: flex-end; }
 .bubble {
@@ -203,7 +204,51 @@ input:focus-visible, textarea:focus-visible, select:focus-visible { outline: non
   padding: 12px 14px;
 }
 .card.alert { border: 2px solid var(--fg); }
-.b2b { border-left: 2px solid var(--fg); padding-left: 12px; }
+.handoff-msg {
+  display: block;
+  width: 100%;
+  min-width: 0;
+  margin: 0 0 16px;
+  padding: 8px 12px;
+  border-radius: var(--r-card);
+}
+.handoff {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  width: 100%;
+  min-width: 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  text-align: left;
+  white-space: nowrap;
+}
+.handoff .route {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.handoff .when {
+  flex: none;
+  color: var(--fg-3);
+  font-family: var(--font);
+  font-size: 12px;
+  font-weight: 400;
+  letter-spacing: 0;
+  text-transform: none;
+}
+.handoff-body {
+  margin-top: 6px;
+  color: var(--fg-2);
+  font-size: 14px;
+  line-height: 1.5;
+  white-space: normal;
+  overflow-wrap: break-word;
+}
 
 .quote {
   border-left: 2px solid var(--line-2);
@@ -286,7 +331,7 @@ tr:last-child td { border-bottom: 0; }
   display: flex; gap: 10px; align-items: center;
   color: var(--fg-3); font-size: 12px; margin-top: 8px;
 }
-.sys { text-align: center; color: var(--fg-3); font-size: 12px; margin: 8px 0 16px; }
+.sys { text-align: center; color: var(--fg-3); font-size: 12px; margin: 8px 0 16px; overflow-wrap: break-word; }
 
 .dock { flex: none; padding: 8px 16px 14px; }
 .dock-inner { max-width: var(--measure); margin: 0 auto; }
@@ -320,7 +365,10 @@ tr:last-child td { border-bottom: 0; }
 .spacer { flex: 1; }
 .model-chip {
   border-radius: var(--r-pill); padding: 6px 10px; background: var(--bg-2); font-size: 13px; color: var(--fg);
+  max-width: min(220px, 42%);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex: none;
 }
+.slash-btn { min-width: 34px; flex: none; }
 .send, .stop {
   width: 34px; height: 34px; border-radius: var(--r-av);
   background: var(--fill); color: var(--fill-fg);
@@ -335,12 +383,19 @@ tr:last-child td { border-bottom: 0; }
   margin-bottom: 8px;
   overflow: hidden;
 }
+.slash { max-height: 280px; overflow: auto; }
 .slash button, .pop button.row {
-  display: flex; width: 100%; text-align: left; gap: 8px;
-  padding: 8px 12px; font-size: 14px;
+  display: flex; width: 100%; text-align: left; gap: 12px; align-items: baseline;
+  padding: 8px 12px; font-size: 14px; min-width: 0;
 }
+.slash button b { flex: none; }
+.slash button span {
+  margin-left: auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  color: var(--fg-3); font-family: var(--font); font-weight: 400; letter-spacing: 0; text-transform: none; font-size: 13px;
+}
+.slash.empty { padding: 8px 12px; color: var(--fg-3); font-size: 13px; }
 .slash button.on, .slash button:hover, .pop button.row:hover { background: var(--bg-2); }
-.slash button span, .hint { color: var(--fg-3); }
+.hint { color: var(--fg-3); }
 .pop { padding: 8px; max-height: min(480px, calc(100dvh - 200px)); overflow: auto; }
 .pop button.row { padding: 6px 10px; }
 .pop .seg { margin: 4px 4px 8px; }

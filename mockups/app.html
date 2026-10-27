@@ -7,10 +7,10 @@
   <script>
     (function () {
       try {
+        localStorage.removeItem("hb-flavor");
+        document.documentElement.removeAttribute("data-flavor");
         var t = localStorage.getItem("hb-theme");
         if (t === "light" || t === "dark") document.documentElement.setAttribute("data-theme", t);
-        var f = localStorage.getItem("hb-flavor");
-        document.documentElement.setAttribute("data-flavor", f === "honest" || f === "zoetrik" ? f : "original");
       } catch (e) {}
       var q = new URLSearchParams(location.search);
       var d = q.get("device");
@@ -18,7 +18,7 @@
       document.documentElement.setAttribute("data-device", d);
     })();
   </script>
-  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Geist+Mono:wght@300..700&family=Orbitron:wght@400;500;700;900&family=Tomorrow:wght@500;600&family=Inter:wght@400;500;600&family=Fragment+Mono&display=swap">
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;500;700;900&family=Tomorrow:wght@500;600&family=Inter:wght@400;500;600&family=Fragment+Mono&display=swap">
   <link rel="stylesheet" href="css/theme.css">
   <link rel="stylesheet" href="css/app.css">
   <link rel="stylesheet" href="css/flavors.css">

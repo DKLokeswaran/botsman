@@ -60,7 +60,8 @@
     attachments: [],
     replyTo: null,
     steer: "",
-    openHandoff: {},
+    openHandoff: { "j-hand-night": true, "n-hand": true },
+    slashIndex: 0,
     highlight: null,
     highlightBot: null,
     openThink: {},
@@ -253,9 +254,6 @@
     if (t === "light" || t === "dark") document.documentElement.setAttribute("data-theme", t);
     else document.documentElement.removeAttribute("data-theme");
   }
-  function applyFlavor(f) {
-    document.documentElement.setAttribute("data-flavor", f === "honest" || f === "zoetrik" ? f : "original");
-  }
   function parse() {
     const raw = (location.hash || "#").replace(/^#/, "");
     const cut = raw.split("?");
@@ -286,6 +284,11 @@
     state.rowMenu = null;
     state.reconnect = view === "reconnect" ? "down" : null;
     state.composer = "";
+    state.slashIndex = 0;
+    if (view === "slash") {
+      state.composer = "/";
+      state.focusId = "composer";
+    }
     if (view === "attach") {
       state.attachments = [
         { id: "seed-img", kind: "image", name: "Pasted image", src: HB.photo },
@@ -441,22 +444,19 @@
   }
   function handoffMessage(m) {
     const open = !!state.openHandoff[m.id];
-    const routeName = botName(m.from) + " → " + botName(m.to);
-    return '<div class="msg msg-assistant"><div>' +
-      '<button type="button" class="handoff" data-act="handoff" data-id="' + m.id + '">' +
-      '<span class="route">' + esc(routeName) + " <span>" + esc(m.time || "") + "</span></span>" +
-      '<span class="snip">' + (open ? "Hide" : esc(snippet(m.text))) + "</span></button>" +
+    return '<div class="handoff-msg">' +
+      '<button type="button" class="handoff" data-act="handoff" data-id="' + m.id + '" aria-expanded="' + (open ? "true" : "false") + '">' +
+      '<span class="route">' + esc(botName(m.from)) + " → " + esc(botName(m.to)) + "</span>" +
+      '<span class="when">' + esc(m.time || "") + "</span></button>" +
       (open ? '<div class="handoff-body">' + esc(m.text) + "</div>" : "") +
-      "</div></div>";
+      "</div>";
   }
   function roomBotMessage(m) {
-    const between = m.to && m.to !== "you";
-    const name = between ? botName(m.who) + " → " + botName(m.to) : botName(m.who);
+    let text = m.text || "";
+    if (m.to && m.to !== "you" && text.indexOf("@") !== 0) text = "@" + botName(m.to) + " " + text;
     return '<div class="msg msg-assistant">' + avatar(m.who, { sm: true }) +
-      '<div class="' + (between ? "b2b" : "") + '">' +
-      (between ? '<div class="kicker">Between bots</div>' : "") +
-      '<div class="who">' + esc(name) + " <span>" + esc(m.time || "") + "</span></div>" +
-      paras(m.text) + "</div></div>";
+      "<div><div class=\"who\">" + esc(botName(m.who)) + " <span>" + esc(m.time || "") + "</span></div>" +
+      paras(text) + "</div></div>";
   }
   function assistantMessage(m) {
     const open = !!(m.thinking && thinkOpen(m));
@@ -582,6 +582,35 @@
     }).join("") + "</div>";
   }
   function canSend() { return !!(state.composer.trim() || state.attachments.length); }
+  function slashQuery() {
+    const line = (state.composer || "").split("\n")[0];
+    if (line.charAt(0) !== "/") return null;
+    if (/\s/.test(line)) return null;
+    return line.slice(1).toLowerCase();
+  }
+  function slashMatches() {
+    const q = slashQuery();
+    if (q === null) return [];
+    return (HB.commands || []).filter(function (c) {
+      return c.name.toLowerCase().indexOf(q) === 0 || (c.hint || "").toLowerCase().indexOf(q) >= 0;
+    });
+  }
+  function slashHtml() {
+    const q = slashQuery();
+    if (q === null) return "";
+    const list = slashMatches();
+    if (!list.length) return '<div class="slash empty">No matching command</div>';
+    if (state.slashIndex >= list.length) state.slashIndex = list.length - 1;
+    if (state.slashIndex < 0) state.slashIndex = 0;
+    return '<div class="slash" role="listbox">' + list.map(function (c, i) {
+      return '<button type="button" role="option" class="' + (i === state.slashIndex ? "on" : "") + '" data-act="slash" data-id="' + esc(c.name) + '">' +
+        "<b>/" + esc(c.name) + "</b><span>" + esc(c.hint) + "</span></button>";
+    }).join("") + "</div>";
+  }
+  function paintSlash() {
+    const host = document.getElementById("slash-host");
+    if (host) host.innerHTML = slashHtml();
+  }
   function dock(bot, room) {
     const working = bot && bot.working;
     const reply = state.replyTo ? findMessage(state.replyTo) : null;
@@ -598,9 +627,11 @@
       '<button type="button" class="ghost" id="steer-btn" data-act="steer"' + (state.steer.trim() ? "" : " disabled") + ">Steer</button></div>" : "";
     return '<div class="dock"><div class="dock-inner">' + replyHtml + attachRow() + (bot ? queueRow(bot) : "") + steer +
       (state.modelOpen && bot ? modelPop(bot) : "") +
+      '<div id="slash-host">' + slashHtml() + "</div>" +
       '<div class="composer-box"><textarea id="composer" rows="1" placeholder="' + esc(placeholder) + '" autocomplete="off">' + esc(state.composer) + "</textarea>" +
       '<div class="composer-tools"><button type="button" class="icon-btn" data-act="pick-file" aria-label="Attach file">' + svg(IC.clip) + "</button>" +
       '<button type="button" class="icon-btn" data-act="paste-sample" aria-label="Paste image">' + svg(IC.image) + "</button>" +
+      '<button type="button" class="icon-btn slash-btn" data-act="slash-ins" aria-label="Commands">/</button>' +
       '<span class="spacer"></span>' +
       modelBtn + sendBtn + "</div></div>" +
       '<input id="file-in" type="file" multiple hidden accept="image/*,.pdf,.txt,.md,.json,.csv"></div></div>';
@@ -854,13 +885,9 @@
   }
   function settingsView() {
     const theme = localStorage.getItem("hb-theme") || "system";
-    const flavor = localStorage.getItem("hb-flavor") || "original";
     const seg = ["system", "light", "dark"].map(function (k) {
       const label = k === "system" ? "System" : k === "light" ? "Light" : "Dark";
       return '<button type="button" class="' + (theme === k ? "on" : "") + '" data-act="theme" data-id="' + k + '">' + label + "</button>";
-    }).join("");
-    const flavors = [["original", "Original"], ["honest", "Honest Terminal"], ["zoetrik", "Zoetrik"]].map(function (pair) {
-      return '<button type="button" class="' + (flavor === pair[0] ? "on" : "") + '" data-act="flavor" data-id="' + pair[0] + '">' + pair[1] + "</button>";
     }).join("");
     const rows = state.servers.map(function (s) {
       const cur = s.id === state.serverId;
@@ -875,7 +902,7 @@
       '<div class="field"><label for="sv-port">Port</label><input id="sv-port" data-field="add:port" value="' + esc(add.port) + '" inputmode="numeric"></div>' +
       (add.error ? '<div class="err">' + esc(add.error) + "</div>" : "") +
       '<button type="button" class="primary" data-act="add-server">Add server</button>' +
-      '<div class="group-label">Appearance</div><div class="seg" style="margin-bottom:8px">' + flavors + '</div><div class="seg" style="margin-bottom:12px">' + seg + "</div>" +
+      '<div class="group-label">Mode</div><div class="seg" style="margin-bottom:12px">' + seg + "</div>" +
       '<div class="set-row"><div><b>Notifications</b><div class="sub">Phone: UnifiedPush via ntfy on devbox. Windows: this app\'s tray.</div></div><button type="button" class="text-btn" data-act="nav" data-to="#/notifications">Open</button></div>' +
       '<div class="set-row"><div><b>Hermes Bots ' + esc(version()) + '</b><div class="sub">' + (state.installed ? "Up to date" : "Update available · " + HB.nextVersion) + "</div></div>" +
       (state.installed ? "" : '<button type="button" class="ghost" data-act="nav" data-to="#/update">View</button>') + "</div>" +
@@ -953,10 +980,6 @@
     if (device() === "phone") return main;
     return '<div class="shell">' + sidebar() + main + "</div>";
   }
-  function tmuxBar() {
-    const win = route.parts[1] || (route.parts[0] || "junior");
-    return '<div class="tmux-bar"><span>[hermes]</span><span>0:' + esc(win) + '*</span><span>' + esc(currentServer().name) + '</span><span style="margin-left:auto">' + nowTime() + " · 27-Oct-26</span></div>";
-  }
   function chrome() {
     if (device() === "desktop") {
       return '<div class="titlebar"><span>Hermes Bots</span><span class="caption"><span>' + svg(IC.min, 14) + "</span><span>" + svg(IC.max, 12) + "</span><span>" + svg(IC.close, 14) + "</span></span></div>";
@@ -1013,7 +1036,7 @@
     const focus = opt.focus || state.focusId;
     const focusAt = state.focusAt;
     document.getElementById("app").innerHTML = '<div class="app">' + chrome() + '<div class="fill">' + inner() + "</div>" +
-      tmuxBar() + (route.parts[0] === "update" ? updateModal() : "") + "</div>";
+      (route.parts[0] === "update" ? updateModal() : "") + "</div>";
     applyScroll(opt, saved);
     if (focus) {
       const el = document.getElementById(focus);
@@ -1172,7 +1195,54 @@
       render({ scroll: "top" });
     } else location.hash = next;
   }
+  function activeLog() {
+    const bot = activeBot();
+    if (bot) return currentThread(bot.id);
+    const room = activeRoom();
+    if (!room) return null;
+    roomLogs[room.id] = roomLogs[room.id] || [];
+    return roomLogs[room.id];
+  }
+  function runCommand(name) {
+    const list = activeLog();
+    if (!list) return;
+    const bot = activeBot();
+    state.composer = "";
+    state.slashIndex = 0;
+    if (name === "compress") {
+      list.push({ id: uid(), role: "system", text: "Earlier messages were summarized." });
+    } else if (name === "clear") {
+      list.push({ id: uid(), role: "system", text: "Context cleared. The transcript stays on screen." });
+    } else if (name === "skills") {
+      list.push({ id: uid(), role: "system", text: "Skills on for this bot: calendar, github, memory." });
+    } else if (name === "personality") {
+      const who = bot ? bot.name : (activeRoom() ? activeRoom().name : "This chat");
+      list.push({ id: uid(), role: "system", text: who + " speaks briefly, names the next step, and does not pad." });
+    } else if (name === "usage") {
+      const tokens = list.reduce(function (s, m) { return s + ((m.usage && m.usage.tokens) || 0); }, 0);
+      list.push({ id: uid(), role: "system", text: "This chat · " + toks(tokens) + " · " + money(chatCost(list)) + "." });
+    } else if (name === "undo") {
+      let i = list.length - 1;
+      while (i >= 0 && list[i].role === "system") i -= 1;
+      if (i >= 0 && (list[i].role === "assistant" || list[i].role === "user")) {
+        const role = list[i].role;
+        list.splice(i, 1);
+        if (role === "assistant" && i - 1 >= 0 && list[i - 1].role === "user") list.splice(i - 1, 1);
+        list.push({ id: uid(), role: "system", text: "Undid the last turn." });
+      } else {
+        list.push({ id: uid(), role: "system", text: "Nothing to undo." });
+      }
+    } else if (name === "help") {
+      list.push({ id: uid(), role: "system", text: "Commands: " + (HB.commands || []).map(function (c) { return "/" + c.name; }).join(", ") + "." });
+    }
+    render({ scroll: "bottom", focus: "composer" });
+  }
   function enterComposer() {
+    const matches = slashMatches();
+    if (slashQuery() !== null && matches.length) {
+      runCommand(matches[state.slashIndex].name);
+      return;
+    }
     const room = activeRoom();
     if (room) doSendRoom(room);
     else if (activeBot()) doSend(activeBot());
@@ -1248,7 +1318,9 @@
   }
   function onComposer(el) {
     state.composer = el.value;
+    state.slashIndex = 0;
     syncSend();
+    paintSlash();
     el.style.height = "auto";
     el.style.height = Math.min(el.scrollHeight, 140) + "px";
   }
@@ -1282,6 +1354,20 @@
       render({ preserve: true });
     },
     summarize: function (el) { summarize(el.dataset.id); },
+    slash: function (el) { runCommand(el.dataset.id); },
+    "slash-ins": function () {
+      const el = document.getElementById("composer");
+      if (!el) return;
+      if ((state.composer || "").charAt(0) !== "/") {
+        state.composer = "/" + (state.composer || "");
+        el.value = state.composer;
+        try { el.setSelectionRange(1, 1); } catch (e) { /* ignore */ }
+      }
+      state.slashIndex = 0;
+      paintSlash();
+      syncSend();
+      try { el.focus({ preventScroll: true }); } catch (e2) { el.focus(); }
+    },
     menu: function () { state.menu = !state.menu; render({ preserve: true }); },
     think: function (el) {
       const m = findMessage(el.dataset.id);
@@ -1471,12 +1557,6 @@
       applyTheme(t);
       render({ preserve: true });
     },
-    flavor: function (el) {
-      const f = el.dataset.id;
-      try { localStorage.setItem("hb-flavor", f); } catch (e) { /* ignore */ }
-      applyFlavor(f);
-      render({ preserve: true });
-    },
     "use-server": function (el) { location.hash = "#/login?reason=switch&server=" + el.dataset.id; },
     "add-server": function () {
       const a = state.addServer;
@@ -1598,6 +1678,25 @@
     app.addEventListener("keydown", function (e) {
       const t = e.target;
       if (t.id === "composer") {
+        const menu = slashQuery() !== null && slashMatches().length;
+        if (menu && (e.key === "ArrowDown" || e.key === "ArrowUp")) {
+          e.preventDefault();
+          const n = slashMatches().length;
+          state.slashIndex = e.key === "ArrowDown" ? (state.slashIndex + 1) % n : (state.slashIndex - 1 + n) % n;
+          paintSlash();
+          const on = document.querySelector("#slash-host button.on");
+          if (on && on.scrollIntoView) on.scrollIntoView({ block: "nearest" });
+          return;
+        }
+        if (e.key === "Escape" && slashQuery() !== null) {
+          e.preventDefault();
+          state.composer = "";
+          state.slashIndex = 0;
+          t.value = "";
+          paintSlash();
+          syncSend();
+          return;
+        }
         if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); enterComposer(); }
         return;
       }
@@ -1621,8 +1720,7 @@
     });
     window.addEventListener("storage", function (e) {
       if (e.key === "hb-theme") applyTheme(e.newValue || "system");
-      if (e.key === "hb-flavor") applyFlavor(e.newValue || "original");
-      if ((e.key === "hb-theme" || e.key === "hb-flavor") && ready) render({ preserve: true });
+      if (e.key === "hb-theme" && ready) render({ preserve: true });
     });
   }
 
@@ -1649,8 +1747,9 @@
   });
 
   function boot() {
+    try { localStorage.removeItem("hb-flavor"); } catch (e) { /* ignore */ }
+    document.documentElement.removeAttribute("data-flavor");
     applyTheme(localStorage.getItem("hb-theme") || "system");
-    applyFlavor(localStorage.getItem("hb-flavor") || "original");
     if (!location.hash) location.hash = homeHash();
     route = parse();
     onRoute();

@@ -5,6 +5,15 @@ const HB = {
   nextVersion: "0.2.0",
   models: ["Haiku 4.5", "Sonnet 4.5", "Opus 4.5", "GPT-5", "Gemini 2.5 Pro"],
   efforts: ["Low", "Medium", "High", "Extra high"],
+  commands: [
+    { name: "compress", hint: "Summarize this chat into the context" },
+    { name: "clear", hint: "Clear this chat's context" },
+    { name: "skills", hint: "Skills this bot can use" },
+    { name: "personality", hint: "How this bot speaks" },
+    { name: "usage", hint: "Tokens and cost for this chat" },
+    { name: "undo", hint: "Undo the last turn" },
+    { name: "help", hint: "Commands in this chat" }
+  ],
   marks: ["junior", "atlas", "ledger", "quartermaster", "scribe", "nightwatch", "diamond", "waves"],
   bots: [
     {
@@ -110,7 +119,7 @@ const HB = {
       id: "standup",
       name: "Standup",
       members: ["junior", "atlas", "nightwatch"],
-      preview: "Nightwatch → Junior: Run 1842 died in the migrate step."
+      preview: "Nightwatch: @Junior Run 1842 died in the migrate step."
     },
     {
       id: "house",

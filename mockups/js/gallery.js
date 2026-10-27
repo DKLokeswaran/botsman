@@ -11,7 +11,7 @@
     {
       id: "chat",
       title: "Bot chat",
-      blurb: "Junior's main chat. A routine posted the morning briefing, and the reply under it quotes that message. Older runs of that routine are earlier in the same chat. A handoff to Ledger or Nightwatch is a short note you can open. Scroll for the table, the todo list, the file diff, and a code block with Copy. Finished replies show tokens, cost, and Retry. Thinking and tool lines are collapsed; tap one to open it. Summarize is in the header.",
+      blurb: "Junior's main chat. A routine posted the morning briefing, and the reply under it quotes that message. Older runs of that routine are earlier in the same chat. A private handoff is a full-width note: one line for who sent it, who it is for, and the time. Open it and the note wraps. Scroll for the table, the todo list, the file diff, and a code block with Copy. Finished replies show tokens, cost, and Retry. Thinking and tool lines are collapsed; tap one to open it. Summarize is in the header.",
       phone: "#/chat/junior",
       desk: "#/chat/junior"
     },
@@ -35,6 +35,13 @@
       blurb: "Open from the chip on the composer. Pick a model and a reasoning effort. This chat changes only the open thread. Bot default changes the bot everywhere a chat has not picked its own.",
       phone: "#/chat/junior?view=model",
       desk: "#/chat/junior?view=model"
+    },
+    {
+      id: "slash",
+      title: "Slash commands",
+      blurb: "Type / in the message box, or tap the / button. The menu filters as you type and moves with the arrow keys. Enter runs the highlighted command. These are Hermes commands without their own control: compress, clear, undo, skills, personality, usage, and help. Model, Stop, routines, and a new chat stay as buttons. Summarize in the header does the same thing as /compress.",
+      phone: "#/chat/junior?view=slash",
+      desk: "#/chat/junior?view=slash"
     },
     {
       id: "reconnect",
@@ -102,7 +109,7 @@
     {
       id: "room",
       title: "Group room",
-      blurb: "Standup is one shared channel. Lines between bots stay in the room and are marked Between bots. A line to you has only the speaking bot. A private handoff that never entered a room is not here; it shows up in each bot's own chat. House is the other room.",
+      blurb: "Standup is one shared channel. A bot talking to another bot is a normal message, with an @mention. A private handoff that never entered a room is not here; it shows up in each bot's own chat. House is the other room.",
       phone: "#/room/standup",
       desk: "#/room/standup"
     },
@@ -123,7 +130,7 @@
     {
       id: "settings",
       title: "Servers",
-      blurb: "Saved Hermes servers. Add one, or use another. Switching opens the sign-in screen with the username already filled in. Appearance picks Original, Honest Terminal, or Zoetrik, and System, Light, or Dark.",
+      blurb: "Saved Hermes servers. Add one, or use another. Switching opens the sign-in screen with the username already filled in. Mode is System, Light, or Dark.",
       phone: "#/settings",
       desk: "#/settings"
     },
@@ -155,13 +162,6 @@
     else document.documentElement.removeAttribute("data-theme");
     document.querySelectorAll("#theme button").forEach(function (btn) {
       btn.setAttribute("aria-pressed", btn.dataset.theme === (t || "system") ? "true" : "false");
-    });
-  }
-  function applyFlavor(f) {
-    const name = f === "honest" || f === "zoetrik" ? f : "original";
-    document.documentElement.setAttribute("data-flavor", name);
-    document.querySelectorAll("#flavor button").forEach(function (btn) {
-      btn.setAttribute("aria-pressed", btn.dataset.flavor === name ? "true" : "false");
     });
   }
 
@@ -209,20 +209,13 @@
     try { localStorage.setItem("hb-theme", t); } catch (err) { /* ignore */ }
     applyTheme(t);
   });
-  document.getElementById("flavor").addEventListener("click", function (e) {
-    const btn = e.target.closest("button");
-    if (!btn) return;
-    const f = btn.dataset.flavor;
-    try { localStorage.setItem("hb-flavor", f); } catch (err) { /* ignore */ }
-    applyFlavor(f);
-  });
   window.addEventListener("storage", function (e) {
     if (e.key === "hb-theme") applyTheme(e.newValue || "system");
-    if (e.key === "hb-flavor") applyFlavor(e.newValue || "original");
   });
   window.addEventListener("resize", fit);
+  try { localStorage.removeItem("hb-flavor"); } catch (err) { /* ignore */ }
+  document.documentElement.removeAttribute("data-flavor");
   applyTheme(localStorage.getItem("hb-theme") || "system");
-  applyFlavor(localStorage.getItem("hb-flavor") || "original");
   fit();
   window.addEventListener("load", fit);
 })();
