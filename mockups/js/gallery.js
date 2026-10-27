@@ -11,7 +11,7 @@
     {
       id: "chat",
       title: "Bot chat",
-      blurb: "Junior's main chat. A routine posted the morning briefing, and the reply under it quotes that message. Scroll the thread for the table, the todo list, the file diff, and a code block with Copy. Finished replies show tokens, cost, and Retry. Thinking and tool lines are collapsed; tap one to open it.",
+      blurb: "Junior's main chat. A routine posted the morning briefing, and the reply under it quotes that message. Older runs of that routine are earlier in the same chat. A handoff to Ledger or Nightwatch is a short note you can open. Scroll for the table, the todo list, the file diff, and a code block with Copy. Finished replies show tokens, cost, and Retry. Thinking and tool lines are collapsed; tap one to open it. Summarize is in the header.",
       phone: "#/chat/junior",
       desk: "#/chat/junior"
     },
@@ -21,13 +21,6 @@
       blurb: "Nightwatch is mid-reply. Thinking stays open while it streams. Each tool is one line; the one still running is marked. Stop ends the turn. Steer adds a note without stopping. The queued line waits until this turn finishes. Type in the box and it offers Queue.",
       phone: "#/chat/nightwatch",
       desk: "#/chat/nightwatch"
-    },
-    {
-      id: "slash",
-      title: "Slash commands",
-      blurb: "The command list is open above the box. Type to filter. Click a command, or press Enter. Arrow keys move the highlight.",
-      phone: "#/chat/junior?view=slash",
-      desk: "#/chat/junior?view=slash"
     },
     {
       id: "attach",
@@ -88,7 +81,7 @@
     {
       id: "routine-new",
       title: "New routine",
-      blurb: "A template fills the form. The schedule is a picker: daily, weekdays, weekly, or once. Advanced: cron reveals the expression that will be saved. Delivery is this bot's chat, ntfy, or both.",
+      blurb: "A template fills the form. The schedule is a picker: daily, weekdays, weekly, or once. Advanced: cron reveals the expression that will be saved. Delivery is this bot's chat, an alert, or both. The alert is UnifiedPush on the phone and a tray notification on Windows.",
       phone: "#/routine/new?bot=junior",
       desk: "#/routine/new?bot=junior"
     },
@@ -102,14 +95,14 @@
     {
       id: "runs",
       title: "Run history",
-      blurb: "Outcomes, not a separate log viewer. A successful run opens the message in the chat. A failed run says nothing was posted.",
+      blurb: "Outcomes only. Each bot has one main chat. A successful run opens that chat and highlights the message that run posted. A failed run posted nothing, so it has no Open.",
       phone: "#/routine/runs/morning",
       desk: "#/routine/runs/morning"
     },
     {
       id: "room",
       title: "Group room",
-      blurb: "Standup has three bots. A line between bots is marked Between bots and names both sides. A line to you has only the speaking bot. House, the other room, is on the list.",
+      blurb: "Standup is one shared channel. Lines between bots stay in the room and are marked Between bots. A line to you has only the speaking bot. A private handoff that never entered a room is not here; it shows up in each bot's own chat. House is the other room.",
       phone: "#/room/standup",
       desk: "#/room/standup"
     },
@@ -130,14 +123,14 @@
     {
       id: "settings",
       title: "Servers",
-      blurb: "Saved Hermes servers. Add one, or use another. Switching opens the sign-in screen with the username already filled in. Theme follows the system until you choose otherwise.",
+      blurb: "Saved Hermes servers. Add one, or use another. Switching opens the sign-in screen with the username already filled in. Appearance picks Original, Honest Terminal, or Zoetrik, and System, Light, or Dark.",
       phone: "#/settings",
       desk: "#/settings"
     },
     {
       id: "notifications",
       title: "Notifications",
-      blurb: "ntfy server and topic, and a switch for each alert that should fire when the app is closed.",
+      blurb: "On the phone, alerts arrive from ntfy on devbox through UnifiedPush and show as Hermes Bots. On Windows, the app posts its own tray notifications. The sample alert opens Junior's morning briefing. Each kind of alert has a switch.",
       phone: "#/notifications",
       desk: "#/notifications"
     },
@@ -160,8 +153,15 @@
   function applyTheme(t) {
     if (t === "light" || t === "dark") document.documentElement.setAttribute("data-theme", t);
     else document.documentElement.removeAttribute("data-theme");
-    document.querySelectorAll(".seg button").forEach(function (btn) {
+    document.querySelectorAll("#theme button").forEach(function (btn) {
       btn.setAttribute("aria-pressed", btn.dataset.theme === (t || "system") ? "true" : "false");
+    });
+  }
+  function applyFlavor(f) {
+    const name = f === "honest" || f === "zoetrik" ? f : "original";
+    document.documentElement.setAttribute("data-flavor", name);
+    document.querySelectorAll("#flavor button").forEach(function (btn) {
+      btn.setAttribute("aria-pressed", btn.dataset.flavor === name ? "true" : "false");
     });
   }
 
@@ -209,11 +209,20 @@
     try { localStorage.setItem("hb-theme", t); } catch (err) { /* ignore */ }
     applyTheme(t);
   });
+  document.getElementById("flavor").addEventListener("click", function (e) {
+    const btn = e.target.closest("button");
+    if (!btn) return;
+    const f = btn.dataset.flavor;
+    try { localStorage.setItem("hb-flavor", f); } catch (err) { /* ignore */ }
+    applyFlavor(f);
+  });
   window.addEventListener("storage", function (e) {
     if (e.key === "hb-theme") applyTheme(e.newValue || "system");
+    if (e.key === "hb-flavor") applyFlavor(e.newValue || "original");
   });
   window.addEventListener("resize", fit);
   applyTheme(localStorage.getItem("hb-theme") || "system");
+  applyFlavor(localStorage.getItem("hb-flavor") || "original");
   fit();
   window.addEventListener("load", fit);
 })();

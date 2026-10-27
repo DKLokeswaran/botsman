@@ -59,8 +59,10 @@
     composer: "",
     attachments: [],
     replyTo: null,
-    slashIndex: 0,
     steer: "",
+    openHandoff: {},
+    highlight: null,
+    highlightBot: null,
     openThink: {},
     openTool: {},
     approvalOpen: false,
@@ -210,9 +212,9 @@
     return job.cron || "";
   }
   function deliverLabel(job) {
-    if (job.chat && job.ntfy) return "This bot's chat · ntfy";
+    if (job.chat && job.ntfy) return "This bot's chat · alert";
     if (job.chat) return "This bot's chat";
-    if (job.ntfy) return "ntfy only";
+    if (job.ntfy) return "Alert only";
     return "Nowhere yet";
   }
   function showNeeds(b) {
@@ -251,6 +253,9 @@
     if (t === "light" || t === "dark") document.documentElement.setAttribute("data-theme", t);
     else document.documentElement.removeAttribute("data-theme");
   }
+  function applyFlavor(f) {
+    document.documentElement.setAttribute("data-flavor", f === "honest" || f === "zoetrik" ? f : "original");
+  }
   function parse() {
     const raw = (location.hash || "#").replace(/^#/, "");
     const cut = raw.split("?");
@@ -280,11 +285,7 @@
     state.menu = false;
     state.rowMenu = null;
     state.reconnect = view === "reconnect" ? "down" : null;
-    state.slashIndex = 0;
-    if (view === "slash") {
-      state.composer = "/";
-      state.focusId = "composer";
-    } else state.composer = "";
+    state.composer = "";
     if (view === "attach") {
       state.attachments = [
         { id: "seed-img", kind: "image", name: "Pasted image", src: HB.photo },
@@ -294,6 +295,10 @@
     } else state.attachments = [];
     state.replyTo = null;
     const a = route.parts[0], b = route.parts[1], c = route.parts[2];
+    if (!(a === "chat" && b === state.highlightBot && state.highlight)) {
+      state.highlight = null;
+      state.highlightBot = null;
+    }
     if (a === "routine" && b === "new") state.form = blankForm(route.q.get("bot") || "junior");
     else if (a === "routine" && b === "edit") state.form = formFrom(c);
     if (a === "chat" && b) {
@@ -434,6 +439,16 @@
       '<div class="usage-line"><button type="button" class="text-btn" data-act="reply" data-id="' + m.id + '">Reply</button>' +
       '<button type="button" class="text-btn" data-act="copy-msg" data-id="' + m.id + '">Copy</button></div></div></div>';
   }
+  function handoffMessage(m) {
+    const open = !!state.openHandoff[m.id];
+    const routeName = botName(m.from) + " → " + botName(m.to);
+    return '<div class="msg msg-assistant"><div>' +
+      '<button type="button" class="handoff" data-act="handoff" data-id="' + m.id + '">' +
+      '<span class="route">' + esc(routeName) + " <span>" + esc(m.time || "") + "</span></span>" +
+      '<span class="snip">' + (open ? "Hide" : esc(snippet(m.text))) + "</span></button>" +
+      (open ? '<div class="handoff-body">' + esc(m.text) + "</div>" : "") +
+      "</div></div>";
+  }
   function roomBotMessage(m) {
     const between = m.to && m.to !== "you";
     const name = between ? botName(m.who) + " → " + botName(m.to) : botName(m.who);
@@ -486,11 +501,15 @@
       think + tools + todos + body + diff + code + usage + "</div></div>";
   }
   function renderMessage(m, list) {
-    if (m.role === "system") return '<div class="sys">' + esc(m.text) + "</div>";
-    if (m.role === "user") return userMessage(m, list);
-    if (m.role === "routine") return routineMessage(m);
-    if (m.role === "bot") return roomBotMessage(m);
-    return assistantMessage(m);
+    let html;
+    if (m.role === "system") html = '<div class="sys">' + esc(m.text) + "</div>";
+    else if (m.role === "user") html = userMessage(m, list);
+    else if (m.role === "routine") html = routineMessage(m);
+    else if (m.role === "handoff") html = handoffMessage(m);
+    else if (m.role === "bot") html = roomBotMessage(m);
+    else html = assistantMessage(m);
+    const on = state.highlight === m.id ? " flash" : "";
+    return '<div class="anchor' + on + '" id="msg-' + esc(m.id) + '">' + html + "</div>";
   }
 
   function approvalCard() {
@@ -529,21 +548,6 @@
       '</div><div class="card-foot"><button type="button" class="primary block" data-act="clarify-send">Send answers</button></div></div>';
   }
 
-  function filteredCommands() {
-    const q = state.composer.replace(/^\//, "").trim().toLowerCase();
-    return HB.commands.filter(function (c) {
-      return !q || c.name.indexOf(q) >= 0 || c.hint.toLowerCase().indexOf(q) >= 0;
-    });
-  }
-  function slashMenu() {
-    const items = filteredCommands();
-    if (!state.composer.startsWith("/")) return "";
-    if (!items.length) return '<div class="slash"><button type="button" tabindex="-1">No matching commands</button></div>';
-    if (state.slashIndex >= items.length) state.slashIndex = 0;
-    return '<div class="slash">' + items.map(function (c, i) {
-      return '<button type="button" class="' + (i === state.slashIndex ? "on" : "") + '" data-act="slash" data-id="' + c.name + '"><b>/' + c.name + '</b> <span>' + esc(c.hint) + "</span></button>";
-    }).join("") + "</div>";
-  }
   function modelPop(bot) {
     const eff = effective(bot);
     const scope = state.modelScope;
@@ -593,12 +597,11 @@
     const steer = working ? '<div class="steer-row"><input id="steer" data-field="steer" placeholder="Steer · add a note to this turn" value="' + esc(state.steer) + '">' +
       '<button type="button" class="ghost" id="steer-btn" data-act="steer"' + (state.steer.trim() ? "" : " disabled") + ">Steer</button></div>" : "";
     return '<div class="dock"><div class="dock-inner">' + replyHtml + attachRow() + (bot ? queueRow(bot) : "") + steer +
-      '<div id="slash-host">' + slashMenu() + "</div>" +
       (state.modelOpen && bot ? modelPop(bot) : "") +
       '<div class="composer-box"><textarea id="composer" rows="1" placeholder="' + esc(placeholder) + '" autocomplete="off">' + esc(state.composer) + "</textarea>" +
       '<div class="composer-tools"><button type="button" class="icon-btn" data-act="pick-file" aria-label="Attach file">' + svg(IC.clip) + "</button>" +
       '<button type="button" class="icon-btn" data-act="paste-sample" aria-label="Paste image">' + svg(IC.image) + "</button>" +
-      '<button type="button" class="icon-btn" data-act="slash-ins" aria-label="Slash commands">/</button><span class="spacer"></span>' +
+      '<span class="spacer"></span>' +
       modelBtn + sendBtn + "</div></div>" +
       '<input id="file-in" type="file" multiple hidden accept="image/*,.pdf,.txt,.md,.json,.csv"></div></div>';
   }
@@ -613,12 +616,14 @@
     if (device() === "phone") {
       return '<button type="button" class="text-btn" data-act="menu">More</button>' +
         (state.menu ? '<div class="sheet"><button type="button" data-act="nav" data-to="#/history/' + bot.id + '">Chats</button>' +
+          '<button type="button" data-act="summarize" data-id="' + bot.id + '">Summarize</button>' +
           '<button type="button" data-act="nav" data-to="#/bot/' + bot.id + '">Bot info</button>' +
           '<button type="button" data-act="nav" data-to="#/routines/' + bot.id + '">Routines</button>' +
           '<button type="button" data-act="nav" data-to="#/usage">Usage</button>' +
           '<button type="button" data-act="nav" data-to="#/settings">Settings</button></div>' : "");
     }
     return '<div class="topbar-actions"><button type="button" class="text-btn" data-act="nav" data-to="#/history/' + bot.id + '">Chats</button>' +
+      '<button type="button" class="text-btn" data-act="summarize" data-id="' + bot.id + '">Summarize</button>' +
       '<button type="button" class="text-btn" data-act="nav" data-to="#/bot/' + bot.id + '">Info</button></div>';
   }
   function chatColumn(botId) {
@@ -729,7 +734,8 @@
       '<button type="button" class="ghost" data-act="nav" data-to="#/routine/runs/' + job.id + '">History</button></div></div>';
   }
   function routinesView(botId) {
-    const toast = state.toast ? '<div class="toast" id="toast">' + esc(state.toast.text) + ' <button type="button" class="text-btn" data-act="nav" data-to="' + state.toast.to + '">Open chat</button></div>' : "";
+    const toast = state.toast ? '<div class="toast" id="toast">' + esc(state.toast.text) +
+      ' <button type="button" class="text-btn" data-act="open-run" data-bot="' + state.toast.bot + '" data-msg="' + state.toast.msg + '">Open chat</button></div>' : "";
     let body;
     if (botId) {
       const mine = routines.filter(function (r) { return r.bot === botId; });
@@ -747,7 +753,7 @@
     body = '<div class="pane"><div class="page">' + toast +
       '<div style="display:flex;justify-content:space-between;gap:8px;align-items:center"><h2>All routines</h2>' +
       '<button type="button" class="primary" data-act="nav" data-to="#/routine/new?bot=junior">New routine</button></div>' +
-      '<p class="lede">Every bot. A run posts into that bot\'s main chat, and can also ping ntfy.</p>' +
+      '<p class="lede">Every bot. A run posts into that bot\'s one main chat, and can also raise an alert.</p>' +
       groups.map(function (g) {
         return '<div class="group-label">' + esc(g[0].name) + "</div>" + g[1].map(routineCard).join("");
       }).join("") + "</div></div>";
@@ -790,7 +796,8 @@
       '<button type="button" class="text-btn" data-act="toggle-cron">' + (f.cronOn ? "Hide cron" : "Advanced: cron") + "</button>" + cron +
       '<div class="field" style="margin-top:12px"><div class="lbl">Deliver to</div><div class="checks">' +
       '<button type="button" class="check" data-act="deliver" data-id="chat"><span class="toggle' + (f.chat ? " on" : "") + '"><i></i></span> This bot\'s chat</button>' +
-      '<button type="button" class="check" data-act="deliver" data-id="ntfy"><span class="toggle' + (f.ntfy ? " on" : "") + '"><i></i></span> ntfy</button></div></div>' +
+      '<button type="button" class="check" data-act="deliver" data-id="ntfy"><span class="toggle' + (f.ntfy ? " on" : "") + '"><i></i></span> Alert</button></div>' +
+      '<p class="need-k">An alert is a Hermes Bots notification. On the phone it arrives through UnifiedPush. On Windows it is a tray notification.</p></div>' +
       (f.error ? '<div class="err">' + esc(f.error) + "</div>" : "") +
       '<div class="choices"><button type="button" class="primary" data-act="save-routine">Save</button>' +
       '<button type="button" class="ghost" data-act="nav" data-to="' + (backTarget() || "#/routines") + '">Cancel</button></div>' +
@@ -801,10 +808,12 @@
     const job = routines.filter(function (r) { return r.id === id; })[0];
     if (!job) return column("History", "", '<div class="pane"><div class="empty">That routine is gone.</div></div>');
     const rows = job.runs.length ? job.runs.map(function (r) {
-      return '<div class="set-row"><div><b>' + esc(r.status) + "</b> · " + esc(r.when) + '<div class="sub">' + esc(r.detail) + "</div></div>" +
-        (r.chat ? '<button type="button" class="text-btn" data-act="nav" data-to="#/chat/' + job.bot + '">Open in chat</button>' : "") + "</div>";
+      const open = r.msg
+        ? '<button type="button" class="text-btn" data-act="open-run" data-bot="' + job.bot + '" data-msg="' + esc(r.msg) + '">Open in chat</button>'
+        : "";
+      return '<div class="set-row"><div><b>' + esc(r.status) + "</b> · " + esc(r.when) + '<div class="sub">' + esc(r.detail) + "</div></div>" + open + "</div>";
     }).join("") : '<p class="lede">No runs yet.</p>';
-    return column(job.name, schedLabel(job), '<div class="pane"><div class="page"><p class="lede">A run\'s output is the message in the chat. This list is only the outcome.</p>' + rows + "</div></div>");
+    return column(job.name, schedLabel(job), '<div class="pane"><div class="page"><p class="lede">Every run posts into this bot\'s one main chat. Open jumps to that message.</p>' + rows + "</div></div>");
   }
 
   function usageView() {
@@ -845,9 +854,13 @@
   }
   function settingsView() {
     const theme = localStorage.getItem("hb-theme") || "system";
+    const flavor = localStorage.getItem("hb-flavor") || "original";
     const seg = ["system", "light", "dark"].map(function (k) {
       const label = k === "system" ? "System" : k === "light" ? "Light" : "Dark";
       return '<button type="button" class="' + (theme === k ? "on" : "") + '" data-act="theme" data-id="' + k + '">' + label + "</button>";
+    }).join("");
+    const flavors = [["original", "Original"], ["honest", "Honest Terminal"], ["zoetrik", "Zoetrik"]].map(function (pair) {
+      return '<button type="button" class="' + (flavor === pair[0] ? "on" : "") + '" data-act="flavor" data-id="' + pair[0] + '">' + pair[1] + "</button>";
     }).join("");
     const rows = state.servers.map(function (s) {
       const cur = s.id === state.serverId;
@@ -862,23 +875,32 @@
       '<div class="field"><label for="sv-port">Port</label><input id="sv-port" data-field="add:port" value="' + esc(add.port) + '" inputmode="numeric"></div>' +
       (add.error ? '<div class="err">' + esc(add.error) + "</div>" : "") +
       '<button type="button" class="primary" data-act="add-server">Add server</button>' +
-      '<div class="group-label">Appearance</div><div class="seg" style="margin-bottom:12px">' + seg + "</div>" +
-      '<div class="set-row"><div><b>Notifications</b><div class="sub">ntfy, when the app is closed</div></div><button type="button" class="text-btn" data-act="nav" data-to="#/notifications">Open</button></div>' +
+      '<div class="group-label">Appearance</div><div class="seg" style="margin-bottom:8px">' + flavors + '</div><div class="seg" style="margin-bottom:12px">' + seg + "</div>" +
+      '<div class="set-row"><div><b>Notifications</b><div class="sub">Phone: UnifiedPush via ntfy on devbox. Windows: this app\'s tray.</div></div><button type="button" class="text-btn" data-act="nav" data-to="#/notifications">Open</button></div>' +
       '<div class="set-row"><div><b>Hermes Bots ' + esc(version()) + '</b><div class="sub">' + (state.installed ? "Up to date" : "Update available · " + HB.nextVersion) + "</div></div>" +
       (state.installed ? "" : '<button type="button" class="ghost" data-act="nav" data-to="#/update">View</button>') + "</div>" +
       '<p class="need-k">API keys stay on the server. This app does not show them.</p></div></div>';
     return column("Settings", currentServer().name, body);
   }
   function notifView() {
+    const phone = device() === "phone";
     const toggles = HB.notifications.map(function (n) {
       const on = !!state.notif[n.id];
       return '<button type="button" class="set-row" data-act="notif" data-id="' + n.id + '"><span>' + esc(n.label) + '</span><span class="toggle' + (on ? " on" : "") + '"><i></i></span></button>';
     }).join("");
-    const body = '<div class="pane"><div class="page"><h2>ntfy</h2><p class="lede">Alerts when this app is closed. Hermes sends them through ntfy. One topic, with a switch for each kind.</p>' +
-      '<div class="field"><label for="ntfy-url">Server</label><input id="ntfy-url" data-field="ntfy-url" value="' + esc(state.ntfyUrl) + '" spellcheck="false"></div>' +
+    const lede = phone
+      ? "On Android, alerts come from the ntfy server on devbox through UnifiedPush. They show under Hermes Bots, with this app's icon. A tap opens the chat."
+      : "On Windows, Hermes Bots posts its own tray notifications. The phone uses UnifiedPush against the same ntfy server, so a tap there opens the same chat.";
+    const status = phone ? "UnifiedPush · registered with ntfy on devbox" : "Windows tray · posted by Hermes Bots";
+    const sample = '<button type="button" class="note-card" data-act="open-run" data-bot="junior" data-msg="j-brief"><b>Hermes Bots</b>Morning briefing finished<span>' +
+      (phone ? "Tap opens Junior's main chat" : "Tray notification · opens Junior's main chat") + "</span></button>";
+    const body = '<div class="pane"><div class="page"><h2>' + (phone ? "UnifiedPush" : "Tray") + "</h2><p class=\"lede\">" + lede + "</p>" +
+      '<div class="set-row"><div><b>Status</b><div class="sub">' + status + "</div></div></div>" +
+      '<div class="field"><label for="ntfy-url">Notification server</label><input id="ntfy-url" data-field="ntfy-url" value="' + esc(state.ntfyUrl) + '" spellcheck="false"></div>' +
       '<div class="field"><label for="ntfy-topic">Topic</label><input id="ntfy-topic" data-field="ntfy-topic" value="' + esc(state.ntfyTopic) + '" spellcheck="false"></div>' +
-      toggles + "</div></div>";
-    return column("Notifications", "ntfy", body);
+      '<p class="need-k">The server is the self-hosted ntfy on devbox. The topic is what UnifiedPush subscribes to. Windows does not use that socket; it shows the same events in the tray.</p>' +
+      sample + toggles + "</div></div>";
+    return column("Notifications", phone ? "UnifiedPush" : "Windows tray", body);
   }
   function loginView() {
     const server = state.pendingServer
@@ -931,41 +953,72 @@
     if (device() === "phone") return main;
     return '<div class="shell">' + sidebar() + main + "</div>";
   }
+  function tmuxBar() {
+    const win = route.parts[1] || (route.parts[0] || "junior");
+    return '<div class="tmux-bar"><span>[hermes]</span><span>0:' + esc(win) + '*</span><span>' + esc(currentServer().name) + '</span><span style="margin-left:auto">' + nowTime() + " · 27-Oct-26</span></div>";
+  }
   function chrome() {
     if (device() === "desktop") {
       return '<div class="titlebar"><span>Hermes Bots</span><span class="caption"><span>' + svg(IC.min, 14) + "</span><span>" + svg(IC.max, 12) + "</span><span>" + svg(IC.close, 14) + "</span></span></div>";
     }
     return '<div class="status"><span class="status-time">' + nowTime() + '</span><span class="status-icons">' + svg(IC.wifi, 16) + svg(IC.bat, 18) + "</span></div>";
   }
+  function captureScroll() {
+    const pane = document.querySelector(".pane");
+    const side = document.querySelector(".side-scroll");
+    const extra = [];
+    document.querySelectorAll(".card-body, .pop").forEach(function (el) { extra.push(el.scrollTop); });
+    return { pane: pane ? pane.scrollTop : 0, side: side ? side.scrollTop : 0, extra: extra };
+  }
+  function scrollToHighlight(pane) {
+    if (!state.highlight || !pane) return;
+    const el = document.getElementById("msg-" + state.highlight);
+    if (!el) return;
+    const paneRect = pane.getBoundingClientRect();
+    const rect = el.getBoundingClientRect();
+    pane.scrollTop += rect.top - paneRect.top - 16;
+  }
+  function applyScroll(opt, saved) {
+    const pane = document.querySelector(".pane");
+    const side = document.querySelector(".side-scroll");
+    if (opt.scroll === "bottom" && pane) {
+      pane.scrollTop = pane.scrollHeight;
+      return;
+    }
+    if (opt.scroll === "message") {
+      scrollToHighlight(pane);
+      return;
+    }
+    if (opt.scroll === "top") {
+      if (pane) pane.scrollTop = 0;
+      const card = document.querySelector(".clarify");
+      const landingId = route.parts[0] === "chat" ? { junior: "j-brief", nightwatch: "n1", ledger: "l1" }[route.parts[1]] : "";
+      const landing = !card && landingId ? document.getElementById("msg-" + landingId) : null;
+      const target = card || landing;
+      if (target && pane) {
+        const paneRect = pane.getBoundingClientRect();
+        const rect = target.getBoundingClientRect();
+        pane.scrollTop += rect.top - paneRect.top - 8;
+      }
+      return;
+    }
+    if (pane) pane.scrollTop = saved.pane;
+    if (side) side.scrollTop = saved.side;
+    const nodes = document.querySelectorAll(".card-body, .pop");
+    saved.extra.forEach(function (v, i) { if (nodes[i]) nodes[i].scrollTop = v; });
+  }
   function render(opt) {
     opt = opt || {};
-    const prevPane = document.querySelector(".pane");
-    const prevSide = document.querySelector(".side-scroll");
-    const prev = { pane: prevPane ? prevPane.scrollTop : 0, side: prevSide ? prevSide.scrollTop : 0 };
+    const saved = captureScroll();
     const focus = opt.focus || state.focusId;
     const focusAt = state.focusAt;
     document.getElementById("app").innerHTML = '<div class="app">' + chrome() + '<div class="fill">' + inner() + "</div>" +
-      (route.parts[0] === "update" ? updateModal() : "") + "</div>";
-    const pane = document.querySelector(".pane");
-    const side = document.querySelector(".side-scroll");
-    if (opt.scroll === "bottom" && pane) pane.scrollTop = pane.scrollHeight;
-    else if (opt.scroll === "top") {
-      if (pane) pane.scrollTop = 0;
-      const card = document.querySelector(".clarify");
-      if (card && pane) {
-        const paneRect = pane.getBoundingClientRect();
-        const cardRect = card.getBoundingClientRect();
-        pane.scrollTop += cardRect.top - paneRect.top - 8;
-      }
-    }
-    else {
-      if (pane) pane.scrollTop = prev.pane;
-      if (side) side.scrollTop = prev.side;
-    }
+      tmuxBar() + (route.parts[0] === "update" ? updateModal() : "") + "</div>";
+    applyScroll(opt, saved);
     if (focus) {
       const el = document.getElementById(focus);
-      if (el) {
-        el.focus();
+      if (el && el.focus) {
+        try { el.focus({ preventScroll: true }); } catch (e) { el.focus(); }
         if (focusAt != null && el.setSelectionRange) el.setSelectionRange(focusAt, focusAt);
       }
     }
@@ -976,6 +1029,10 @@
       c.style.height = "auto";
       c.style.height = Math.min(c.scrollHeight, 140) + "px";
     }
+    requestAnimationFrame(function () {
+      applyScroll(opt, saved);
+      requestAnimationFrame(function () { applyScroll(opt, saved); });
+    });
   }
 
   function copyText(text, btn) {
@@ -1094,29 +1151,12 @@
     state.attachments = [];
     render({ scroll: "bottom", focus: "composer" });
   }
-  function runCommand(name, bot) {
-    state.composer = "";
+  function summarize(botId) {
+    const bot = botBy(botId);
     if (!bot) return;
-    if (name === "new") { createSide(bot.id); return; }
-    if (name === "routine") { location.hash = "#/routine/new?bot=" + bot.id; return; }
-    if (name === "model" || name === "effort") {
-      state.modelOpen = true;
-      state.modelScope = "chat";
-      render({ preserve: true });
-      return;
-    }
-    if (name === "compact") {
-      currentThread(bot.id).push({ id: uid(), role: "system", text: "Earlier messages were summarized." });
-      render({ scroll: "bottom" });
-      return;
-    }
-    if (name === "stop") {
-      if (bot.working) doStop(bot);
-      else {
-        currentThread(bot.id).push({ id: uid(), role: "system", text: "Nothing is running." });
-        render({ scroll: "bottom" });
-      }
-    }
+    currentThread(bot.id).push({ id: uid(), role: "system", text: "Earlier messages were summarized." });
+    state.menu = false;
+    render({ scroll: "bottom" });
   }
   function createSide(botId) {
     const id = uid();
@@ -1133,11 +1173,6 @@
     } else location.hash = next;
   }
   function enterComposer() {
-    if (state.composer.startsWith("/")) {
-      const items = filteredCommands();
-      const pick = items[state.slashIndex] || items[0];
-      if (pick && activeBot()) { runCommand(pick.name, activeBot()); return; }
-    }
     const room = activeRoom();
     if (room) doSendRoom(room);
     else if (activeBot()) doSend(activeBot());
@@ -1146,18 +1181,19 @@
     const job = routines.filter(function (r) { return r.id === id; })[0];
     if (!job) return;
     const name = botName(job.bot);
-    job.runs.unshift({ when: "Just now", status: "Succeeded", detail: "Posted into " + name + "'s main chat.", chat: true });
+    const mid = uid();
+    job.runs.unshift({ when: "Just now", status: "Succeeded", detail: "Posted into the main chat.", msg: mid });
     const key = job.bot + ":main";
     if (!threads[key]) threads[key] = [];
     state.minute += 1;
-    threads[key].push({ id: uid(), role: "routine", who: job.bot, routine: job.name, time: nowTime(), text: job.result || "Ran just now." });
+    threads[key].push({ id: mid, role: "routine", who: job.bot, routine: job.name, time: nowTime(), text: job.result || "Ran just now." });
     const b = botBy(job.bot);
     if (b) {
       b.preview = (job.result || "Ran just now.").slice(0, 90);
       b.time = nowTime();
       b.activity = 1000 + state.minute;
     }
-    state.toast = { text: "Posted into " + name + "'s main chat.", to: "#/chat/" + job.bot };
+    state.toast = { text: "Posted into " + name + "'s main chat.", to: "#/chat/" + job.bot, bot: job.bot, msg: mid };
     render({ preserve: true });
     setTimeout(function () {
       state.toast = null;
@@ -1212,9 +1248,6 @@
   }
   function onComposer(el) {
     state.composer = el.value;
-    state.slashIndex = 0;
-    const host = document.getElementById("slash-host");
-    if (host) host.innerHTML = slashMenu();
     syncSend();
     el.style.height = "auto";
     el.style.height = Math.min(el.scrollHeight, 140) + "px";
@@ -1225,9 +1258,30 @@
     "open-bot": function (el) {
       const b = botBy(el.dataset.id);
       if (b) b.unread = 0;
-      state.session[el.dataset.id] = state.session[el.dataset.id] || "main";
+      state.highlight = null;
+      state.highlightBot = null;
+      state.session[el.dataset.id] = "main";
       location.hash = "#/chat/" + el.dataset.id;
     },
+    "open-run": function (el) {
+      const bot = el.dataset.bot;
+      const msg = el.dataset.msg;
+      if (!bot || !msg) return;
+      state.session[bot] = "main";
+      state.highlight = msg;
+      state.highlightBot = bot;
+      const next = "#/chat/" + bot;
+      if ((location.hash || "").split("?")[0] === next) {
+        route = parse();
+        onRoute();
+        render({ scroll: "message" });
+      } else location.hash = next;
+    },
+    handoff: function (el) {
+      state.openHandoff[el.dataset.id] = !state.openHandoff[el.dataset.id];
+      render({ preserve: true });
+    },
+    summarize: function (el) { summarize(el.dataset.id); },
     menu: function () { state.menu = !state.menu; render({ preserve: true }); },
     think: function (el) {
       const m = findMessage(el.dataset.id);
@@ -1272,11 +1326,6 @@
       state.attachments = state.attachments.filter(function (a) { return a.id !== el.dataset.id; });
       render({ preserve: true, focus: "composer" });
     },
-    "slash-ins": function () {
-      if (state.composer.indexOf("/") !== 0) state.composer = "/" + state.composer;
-      render({ preserve: true, focus: "composer" });
-    },
-    slash: function (el) { runCommand(el.dataset.id, activeBot()); },
     "toggle-model": function () { state.modelOpen = !state.modelOpen; render({ preserve: true }); },
     scope: function (el) { state.modelScope = el.dataset.id; render({ preserve: true }); },
     "pick-model": function (el) {
@@ -1422,6 +1471,12 @@
       applyTheme(t);
       render({ preserve: true });
     },
+    flavor: function (el) {
+      const f = el.dataset.id;
+      try { localStorage.setItem("hb-flavor", f); } catch (e) { /* ignore */ }
+      applyFlavor(f);
+      render({ preserve: true });
+    },
     "use-server": function (el) { location.hash = "#/login?reason=switch&server=" + el.dataset.id; },
     "add-server": function () {
       const a = state.addServer;
@@ -1468,6 +1523,9 @@
 
   function bind() {
     const app = document.getElementById("app");
+    app.addEventListener("mousedown", function (e) {
+      if (e.target.closest("button")) e.preventDefault();
+    });
     app.addEventListener("click", function (e) {
       const el = e.target.closest("[data-act]");
       if (el && app.contains(el)) {
@@ -1540,15 +1598,6 @@
     app.addEventListener("keydown", function (e) {
       const t = e.target;
       if (t.id === "composer") {
-        if ((e.key === "ArrowDown" || e.key === "ArrowUp") && state.composer.indexOf("/") === 0) {
-          e.preventDefault();
-          const items = filteredCommands();
-          if (!items.length) return;
-          state.slashIndex = (state.slashIndex + (e.key === "ArrowDown" ? 1 : -1) + items.length) % items.length;
-          const host = document.getElementById("slash-host");
-          if (host) host.innerHTML = slashMenu();
-          return;
-        }
         if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); enterComposer(); }
         return;
       }
@@ -1572,6 +1621,8 @@
     });
     window.addEventListener("storage", function (e) {
       if (e.key === "hb-theme") applyTheme(e.newValue || "system");
+      if (e.key === "hb-flavor") applyFlavor(e.newValue || "original");
+      if ((e.key === "hb-theme" || e.key === "hb-flavor") && ready) render({ preserve: true });
     });
   }
 
@@ -1594,11 +1645,12 @@
   window.addEventListener("hashchange", function () {
     route = parse();
     onRoute();
-    if (ready) render({ scroll: "top" });
+    if (ready) render({ scroll: state.highlight ? "message" : "top" });
   });
 
   function boot() {
     applyTheme(localStorage.getItem("hb-theme") || "system");
+    applyFlavor(localStorage.getItem("hb-flavor") || "original");
     if (!location.hash) location.hash = homeHash();
     route = parse();
     onRoute();

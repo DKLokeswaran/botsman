@@ -1,4 +1,8 @@
-/* Shared color tokens. System theme unless data-theme is set. */
+/* Color, type, and radius tokens.
+   Original is the first mock. Honest Terminal and Zoetrik follow the flavor specs.
+   data-theme="light"|"dark" forces a mode. With no attribute, the system preference applies.
+   data-flavor="original"|"honest"|"zoetrik". */
+
 :root {
   color-scheme: light;
   --bg: #ffffff;
@@ -9,15 +13,35 @@
   --fg: #111111;
   --fg-2: #4a4a4a;
   --fg-3: #6a6a6a;
+  --bright: #111111;
   --line: #e6e6e6;
   --line-2: #cfcfcf;
   --fill: #111111;
   --fill-fg: #ffffff;
+  --accent: #111111;
+  --accent-fg: #ffffff;
+  --error: #9a3412;
+  --green: #111111;
+  --cyan: #111111;
+  --btn: #111111;
+  --btn-fg: #ffffff;
+  --hair: #e6e6e6;
   --shadow: 0 16px 48px rgba(0, 0, 0, 0.12);
   --font: "Segoe UI", system-ui, -apple-system, Roboto, "Helvetica Neue", Arial, sans-serif;
+  --font-display: var(--font);
+  --font-label: var(--font);
   --mono: "Cascadia Code", "Cascadia Mono", "Segoe UI Mono", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
   --sidebar: 300px;
   --measure: 720px;
+  --r: 12px;
+  --r-pill: 999px;
+  --r-card: 16px;
+  --r-composer: 22px;
+  --r-bubble: 18px;
+  --r-av: 50%;
+  --r-sm: 4px;
+  --ease: cubic-bezier(0.2, 0.8, 0.2, 1);
+  --dur: 200ms;
 }
 
 :root[data-theme="dark"] {
@@ -30,10 +54,19 @@
   --fg: #f3f3f3;
   --fg-2: #c6c6c6;
   --fg-3: #9a9a9a;
+  --bright: #f3f3f3;
   --line: #262626;
   --line-2: #3a3a3a;
   --fill: #f3f3f3;
   --fill-fg: #0a0a0a;
+  --accent: #f3f3f3;
+  --accent-fg: #0a0a0a;
+  --error: #ffb4a2;
+  --green: #f3f3f3;
+  --cyan: #f3f3f3;
+  --btn: #f3f3f3;
+  --btn-fg: #0a0a0a;
+  --hair: #262626;
   --shadow: 0 16px 48px rgba(0, 0, 0, 0.45);
 }
 
@@ -48,11 +81,210 @@
     --fg: #f3f3f3;
     --fg-2: #c6c6c6;
     --fg-3: #9a9a9a;
+    --bright: #f3f3f3;
     --line: #262626;
     --line-2: #3a3a3a;
     --fill: #f3f3f3;
     --fill-fg: #0a0a0a;
+    --accent: #f3f3f3;
+    --accent-fg: #0a0a0a;
+    --error: #ffb4a2;
+    --green: #f3f3f3;
+    --cyan: #f3f3f3;
+    --btn: #f3f3f3;
+    --btn-fg: #0a0a0a;
+    --hair: #262626;
     --shadow: 0 16px 48px rgba(0, 0, 0, 0.45);
+  }
+}
+
+/* Honest Terminal — dark is the flavor spec. Light is its Teletype paper scheme. */
+html[data-flavor="honest"] {
+  color-scheme: light;
+  --bg: #efebe1;
+  --bg-2: #e5e0d2;
+  --bg-3: #ddd9d0;
+  --bg-user: #e5e0d2;
+  --bg-composer: #efebe1;
+  --fg: #2a2723;
+  --fg-2: #3a3631;
+  --fg-3: #5c574f;
+  --bright: #111010;
+  --line: #c9c2b2;
+  --line-2: #b7af9e;
+  --fill: #1d6b34;
+  --fill-fg: #f4f1e8;
+  --accent: #1d6b34;
+  --accent-fg: #f4f1e8;
+  --error: #b3401f;
+  --green: #1d6b34;
+  --cyan: #1d6b34;
+  --btn: #1d6b34;
+  --btn-fg: #f4f1e8;
+  --hair: #c9c2b2;
+  --shadow: 0 0 28px color-mix(in srgb, #1d6b34 18%, transparent);
+  --font: "Geist Mono", ui-monospace, "SFMono-Regular", "JetBrains Mono", Menlo, monospace;
+  --font-display: "Geist Mono", ui-monospace, "SFMono-Regular", "JetBrains Mono", Menlo, monospace;
+  --font-label: "Geist Mono", ui-monospace, "SFMono-Regular", "JetBrains Mono", Menlo, monospace;
+  --mono: "Geist Mono", ui-monospace, "SFMono-Regular", "JetBrains Mono", Menlo, monospace;
+  --r: 0px;
+  --r-pill: 0px;
+  --r-card: 0px;
+  --r-composer: 0px;
+  --r-bubble: 0px;
+  --r-av: 0px;
+  --r-sm: 0px;
+}
+
+html[data-flavor="honest"][data-theme="dark"] {
+  color-scheme: dark;
+  --bg: #0b0d11;
+  --bg-2: #0f131a;
+  --bg-3: #161b22;
+  --bg-user: #0f131a;
+  --bg-composer: #0b0d11;
+  --fg: #d5d9e0;
+  --fg-2: #d5d9e0;
+  --fg-3: #7c8390;
+  --bright: #f2f5f8;
+  --line: #292c31;
+  --line-2: #292c31;
+  --fill: #86f28a;
+  --fill-fg: #0b0d11;
+  --accent: #86f28a;
+  --accent-fg: #0b0d11;
+  --error: #ff9d73;
+  --green: #86f28a;
+  --cyan: #86f28a;
+  --btn: #86f28a;
+  --btn-fg: #0b0d11;
+  --hair: #292c31;
+  --shadow: 0 0 28px color-mix(in srgb, #86f28a 18%, transparent);
+}
+
+@media (prefers-color-scheme: dark) {
+  html[data-flavor="honest"]:not([data-theme="light"]) {
+    color-scheme: dark;
+    --bg: #0b0d11;
+    --bg-2: #0f131a;
+    --bg-3: #161b22;
+    --bg-user: #0f131a;
+    --bg-composer: #0b0d11;
+    --fg: #d5d9e0;
+    --fg-2: #d5d9e0;
+    --fg-3: #7c8390;
+    --bright: #f2f5f8;
+    --line: #292c31;
+    --line-2: #292c31;
+    --fill: #86f28a;
+    --fill-fg: #0b0d11;
+    --accent: #86f28a;
+    --accent-fg: #0b0d11;
+    --error: #ff9d73;
+    --green: #86f28a;
+    --cyan: #86f28a;
+    --btn: #86f28a;
+    --btn-fg: #0b0d11;
+    --hair: #292c31;
+    --shadow: 0 0 28px color-mix(in srgb, #86f28a 18%, transparent);
+  }
+}
+
+/* Zoetrik — dark is the flavor spec. Light is its Drafting Table scheme. */
+html[data-flavor="zoetrik"] {
+  color-scheme: light;
+  --bg: #f2f0eb;
+  --bg-2: #e8e5de;
+  --bg-3: #dedcd7;
+  --bg-user: #ffffff;
+  --bg-composer: #e8e5de;
+  --fg: #111111;
+  --fg-2: #3c3a36;
+  --fg-3: #4e4c47;
+  --bright: #111111;
+  --line: #d4d0c6;
+  --line-2: #b7b2a6;
+  --fill: #111111;
+  --fill-fg: #ffffff;
+  --accent: #d9480f;
+  --accent-fg: #ffffff;
+  --error: #b42318;
+  --green: #146b12;
+  --cyan: #0b6e78;
+  --mint: #0f6b52;
+  --blue: #1f6fe0;
+  --btn: #111111;
+  --btn-fg: #ffffff;
+  --hair: color-mix(in srgb, #111111 14%, transparent);
+  --shadow: none;
+  --font: "Inter", system-ui, sans-serif;
+  --font-display: "Orbitron", sans-serif;
+  --font-label: "Tomorrow", sans-serif;
+  --mono: "Fragment Mono", ui-monospace, monospace;
+  --r: 4px;
+  --r-pill: 4px;
+  --r-card: 4px;
+  --r-composer: 4px;
+  --r-bubble: 4px;
+  --r-av: 3px;
+  --r-sm: 3px;
+}
+
+html[data-flavor="zoetrik"][data-theme="dark"] {
+  color-scheme: dark;
+  --bg: #000000;
+  --bg-2: #111111;
+  --bg-3: #151515;
+  --bg-user: #111111;
+  --bg-composer: #111111;
+  --fg: #ffffff;
+  --fg-2: #999999;
+  --fg-3: #999999;
+  --bright: #ffffff;
+  --line: #262626;
+  --line-2: #262626;
+  --fill: #1d1d1d;
+  --fill-fg: #ffffff;
+  --accent: #ffa41c;
+  --accent-fg: #000000;
+  --error: #f87171;
+  --green: #71ff19;
+  --cyan: #19f2ff;
+  --mint: #78facb;
+  --blue: #0099ff;
+  --btn: #1d1d1d;
+  --btn-fg: #ffffff;
+  --hair: color-mix(in srgb, #ffffff 9%, transparent);
+  --shadow: none;
+}
+
+@media (prefers-color-scheme: dark) {
+  html[data-flavor="zoetrik"]:not([data-theme="light"]) {
+    color-scheme: dark;
+    --bg: #000000;
+    --bg-2: #111111;
+    --bg-3: #151515;
+    --bg-user: #111111;
+    --bg-composer: #111111;
+    --fg: #ffffff;
+    --fg-2: #999999;
+    --fg-3: #999999;
+    --bright: #ffffff;
+    --line: #262626;
+    --line-2: #262626;
+    --fill: #1d1d1d;
+    --fill-fg: #ffffff;
+    --accent: #ffa41c;
+    --accent-fg: #000000;
+    --error: #f87171;
+    --green: #71ff19;
+    --cyan: #19f2ff;
+    --mint: #78facb;
+    --blue: #0099ff;
+    --btn: #1d1d1d;
+    --btn-fg: #ffffff;
+    --hair: color-mix(in srgb, #ffffff 9%, transparent);
+    --shadow: none;
   }
 }
 

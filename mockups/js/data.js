@@ -5,14 +5,6 @@ const HB = {
   nextVersion: "0.2.0",
   models: ["Haiku 4.5", "Sonnet 4.5", "Opus 4.5", "GPT-5", "Gemini 2.5 Pro"],
   efforts: ["Low", "Medium", "High", "Extra high"],
-  commands: [
-    { name: "new", hint: "Start a side chat" },
-    { name: "routine", hint: "Create a routine" },
-    { name: "model", hint: "Model for this chat" },
-    { name: "effort", hint: "Reasoning effort" },
-    { name: "compact", hint: "Summarize this chat" },
-    { name: "stop", hint: "Stop the current turn" }
-  ],
   marks: ["junior", "atlas", "ledger", "quartermaster", "scribe", "nightwatch", "diamond", "waves"],
   bots: [
     {
@@ -214,9 +206,9 @@ const HB = {
       paused: false,
       result: "Ran just now. Nothing new since the 7:00 briefing.",
       runs: [
-        { when: "Today · 7:00", status: "Succeeded", detail: "Posted into Junior's main chat.", chat: true },
-        { when: "Yesterday · 7:00", status: "Succeeded", detail: "Posted into Junior's main chat.", chat: true },
-        { when: "Mon · 7:00", status: "Failed", detail: "Calendar tool timed out. Nothing was posted.", chat: false }
+        { when: "Today · 7:00", status: "Succeeded", detail: "Posted into the main chat.", msg: "j-brief" },
+        { when: "Yesterday · 7:00", status: "Succeeded", detail: "Posted into the main chat.", msg: "j-brief-y" },
+        { when: "Mon · 7:00", status: "Failed", detail: "Calendar tool timed out. Nothing was posted." }
       ]
     },
     {
@@ -251,7 +243,7 @@ const HB = {
       paused: false,
       result: "Ran just now. The week is still open: the memo, and the dentist today.",
       runs: [
-        { when: "Last Sunday · 18:00", status: "Succeeded", detail: "Posted into Junior's main chat.", chat: true }
+        { when: "Last Sunday · 18:00", status: "Succeeded", detail: "Posted into the main chat.", msg: "j-sunday" }
       ]
     },
     {
@@ -269,8 +261,8 @@ const HB = {
       paused: false,
       result: "Ran just now. Run 1842 is still the latest, and it failed at migrate.",
       runs: [
-        { when: "Today · 7:00", status: "Succeeded", detail: "Posted into Nightwatch's main chat.", chat: true },
-        { when: "Today · 6:00", status: "Failed", detail: "The workflow API did not answer. Nothing was posted.", chat: false }
+        { when: "Today · 7:00", status: "Succeeded", detail: "Posted into the main chat.", msg: "n-deploy-7" },
+        { when: "Today · 6:00", status: "Failed", detail: "The workflow API did not answer. Nothing was posted." }
       ]
     },
     {
@@ -288,7 +280,7 @@ const HB = {
       paused: false,
       result: "Ran just now. The electricity bill is the only one due this week.",
       runs: [
-        { when: "Yesterday · 9:00", status: "Succeeded", detail: "Posted into Ledger's main chat.", chat: true }
+        { when: "Yesterday · 9:00", status: "Succeeded", detail: "Posted into the main chat.", msg: "l-invoice" }
       ]
     },
     {
@@ -366,6 +358,38 @@ HB.sessions = {
 HB.threads = {};
 
 HB.threads["junior:main"] = [
+  {
+    id: "j-brief-y",
+    role: "routine",
+    who: "junior",
+    routine: "Morning briefing",
+    time: "Yesterday",
+    text: "Monday 26 Oct.\n\nNo dentist. Gym stayed at 18:30. Nothing due."
+  },
+  {
+    id: "j-sunday",
+    role: "routine",
+    who: "junior",
+    routine: "Sunday review",
+    time: "Sun",
+    text: "The memo is still unsent. The dentist is the only fixed point this week."
+  },
+  {
+    id: "j-hand-ledger",
+    role: "handoff",
+    from: "junior",
+    to: "ledger",
+    time: "6:40",
+    text: "Check the electricity bill before Friday. Don't pay it."
+  },
+  {
+    id: "j-hand-night",
+    role: "handoff",
+    from: "junior",
+    to: "nightwatch",
+    time: "7:33",
+    text: "Read the failed deploy log for run 1842 and say what broke."
+  },
   {
     id: "j-brief",
     role: "routine",
@@ -486,6 +510,22 @@ HB.threads["junior:inv"] = [
 ];
 
 HB.threads["nightwatch:main"] = [
+  {
+    id: "n-deploy-7",
+    role: "routine",
+    who: "nightwatch",
+    routine: "Deploy watch",
+    time: "7:00",
+    text: "Run 1842 failed in the migrate step. Staging rejected the new column."
+  },
+  {
+    id: "n-hand",
+    role: "handoff",
+    from: "junior",
+    to: "nightwatch",
+    time: "7:33",
+    text: "Read the failed deploy log for run 1842 and say what broke."
+  },
   { id: "n1", role: "user", time: "7:39", text: "Check why the deploy workflow failed." },
   {
     id: "n2",
@@ -524,6 +564,22 @@ HB.threads["nightwatch:main"] = [
 ];
 
 HB.threads["ledger:main"] = [
+  {
+    id: "l-invoice",
+    role: "routine",
+    who: "ledger",
+    routine: "Invoice sweep",
+    time: "Yesterday",
+    text: "The electricity bill is the only one due this week. Nothing was paid."
+  },
+  {
+    id: "l-hand",
+    role: "handoff",
+    from: "junior",
+    to: "ledger",
+    time: "6:40",
+    text: "Check the electricity bill before Friday. Don't pay it."
+  },
   { id: "l1", role: "user", time: "6:57", text: "Ship the invoice fix if the checks are green." },
   {
     id: "l2",

@@ -1,0 +1,292 @@
+/* Component treatments for Honest Terminal and Zoetrik.
+   Original keeps the base app styles. Phone and desktop frames in the gallery
+   stay rounded: they are the device, not the UI. */
+
+html[data-flavor="honest"] body {
+  font-variant-ligatures: none;
+  letter-spacing: 0;
+}
+html[data-flavor="honest"] .wordmark,
+html[data-flavor="honest"] .brand,
+html[data-flavor="honest"] h1,
+html[data-flavor="honest"] h2,
+html[data-flavor="honest"] .bot-name,
+html[data-flavor="honest"] .who,
+html[data-flavor="honest"] .topbar-text strong {
+  font-family: var(--font-display);
+  color: var(--bright);
+  letter-spacing: -0.045em;
+}
+html[data-flavor="honest"] .status {
+  background: var(--fill);
+  color: var(--fill-fg);
+}
+html[data-flavor="honest"] .status svg { stroke: var(--fill-fg); }
+html[data-flavor="honest"] .tmux-bar {
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: 14px;
+  height: 28px;
+  padding: 0 12px;
+  background: var(--fill);
+  color: var(--fill-fg);
+  font: 500 12px/1 var(--mono);
+}
+html[data-device="phone"] .tmux-bar { display: none; }
+html[data-flavor="honest"] .titlebar {
+  background: var(--bg);
+  color: var(--fg-3);
+  letter-spacing: 0;
+}
+html[data-flavor="honest"] .sidebar {
+  border-right: 1px solid var(--accent);
+  box-shadow: 0 0 28px color-mix(in srgb, var(--accent) 12%, transparent);
+}
+html[data-flavor="honest"] .primary,
+html[data-flavor="honest"] .ghost,
+html[data-flavor="honest"] .choice,
+html[data-flavor="honest"] .opt,
+html[data-flavor="honest"] .day,
+html[data-flavor="honest"] .seg button.on {
+  border-radius: 0;
+}
+html[data-flavor="honest"] .primary,
+html[data-flavor="honest"] .choice.primary,
+html[data-flavor="honest"] .day.on,
+html[data-flavor="honest"] .seg button.on,
+html[data-flavor="honest"] .opt.on,
+html[data-flavor="honest"] .send {
+  background: var(--fill);
+  color: var(--fill-fg);
+  border: 1px solid var(--fill);
+}
+html[data-flavor="honest"] .ghost,
+html[data-flavor="honest"] .choice:not(.primary),
+html[data-flavor="honest"] .opt:not(.on) {
+  background: var(--bg);
+  color: var(--accent);
+  border: 1px solid var(--accent);
+}
+html[data-flavor="honest"] .primary::before,
+html[data-flavor="honest"] .ghost::before,
+html[data-flavor="honest"] .choice::before {
+  content: "[";
+  opacity: 0.55;
+  margin-right: 4px;
+}
+html[data-flavor="honest"] .primary::after,
+html[data-flavor="honest"] .ghost::after,
+html[data-flavor="honest"] .choice::after {
+  content: "]";
+  opacity: 0.55;
+  margin-left: 4px;
+}
+html[data-flavor="honest"] .send,
+html[data-flavor="honest"] .icon-btn,
+html[data-flavor="honest"] .text-btn,
+html[data-flavor="honest"] .pill {
+  border-radius: 0;
+}
+html[data-flavor="honest"] .pill,
+html[data-flavor="honest"] .toggle.on {
+  background: var(--fill);
+  color: var(--fill-fg);
+}
+html[data-flavor="honest"] .work-dot { border-radius: 0; background: var(--accent); }
+html[data-flavor="honest"] .diff-line.del {
+  color: var(--error);
+  background: color-mix(in srgb, var(--error) 10%, transparent);
+}
+html[data-flavor="honest"] .diff-line.add {
+  color: var(--accent);
+  font-weight: 650;
+  background: color-mix(in srgb, var(--accent) 12%, transparent);
+}
+html[data-flavor="honest"] .card.alert { border: 1px solid var(--accent); }
+html[data-flavor="honest"] .err { color: var(--error); }
+html[data-flavor="honest"] .bar {
+  background: repeating-linear-gradient(to top, var(--accent) 0 7px, transparent 7px 9px);
+  box-shadow: 0 0 12px color-mix(in srgb, var(--accent) 35%, transparent);
+}
+html[data-flavor="honest"] .meter i { background: var(--accent); }
+html[data-flavor="honest"] .bot-row.on,
+html[data-flavor="honest"] .room-row.on { background: color-mix(in srgb, var(--accent) 8%, transparent); }
+html[data-flavor="honest"] .msg.flash,
+html[data-flavor="honest"] .anchor.flash {
+  background: color-mix(in srgb, var(--accent) 12%, transparent);
+  outline: 1px solid var(--accent);
+}
+@media (prefers-reduced-motion: no-preference) {
+  html[data-flavor="honest"] .primary:hover,
+  html[data-flavor="honest"] .ghost:hover,
+  html[data-flavor="honest"] .choice:hover {
+    background: var(--fill);
+    color: var(--fill-fg);
+    box-shadow: 0 0 0 1px var(--accent), 0 0 26px color-mix(in srgb, var(--accent) 45%, transparent);
+  }
+}
+
+html[data-flavor="zoetrik"] body { letter-spacing: 0.01em; }
+html[data-flavor="zoetrik"] .column { background: var(--bg-2); }
+html[data-flavor="zoetrik"] .sidebar,
+html[data-flavor="zoetrik"] .login,
+html[data-flavor="zoetrik"] .list-page { background: var(--bg); }
+html[data-flavor="zoetrik"] .wordmark,
+html[data-flavor="zoetrik"] .brand,
+html[data-flavor="zoetrik"] h1,
+html[data-flavor="zoetrik"] h2,
+html[data-flavor="zoetrik"] .bot-name,
+html[data-flavor="zoetrik"] .who,
+html[data-flavor="zoetrik"] .topbar-text strong,
+html[data-flavor="zoetrik"] .login-card h1 {
+  font-family: var(--font-display);
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.01em;
+  color: var(--bright);
+}
+html[data-flavor="zoetrik"] .wordmark,
+html[data-flavor="zoetrik"] .brand { letter-spacing: 0.12em; font-weight: 500; }
+html[data-flavor="zoetrik"] .side-label,
+html[data-flavor="zoetrik"] .group-label,
+html[data-flavor="zoetrik"] .kicker,
+html[data-flavor="zoetrik"] .lbl,
+html[data-flavor="zoetrik"] .field label,
+html[data-flavor="zoetrik"] .primary,
+html[data-flavor="zoetrik"] .ghost,
+html[data-flavor="zoetrik"] .choice,
+html[data-flavor="zoetrik"] .text-btn,
+html[data-flavor="zoetrik"] .model-chip,
+html[data-flavor="zoetrik"] .seg button,
+html[data-flavor="zoetrik"] .foot-btn,
+html[data-flavor="zoetrik"] .phone-links button {
+  font-family: var(--font-label);
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  font-size: 12px;
+}
+html[data-flavor="zoetrik"] .side-label,
+html[data-flavor="zoetrik"] .group-label,
+html[data-flavor="zoetrik"] .kicker { color: var(--accent); font-size: 12px; }
+html[data-flavor="zoetrik"] .msg-body,
+html[data-flavor="zoetrik"] .lede,
+html[data-flavor="zoetrik"] .bot-sub,
+html[data-flavor="zoetrik"] .meta,
+html[data-flavor="zoetrik"] p { color: var(--fg-2); }
+html[data-flavor="zoetrik"] .bubble { background: var(--bg); color: var(--fg); border: 1px solid var(--hair); }
+html[data-flavor="zoetrik"] .bubble .msg-body,
+html[data-flavor="zoetrik"] .bubble p { color: var(--fg); }
+html[data-flavor="zoetrik"] .primary,
+html[data-flavor="zoetrik"] .ghost,
+html[data-flavor="zoetrik"] .choice,
+html[data-flavor="zoetrik"] .opt,
+html[data-flavor="zoetrik"] .send,
+html[data-flavor="zoetrik"] .day,
+html[data-flavor="zoetrik"] .seg button.on {
+  background: var(--btn);
+  color: var(--btn-fg);
+  border: 1px solid var(--hair);
+  box-shadow: none;
+}
+html[data-flavor="zoetrik"] .opt.on,
+html[data-flavor="zoetrik"] .day.on,
+html[data-flavor="zoetrik"] .seg button.on {
+  background: var(--fg);
+  color: var(--bg);
+  border-color: var(--fg);
+}
+html[data-flavor="zoetrik"] .text-btn { background: transparent; border: 0; color: var(--fg); }
+html[data-flavor="zoetrik"] .card,
+html[data-flavor="zoetrik"] .r-card,
+html[data-flavor="zoetrik"] .routine-card,
+html[data-flavor="zoetrik"] .composer-box,
+html[data-flavor="zoetrik"] .modal,
+html[data-flavor="zoetrik"] .pop,
+html[data-flavor="zoetrik"] .code,
+html[data-flavor="zoetrik"] .diff,
+html[data-flavor="zoetrik"] .todos {
+  background: var(--bg);
+  border: 1px solid var(--hair);
+  box-shadow: none;
+}
+html[data-flavor="zoetrik"] .card.alert { border-color: var(--accent); }
+html[data-flavor="zoetrik"] .bars,
+html[data-flavor="zoetrik"] .code pre,
+html[data-flavor="zoetrik"] .cmd {
+  background: #000;
+  color: #71ff19;
+  border: 1px solid var(--hair);
+  padding: 12px;
+}
+html[data-flavor="zoetrik"] .bar { background: #71ff19; border-radius: 0; }
+html[data-flavor="zoetrik"] .meter i { background: var(--mint); }
+html[data-flavor="zoetrik"] .diff-line.add { color: var(--green); background: color-mix(in srgb, var(--green) 12%, transparent); }
+html[data-flavor="zoetrik"] .diff-line.del { color: var(--error); background: color-mix(in srgb, var(--error) 12%, transparent); }
+html[data-flavor="zoetrik"] .err { color: var(--error); }
+html[data-flavor="zoetrik"] .anchor.flash {
+  outline: 1px solid var(--accent);
+  background: color-mix(in srgb, var(--accent) 8%, transparent);
+}
+html[data-flavor="zoetrik"] .status { border-bottom: 1px solid var(--hair); }
+html[data-flavor="zoetrik"] .titlebar { border-bottom: 1px solid var(--hair); letter-spacing: 0.1em; text-transform: uppercase; font-family: var(--font-label); }
+@media (prefers-reduced-motion: no-preference) {
+  html[data-flavor="zoetrik"] .primary:hover,
+  html[data-flavor="zoetrik"] .ghost:hover,
+  html[data-flavor="zoetrik"] .choice:hover,
+  html[data-flavor="zoetrik"] .send:hover {
+    background: color-mix(in srgb, var(--btn) 88%, var(--fg));
+  }
+}
+
+.tmux-bar { display: none; }
+.anchor.flash { outline: 2px solid var(--fill); outline-offset: 4px; }
+.handoff {
+  width: 100%;
+  text-align: left;
+  border: 1px solid var(--line-2);
+  border-radius: var(--r-card);
+  padding: 8px 10px;
+  margin: 4px 0 8px;
+  background: var(--bg-2);
+}
+.handoff .route { display: block; font-weight: 650; font-size: 13px; color: var(--bright); }
+.handoff .snip { display: block; color: var(--fg-2); font-size: 13px; }
+.handoff-body {
+  margin-top: 6px;
+  color: var(--fg-2);
+  font-size: 13px;
+  line-height: 1.5;
+}
+html[data-flavor="honest"] .handoff { border-color: var(--line); background: var(--bg-2); }
+html[data-flavor="honest"] .handoff .route { color: var(--accent); }
+html[data-flavor="zoetrik"] .handoff { background: var(--bg); border-color: var(--hair); }
+html[data-flavor="zoetrik"] .handoff .route {
+  font-family: var(--font-label);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  font-size: 12px;
+  color: var(--fg);
+}
+
+.note-card {
+  border: 1px solid var(--line-2);
+  border-radius: var(--r-card);
+  padding: 10px 12px;
+  margin: 0 0 12px;
+  cursor: pointer;
+  text-align: left;
+  width: 100%;
+  background: var(--bg);
+  color: inherit;
+}
+.note-card b { display: block; }
+.note-card span { color: var(--fg-3); font-size: 12px; }
+html[data-flavor="zoetrik"] .note-card { border-color: var(--hair); background: var(--bg); }
+html[data-flavor="zoetrik"] .note-card b {
+  font-family: var(--font-label);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  font-size: 12px;
+}

@@ -16,17 +16,18 @@ a { color: inherit; }
   z-index: 5;
   background: var(--bg);
   background: color-mix(in srgb, var(--bg) 92%, transparent);
-  backdrop-filter: blur(12px);
   border-bottom: 1px solid var(--line);
   padding: 16px 28px;
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 16px;
+  flex-wrap: wrap;
 }
+.controls { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
 .brand { font-weight: 650; letter-spacing: -0.04em; font-size: 18px; }
 .brand small { display: block; font-weight: 400; letter-spacing: 0; color: var(--fg-3); font-size: 12px; }
-.seg { display: flex; border: 1px solid var(--line-2); border-radius: 999px; overflow: hidden; }
+.seg { display: flex; border: 1px solid var(--line-2); border-radius: var(--r-pill); overflow: hidden; }
 .seg button {
   background: transparent;
   border: 0;
