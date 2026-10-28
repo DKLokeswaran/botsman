@@ -8,6 +8,9 @@ class SessionAttachTest {
     @Test
     fun isSessionAttachFailureRecognises4007() {
         assertTrue(isSessionAttachFailure(HermesException("session not found", code = SESSION_UNAVAILABLE_CODE)))
+        assertTrue(isSessionAttachFailure(HermesException("session not active", code = SESSION_ACTIVATE_REJECTED_CODE)))
+        assertEquals(4001, SESSION_ACTIVATE_REJECTED_CODE)
+        assertEquals(4007, SESSION_UNAVAILABLE_CODE)
         assertTrue(isSessionAttachFailure(HermesException("Session not found on server")))
         assertEquals(false, isSessionAttachFailure(HermesException("network down")))
         assertEquals(false, isSessionAttachFailure(IllegalStateException("session not found")))

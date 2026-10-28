@@ -319,7 +319,7 @@ class HermesClient(
         return attachSession("session.resume", sessionId, profile)
     }
 
-    /** Runtime id of a live session. Does not replace session.resume. */
+    /** Runtime id of a live session. An unknown or dead runtime id, or a stored id, is 4001. */
     suspend fun activateSession(sessionId: String, profile: String? = null): ResumedSession {
         return attachSession("session.activate", sessionId, profile)
     }

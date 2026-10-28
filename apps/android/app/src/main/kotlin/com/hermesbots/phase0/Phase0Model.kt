@@ -134,6 +134,7 @@ class Phase0Model(app: Application) : AndroidViewModel(app) {
     private var intentionalClose = false
     private val resumeRetryAfter = mutableMapOf<String, Long>()
     private var openChat: OpenChat? = null
+    private val openEpoch = OpenEpoch()
 
     private val _state = MutableStateFlow(Phase0State())
     val state: StateFlow<Phase0State> = _state
@@ -271,7 +272,10 @@ class Phase0Model(app: Application) : AndroidViewModel(app) {
         }
 
         override fun onSocketClose() {
-            if (!intentionalClose) scheduleReconnect()
+            if (!intentionalClose) {
+                openEpoch.invalidate()
+                scheduleReconnect()
+            }
         }
     }
 
@@ -369,17 +373,20 @@ class Phase0Model(app: Application) : AndroidViewModel(app) {
     }
 
     private fun openBy(method: String, sessionId: String, profile: String = "") {
+        val current = client ?: return
+        if (sessionId.isEmpty() || resumeBlocked(sessionId)) return
         viewModelScope.launch {
-            val current = client ?: return@launch
-            if (sessionId.isEmpty() || resumeBlocked(sessionId)) return@launch
+            val mine = openEpoch.begin()
             _state.update { it.copy(question = null) }
             try {
                 val opened = withContext(Dispatchers.IO) {
                     if (method == "activate") current.activateSession(sessionId, profile.ifBlank { null })
                     else current.resumeSession(sessionId, profile.ifBlank { null })
                 }
-                showOpened(sessionId, opened)
+                if (!openEpoch.same(mine)) return@launch
+                showOpened(sessionId, opened, mine)
             } catch (error: Exception) {
+                if (!openEpoch.same(mine)) return@launch
                 if (!isSessionAttachFailure(error)) {
                     _state.update { it.copy(status = error.message ?: "Could not open the session") }
                     return@launch
@@ -390,9 +397,11 @@ class Phase0Model(app: Application) : AndroidViewModel(app) {
                     if (stored.isNotEmpty()) {
                         try {
                             val fallback = withContext(Dispatchers.IO) { current.resumeSession(stored, profile.ifBlank { null }) }
-                            showOpened(stored, fallback)
+                            if (!openEpoch.same(mine)) return@launch
+                            showOpened(stored, fallback, mine)
                             return@launch
                         } catch (fallback: Exception) {
+                            if (!openEpoch.same(mine)) return@launch
                             if (!isSessionAttachFailure(fallback)) {
                                 _state.update { it.copy(status = fallback.message ?: "Could not open the session") }
                                 return@launch
@@ -407,9 +416,10 @@ class Phase0Model(app: Application) : AndroidViewModel(app) {
         }
     }
 
-    private suspend fun showOpened(requestedId: String, opened: ResumedSession) {
+    private suspend fun showOpened(requestedId: String, opened: ResumedSession, mine: Int) {
         val current = client ?: return
         val history = withContext(Dispatchers.IO) { current.history(opened.sessionId) }
+        if (!openEpoch.commit(mine)) return
         val rows = history.map { row -> HistoryEntry(row.role, row.text, row.rowId) }
         val previousRuntime = _state.value.liveSessionId
         val chat = rememberOpenChat(requestedId, opened)
@@ -456,11 +466,16 @@ class Phase0Model(app: Application) : AndroidViewModel(app) {
     }
 
     fun newSession() {
+        val current = client ?: return
         viewModelScope.launch {
-            val current = client ?: return@launch
+            val mine = openEpoch.begin()
+            var owned = 0
             try {
                 val id = withContext(Dispatchers.IO) { current.createSession() }
+                if (!openEpoch.same(mine)) return@launch
                 val opened = withContext(Dispatchers.IO) { current.activateSession(id) }
+                if (!openEpoch.commit(mine)) return@launch
+                owned = openEpoch.current
                 val chat = rememberOpenChat(id, opened)
                 _state.update {
                     it.copy(
@@ -474,7 +489,10 @@ class Phase0Model(app: Application) : AndroidViewModel(app) {
                     )
                 }
                 refreshLists()
+                if (!openEpoch.same(owned)) return@launch
             } catch (error: Exception) {
+                val still = if (owned == 0) openEpoch.same(mine) else openEpoch.same(owned)
+                if (!still) return@launch
                 _state.update { it.copy(status = error.message ?: "Could not create a session") }
             }
         }
@@ -624,20 +642,25 @@ class Phase0Model(app: Application) : AndroidViewModel(app) {
             }
             val liveChat = openChat
             if (liveChat != null) {
+                val epoch = openEpoch.current
                 val resumed = resumeOrDrop(next, liveChat.resumeId) ?: return@withLock
+                if (!openEpoch.same(epoch)) return@withLock
                 val adopted = rememberOpenChat(liveChat.resumeId, resumed)
                 if (_state.value.liveSessionId != adopted.runtimeId) {
                     _state.update { it.copy(liveSessionId = adopted.runtimeId) }
                 }
-                mergeOpenHistory(next, adopted.runtimeId)
+                mergeOpenHistory(next, adopted.runtimeId, epoch)
+                if (!openEpoch.same(epoch)) return@withLock
                 replaying = true
                 val replay = try {
                     withContext(Dispatchers.IO) { next.replay(adopted.runtimeId, seqs[adopted.runtimeId] ?: 0) }
                 } finally {
                     replaying = false
                 }
+                if (!openEpoch.same(epoch)) return@withLock
                 syncOpenApprovals(adopted.runtimeId, replay.openRequests)
-                mergeOpenHistory(next, adopted.runtimeId)
+                mergeOpenHistory(next, adopted.runtimeId, epoch)
+                if (!openEpoch.same(epoch)) return@withLock
                 if (replay.truncated) {
                     openSession(adopted.runtimeId, liveAttach = true)
                 } else if (route != null && (route.sessionId.isEmpty() || route.sessionId == adopted.runtimeId || route.sessionId == adopted.resumeId)) {
@@ -847,10 +870,12 @@ class Phase0Model(app: Application) : AndroidViewModel(app) {
         val earlier = refreshTail
         refreshTail = viewModelScope.launch {
             earlier?.join()
+            val epoch = openEpoch.current
             val current = client ?: return@launch
-            if (!_state.value.connected) return@launch
+            if (!_state.value.connected && !_state.value.reconnecting) return@launch
             try {
                 val sessions = withContext(Dispatchers.IO) { current.listSessions() }
+                if (!openEpoch.same(epoch)) return@launch
                 _state.update { it.copy(sessions = sessions) }
                 val chat = openChat ?: return@launch
                 val kept = openChatAfterListUpdate(chat, sessions.map { it.id })
@@ -858,54 +883,59 @@ class Phase0Model(app: Application) : AndroidViewModel(app) {
                 if (_state.value.liveSessionId != kept.runtimeId) {
                     _state.update { it.copy(liveSessionId = kept.runtimeId) }
                 }
+                if (!openEpoch.same(epoch)) return@launch
                 if (attach) {
-                    val call = reattachCall(kept)
-                    try {
-                        val opened = withContext(Dispatchers.IO) {
-                            if (call.method == "activate") current.activateSession(call.sessionId)
-                            else current.resumeSession(call.sessionId)
-                        }
-                        val adopted = rememberOpenChat(call.sessionId, opened)
+                    val outcome = reattachOpenChat(
+                        kept,
+                        stillOpen = { openEpoch.same(epoch) },
+                        activate = { id ->
+                            val opened = withContext(Dispatchers.IO) { current.activateSession(id) }
+                            AttachedIds(opened.sessionId, opened.storedSessionId, opened.sessionKey)
+                        },
+                        resume = { id ->
+                            val opened = withContext(Dispatchers.IO) { current.resumeSession(id) }
+                            AttachedIds(opened.sessionId, opened.storedSessionId, opened.sessionKey)
+                        },
+                        isAttachFailure = { isSessionAttachFailure(it) },
+                    )
+                    if (!openEpoch.same(epoch) || outcome is ReattachOutcome.Aborted) return@launch
+                    if (outcome is ReattachOutcome.Dropped) {
+                        noteAttachFailure(outcome.failedId, outcome.method)
+                        return@launch
+                    }
+                    if (outcome is ReattachOutcome.Attached) {
+                        if (!openEpoch.same(epoch)) return@launch
+                        val adopted = rememberOpenChat(
+                            outcome.requestedId,
+                            ResumedSession(
+                                sessionId = outcome.opened.sessionId,
+                                messages = emptyList(),
+                                openRequests = emptyList(),
+                                storedSessionId = outcome.opened.storedSessionId,
+                                sessionKey = outcome.opened.sessionKey,
+                            ),
+                        )
                         if (_state.value.liveSessionId != adopted.runtimeId) {
                             _state.update { it.copy(liveSessionId = adopted.runtimeId) }
                         }
-                    } catch (error: Exception) {
-                        if (isSessionAttachFailure(error)) {
-                            if (call.method == "activate" && kept.resumeId.isNotEmpty() && kept.resumeId != kept.runtimeId) {
-                                try {
-                                    val opened = withContext(Dispatchers.IO) { current.resumeSession(kept.resumeId) }
-                                    val adopted = rememberOpenChat(kept.resumeId, opened)
-                                    if (_state.value.liveSessionId != adopted.runtimeId) {
-                                        _state.update { it.copy(liveSessionId = adopted.runtimeId) }
-                                    }
-                                } catch (fallback: Exception) {
-                                    if (isSessionAttachFailure(fallback)) {
-                                        noteAttachFailure(kept.resumeId, "resume")
-                                        return@launch
-                                    }
-                                }
-                            } else {
-                                noteAttachFailure(call.sessionId, call.method)
-                                return@launch
-                            }
-                        }
-                        // History can still move if this socket was already attached.
                     }
                 }
+                if (!openEpoch.same(epoch)) return@launch
                 val live = openChat?.runtimeId ?: return@launch
-                mergeOpenHistory(current, live)
+                mergeOpenHistory(current, live, epoch)
             } catch (_: Exception) {
                 // A missed refresh is retried on the next sessions.changed or foreground.
             }
         }
     }
 
-    private suspend fun mergeOpenHistory(current: HermesClient, live: String) {
+    private suspend fun mergeOpenHistory(current: HermesClient, live: String, epoch: Int) {
         val history = withContext(Dispatchers.IO) { current.history(live) }
+        if (!openEpoch.same(epoch)) return
         val rows = history.map { row -> HistoryEntry(row.role, row.text, row.rowId) }
         var grew = false
         _state.update { state ->
-            if (state.liveSessionId != live) return@update state
+            if (!openEpoch.same(epoch) || state.liveSessionId != live) return@update state
             val merged = mergeHistory(state.messages, rows)
             grew = transcriptGrew(state.messages, merged)
             if (sameTranscript(state.messages, merged)) state else state.copy(messages = merged)
@@ -980,6 +1010,7 @@ class Phase0Model(app: Application) : AndroidViewModel(app) {
                 seqs.remove(it.runtimeId)
                 seqs.remove(it.resumeId)
             }
+            openEpoch.invalidate()
             openChat = null
         }
         applyApproval { book ->

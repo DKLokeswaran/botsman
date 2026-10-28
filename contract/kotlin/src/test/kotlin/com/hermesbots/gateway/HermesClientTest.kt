@@ -374,6 +374,47 @@ class HermesClientTest {
     }
 
     @Test
+    fun test_bug_activate_unknown_runtime_returns_4001() = withFake(testHooks = true) { port, http ->
+        val gateway = HermesClient("http://127.0.0.1:$port", http)
+        try {
+            val material = runBlocking { gateway.login("tester", "tester") }
+            runBlocking { gateway.connect(material.accessToken) }
+            val missingRuntime = assertThrows<HermesException> {
+                runBlocking { gateway.activateSession("missing-runtime") }
+            }
+            assertEquals(SESSION_ACTIVATE_REJECTED_CODE, missingRuntime.code)
+            val stored = assertThrows<HermesException> {
+                runBlocking { gateway.activateSession("sess-1") }
+            }
+            assertEquals(SESSION_ACTIVATE_REJECTED_CODE, stored.code)
+            val missingResume = assertThrows<HermesException> {
+                runBlocking { gateway.resumeSession("missing-stored") }
+            }
+            assertEquals(SESSION_UNAVAILABLE_CODE, missingResume.code)
+            postTestHook(http, port, "/__test__/resume_reject", mapOf(
+                "session_id" to "live-1",
+                "runtime_dead" to true,
+            ))
+            val dead = assertThrows<HermesException> {
+                runBlocking { gateway.activateSession("live-1") }
+            }
+            assertEquals(SESSION_ACTIVATE_REJECTED_CODE, dead.code)
+            val resumed = runBlocking { gateway.resumeSession("sess-1") }
+            assertTrue(resumed.sessionId != "live-1")
+            assertEquals("sess-1", resumed.storedSessionId)
+            assertEquals("sess-1", resumed.sessionKey)
+            val gone = assertThrows<HermesException> {
+                runBlocking { gateway.activateSession("live-1") }
+            }
+            assertEquals(SESSION_ACTIVATE_REJECTED_CODE, gone.code)
+            val sessions = runBlocking { gateway.listSessions() }
+            assertTrue(sessions.any { it.id == "sess-1" })
+        } finally {
+            gateway.close()
+        }
+    }
+
+    @Test
     fun test_bug_login_stray_whitespace() {
         assertEquals(
             "Login failed (401: invalid_credentials)",

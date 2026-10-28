@@ -54,13 +54,15 @@ import {
   mergeHistory,
   noteLocalChoice,
   onApprovalCancelled,
+  OpenEpoch,
   onNewerMessage,
   onRequestCancel,
   onToolComplete,
   openCallForRoute,
   openChatAfterListUpdate,
-  reattachCall,
+  reattachOpenChat,
   rememberOpen,
+  showOpenChat,
   restoreOpen,
   sameTranscript,
   shouldDropOpenChat,
@@ -261,6 +263,7 @@ export function App() {
   const seqs = useRef<Record<string, number>>({});
   const liveRef = useRef<string | null>(null);
   const openChatRef = useRef<OpenChat | null>(null);
+  const openEpoch = useRef(new OpenEpoch());
   const sessionsRef = useRef<SessionRow[]>([]);
   const closing = useRef(false);
   const fileRef = useRef<HTMLInputElement>(null);
@@ -667,10 +670,10 @@ export function App() {
     applyApproval(syncOpen(approvalsRef.current, sessionId, ids));
   }
 
-  async function mergeOpenHistory(client: HermesClient, live: string) {
+  async function mergeOpenHistory(client: HermesClient, live: string, epoch: number) {
     const history = await client.history(live);
     const rows: HistoryEntry[] = history.map((row) => ({ role: row.role, text: row.text, rowId: row.rowId }));
-    if (liveRef.current !== live) return;
+    if (!openEpoch.current.same(epoch) || liveRef.current !== live) return;
     const merged = mergeHistory(linesRef.current, rows);
     const grew = transcriptGrew(linesRef.current, merged);
     if (!sameTranscript(linesRef.current, merged)) {
@@ -738,6 +741,7 @@ export function App() {
     }
     applyApproval({ book: nextBook, effects: [] });
     if (!targetsOpen) return;
+    openEpoch.current.invalidate();
     openChatRef.current = null;
     const cleared = afterStaleSessionDropped({
       liveId: liveRef.current,
@@ -784,8 +788,10 @@ export function App() {
   async function refreshLive(attach: boolean) {
     const client = clientRef.current;
     if (!client) return;
+    const epoch = openEpoch.current.current;
     try {
       const nextSessions = await client.listSessions();
+      if (!openEpoch.current.same(epoch)) return;
       rememberSessions(nextSessions);
       const chat = openChatRef.current;
       if (!chat) return;
@@ -796,37 +802,29 @@ export function App() {
       openChatRef.current = kept;
       liveRef.current = kept.runtimeId;
       setLiveId((current) => (current === kept.runtimeId ? current : kept.runtimeId));
+      if (!openEpoch.current.same(epoch)) return;
       if (attach) {
-        const call = reattachCall(kept);
-        try {
-          const opened =
-            call.method === "activate"
-              ? await client.activateSession(call.sessionId)
-              : await client.resumeSession(call.sessionId);
-          rememberOpenChat(call.sessionId, opened);
-        } catch (error) {
-          if (isSessionAttachFailure(error)) {
-            if (call.method === "activate" && kept.resumeId && kept.resumeId !== kept.runtimeId) {
-              try {
-                const opened = await client.resumeSession(kept.resumeId);
-                rememberOpenChat(kept.resumeId, opened);
-              } catch (fallback) {
-                if (isSessionAttachFailure(fallback)) {
-                  noteAttachFailure(kept.resumeId, "resume");
-                  return;
-                }
-              }
-            } else {
-              noteAttachFailure(call.sessionId, call.method);
-              return;
-            }
-          }
-          // History can still move if this socket was already attached.
+        const outcome = await reattachOpenChat({
+          chat: kept,
+          stillOpen: () => openEpoch.current.same(epoch),
+          activate: (sessionId) => client.activateSession(sessionId),
+          resume: (sessionId) => client.resumeSession(sessionId),
+          isAttachFailure: isSessionAttachFailure,
+        });
+        if (!openEpoch.current.same(epoch) || outcome.status === "aborted") return;
+        if (outcome.status === "dropped") {
+          noteAttachFailure(outcome.failedId, outcome.method);
+          return;
+        }
+        if (outcome.status === "attached") {
+          if (!openEpoch.current.same(epoch)) return;
+          rememberOpenChat(outcome.requestedId, outcome.opened);
         }
       }
+      if (!openEpoch.current.same(epoch)) return;
       const live = openChatRef.current?.runtimeId;
       if (!live) return;
-      await mergeOpenHistory(client, live);
+      await mergeOpenHistory(client, live, epoch);
     } catch {
       // A missed refresh is retried on the next sessions.changed or foreground.
     }
@@ -1070,6 +1068,7 @@ export function App() {
     client.onServerRequest = applyRequest;
     client.onSocketClose = () => {
       if (!closing.current) {
+        openEpoch.current.invalidate();
         setReconnecting(true);
         setConnected(false);
         setStatus("Reconnecting");
@@ -1116,12 +1115,14 @@ export function App() {
       }
     }
     if (chat) {
+      const epoch = openEpoch.current.current;
       const resumed = await resumeOrDrop(client, chat.resumeId);
-      if (!resumed) {
+      if (!resumed || !openEpoch.current.same(epoch)) {
         return;
       }
       const adopted = rememberOpenChat(chat.resumeId, resumed);
-      await mergeOpenHistory(client, adopted.runtimeId);
+      await mergeOpenHistory(client, adopted.runtimeId, epoch);
+      if (!openEpoch.current.same(epoch)) return;
       replaying.current = true;
       let replay;
       try {
@@ -1129,8 +1130,10 @@ export function App() {
       } finally {
         replaying.current = false;
       }
+      if (!openEpoch.current.same(epoch)) return;
       syncOpenApprovals(adopted.runtimeId, replay.openRequests);
-      await mergeOpenHistory(client, adopted.runtimeId);
+      await mergeOpenHistory(client, adopted.runtimeId, epoch);
+      if (!openEpoch.current.same(epoch)) return;
       if (replay.truncated) {
         await openSession(adopted.runtimeId, "", { liveAttach: true });
       } else if (route && (!route.sessionId || route.sessionId === adopted.runtimeId || route.sessionId === adopted.resumeId)) {
@@ -1231,10 +1234,12 @@ export function App() {
   async function showOpened(
     requestedId: string,
     opened: { sessionId: string; storedSessionId?: string; sessionKey?: string; openRequests: ServerRequest[] },
+    mine: number,
   ) {
     const client = clientRef.current;
     if (!client) return;
     const history = await client.history(opened.sessionId);
+    if (!openEpoch.current.commit(mine)) return;
     const rows: HistoryEntry[] = history.map((row) => ({ role: row.role, text: row.text, rowId: row.rowId }));
     const previousRuntime = liveRef.current;
     const chat = rememberOpenChat(requestedId, opened);
@@ -1258,14 +1263,17 @@ export function App() {
     const client = clientRef.current;
     if (!client || !sessionId) return;
     if (resumeBlocked(sessionId)) return;
+    const mine = openEpoch.current.begin();
     rememberQuestion(null);
     try {
       const opened =
         method === "activate"
           ? await client.activateSession(sessionId, profile || undefined)
           : await client.resumeSession(sessionId, profile || undefined);
-      await showOpened(sessionId, opened);
+      if (!openEpoch.current.same(mine)) return;
+      await showOpened(sessionId, opened, mine);
     } catch (error) {
+      if (!openEpoch.current.same(mine)) return;
       if (!isSessionAttachFailure(error)) {
         setStatus(error instanceof Error ? error.message : "Could not open the session");
         return;
@@ -1276,9 +1284,11 @@ export function App() {
         if (stored) {
           try {
             const opened = await client.resumeSession(stored, profile || undefined);
-            await showOpened(stored, opened);
+            if (!openEpoch.current.same(mine)) return;
+            await showOpened(stored, opened, mine);
             return;
           } catch (fallback) {
+            if (!openEpoch.current.same(mine)) return;
             if (!isSessionAttachFailure(fallback)) {
               setStatus(fallback instanceof Error ? fallback.message : "Could not open the session");
               return;
@@ -1303,18 +1313,27 @@ export function App() {
     if (!client) {
       return;
     }
+    const mine = openEpoch.current.begin();
+    let owned = 0;
     try {
       const id = await client.createSession();
+      if (!openEpoch.current.same(mine)) return;
       const opened = await client.activateSession(id);
+      if (!openEpoch.current.commit(mine)) return;
+      owned = openEpoch.current.current;
       rememberOpenChat(id, opened);
       linesRef.current = [];
       setLines([]);
       publishApprovals(approvalsRef.current);
       rememberQuestion(null);
       setFocus(null);
-      rememberSessions(await client.listSessions());
+      const listed = await client.listSessions();
+      if (!openEpoch.current.same(owned)) return;
+      rememberSessions(listed);
       setStatus("New session");
     } catch (error) {
+      const still = owned === 0 ? openEpoch.current.same(mine) : openEpoch.current.same(owned);
+      if (!still) return;
       setStatus(error instanceof Error ? error.message : "Could not create a session");
     }
   }
@@ -1461,7 +1480,7 @@ export function App() {
           </Button>
         ) : null}
         <main ref={mainRef} className="h-full space-y-3 overflow-y-auto px-4 py-3" onScroll={refreshScrollMetrics}>
-        {connected ? (
+        {showOpenChat(connected, reconnecting) ? (
           <>
             <p className="font-[family-name:var(--font-label)] text-[12px] tracking-[0.08em] text-primary uppercase">Profiles</p>
             {profiles.map((profile) => (
@@ -1597,7 +1616,7 @@ export function App() {
         )}
         </main>
       </div>
-      {connected ? (
+      {showOpenChat(connected, reconnecting) ? (
         <form
           className="space-y-2 border-t border-[var(--line)] px-4 py-3"
           onSubmit={(event) => {
@@ -1649,7 +1668,7 @@ export function App() {
       <div className="space-y-2 border-t border-[var(--line)] px-4 py-3">
         <p className="font-[family-name:var(--font-label)] text-[12px] tracking-[0.08em] text-primary uppercase">About</p>
         <p className="text-sm">{APP_VERSION}</p>
-        {connected ? (
+        {showOpenChat(connected, reconnecting) ? (
           <label className="block space-y-1">
             <span className="font-[family-name:var(--font-label)] text-[12px] tracking-[0.08em] uppercase">Update server</span>
             <Input

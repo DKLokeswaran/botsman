@@ -1,5 +1,9 @@
 package com.hermesbots.phase0
 
+import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.async
+import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.yield
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
@@ -227,5 +231,101 @@ class Phase0ModelSyncTest {
         assertEquals("sess-1", stored.sessionId)
         val focused = openCallForRoute("a1b2c3d4", listOf("sess-1"), OpenChat("a1b2c3d4", "sess-1"))
         assertEquals("focus", focused.method)
+    }
+
+    @Test
+    fun test_bug_new_session_while_refresh_in_flight_stays_on_the_new_chat() = runBlocking {
+        val epoch = OpenEpoch()
+        val captured = epoch.current
+        val gate = CompletableDeferred<AttachedIds>()
+        var entered = false
+        val pending = async {
+            reattachOpenChat(
+                OpenChat("live-1", "sess-1"),
+                stillOpen = { epoch.same(captured) },
+                activate = {
+                    entered = true
+                    gate.await()
+                },
+                resume = { error("resume not used") },
+                isAttachFailure = { false },
+            )
+        }
+        while (!entered) yield()
+        val mine = epoch.begin()
+        assertTrue(epoch.commit(mine))
+        gate.complete(AttachedIds("live-1", "sess-1", "sess-1"))
+        assertTrue(pending.await() is ReattachOutcome.Aborted)
+    }
+
+    @Test
+    fun test_bug_open_another_chat_while_refresh_in_flight_stays_on_it() = runBlocking {
+        val current = OpenChat("live-1", "sess-1")
+        val opened = openCallForRoute("sess-2", listOf("sess-1", "sess-2"), current)
+        assertEquals("resume", opened.method)
+        assertEquals("sess-2", opened.sessionId)
+        val epoch = OpenEpoch()
+        val captured = epoch.current
+        val gate = CompletableDeferred<AttachedIds>()
+        var entered = false
+        val pending = async {
+            reattachOpenChat(
+                current,
+                stillOpen = { epoch.same(captured) },
+                activate = {
+                    entered = true
+                    gate.await()
+                },
+                resume = { error("resume not used") },
+                isAttachFailure = { false },
+            )
+        }
+        while (!entered) yield()
+        val mine = epoch.begin()
+        assertTrue(epoch.commit(mine))
+        gate.complete(AttachedIds("live-1", "sess-1", "sess-1"))
+        assertTrue(pending.await() is ReattachOutcome.Aborted)
+    }
+
+    @Test
+    fun test_bug_notification_tap_while_refresh_in_flight() = runBlocking {
+        val route = openCallForRoute("live-9", listOf("sess-1"), OpenChat("live-1", "sess-1"))
+        assertEquals("activate", route.method)
+        assertEquals("live-9", route.sessionId)
+        val epoch = OpenEpoch()
+        val captured = epoch.current
+        val gate = CompletableDeferred<AttachedIds>()
+        var resumed = false
+        val pending = async {
+            reattachOpenChat(
+                OpenChat("live-1", "sess-1"),
+                stillOpen = { epoch.same(captured) },
+                activate = { throw IllegalStateException("session not active") },
+                resume = {
+                    resumed = true
+                    gate.await()
+                },
+                isAttachFailure = { error ->
+                    val message = error.message.orEmpty()
+                    message.contains("not active") || message.contains("not found")
+                },
+            )
+        }
+        while (!resumed) yield()
+        val mine = epoch.begin()
+        assertTrue(epoch.commit(mine))
+        gate.complete(AttachedIds("live-2", "sess-1", "sess-1"))
+        assertTrue(pending.await() is ReattachOutcome.Aborted)
+    }
+
+    @Test
+    fun test_bug_reconnect_keeps_mount_and_scroll() {
+        assertTrue(showOpenChat(false, true))
+        assertTrue(showOpenChat(true, false))
+        assertFalse(showOpenChat(false, false))
+        val epoch = OpenEpoch()
+        val open = epoch.current
+        epoch.invalidate()
+        assertFalse(epoch.same(open))
     }
 }

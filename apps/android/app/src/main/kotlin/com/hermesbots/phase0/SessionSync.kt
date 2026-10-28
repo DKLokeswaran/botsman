@@ -1,5 +1,7 @@
 package com.hermesbots.phase0
 
+import kotlinx.coroutines.CancellationException
+
 /** Per-session approval cards and transcript merge. The Windows reducer matches this. */
 
 const val RESOLVED_CARD_MS = 5_000L
@@ -273,8 +275,8 @@ fun reattachCall(chat: OpenChat): AttachCall {
 }
 
 /**
- * A 4007 for the runtime id keeps the chat while a stored resume id remains.
- * A 4007 for that stored id drops the chat.
+ * 4007 or 4001 for the runtime id keeps the chat while a stored resume id remains.
+ * 4007 from session.resume of that stored id drops the chat.
  */
 fun shouldDropOpenChat(chat: OpenChat?, failedId: String, failedMethod: String): Boolean {
     if (chat == null) return false
@@ -300,6 +302,88 @@ fun openCallForRoute(routeSessionId: String, knownStoredIds: List<String>, curre
 fun openChatAfterListUpdate(chat: OpenChat, sessionIds: List<String>): OpenChat {
     if (sessionIds.isEmpty()) return chat
     return chat
+}
+
+/** The session list and transcript stay mounted while the socket is down for reconnect. */
+fun showOpenChat(connected: Boolean, reconnecting: Boolean): Boolean = connected || reconnecting
+
+/**
+ * Generation for the open chat. A refresh captures current at start and aborts
+ * when it no longer matches. begin() runs before a user-driven attach.
+ * commit() runs when that attach wins, so a refresh that sampled begin()'s
+ * value still aborts.
+ */
+class OpenEpoch {
+    var current: Int = 0
+        private set
+
+    fun begin(): Int {
+        current += 1
+        return current
+    }
+
+    fun commit(expected: Int): Boolean {
+        if (current != expected) return false
+        current = expected + 1
+        return true
+    }
+
+    fun same(expected: Int): Boolean = current == expected
+
+    fun invalidate() {
+        current += 1
+    }
+}
+
+data class AttachedIds(val sessionId: String, val storedSessionId: String, val sessionKey: String)
+
+sealed class ReattachOutcome {
+    data object Aborted : ReattachOutcome()
+    data class Attached(val requestedId: String, val opened: AttachedIds) : ReattachOutcome()
+    data class Dropped(val failedId: String, val method: String) : ReattachOutcome()
+    data object Kept : ReattachOutcome()
+}
+
+/**
+ * Re-attach the chat a refresh started with. After every await, abort when
+ * stillOpen is false so a newer chat is not replaced. Activate 4001 and 4007
+ * both fall back to session.resume of a distinct stored id.
+ */
+suspend fun reattachOpenChat(
+    chat: OpenChat,
+    stillOpen: () -> Boolean,
+    activate: suspend (String) -> AttachedIds,
+    resume: suspend (String) -> AttachedIds,
+    isAttachFailure: (Throwable) -> Boolean,
+): ReattachOutcome {
+    if (!stillOpen()) return ReattachOutcome.Aborted
+    val call = reattachCall(chat)
+    try {
+        val opened = if (call.method == "activate") activate(call.sessionId) else resume(call.sessionId)
+        if (!stillOpen()) return ReattachOutcome.Aborted
+        return ReattachOutcome.Attached(call.sessionId, opened)
+    } catch (error: Exception) {
+        if (error is CancellationException) throw error
+        if (!isAttachFailure(error)) {
+            if (!stillOpen()) return ReattachOutcome.Aborted
+            return ReattachOutcome.Kept
+        }
+        val stored = chat.resumeId
+        if (call.method == "activate" && stored.isNotEmpty() && stored != chat.runtimeId) {
+            try {
+                val opened = resume(stored)
+                if (!stillOpen()) return ReattachOutcome.Aborted
+                return ReattachOutcome.Attached(stored, opened)
+            } catch (fallback: Exception) {
+                if (fallback is CancellationException) throw fallback
+                if (!stillOpen()) return ReattachOutcome.Aborted
+                if (isAttachFailure(fallback)) return ReattachOutcome.Dropped(stored, "resume")
+                return ReattachOutcome.Kept
+            }
+        }
+        if (!stillOpen()) return ReattachOutcome.Aborted
+        return ReattachOutcome.Dropped(call.sessionId, call.method)
+    }
 }
 
 fun syncOpen(book: Map<String, PendingApproval>, sessionId: String, openIds: Set<String>): ApprovalResult {

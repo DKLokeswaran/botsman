@@ -115,6 +115,7 @@ export {
   reconnectDelayMs,
   RECONNECT_BACKOFF_CAP_MS,
   RESUME_RETRY_MS,
+  SESSION_ACTIVATE_REJECTED_CODE,
   SESSION_UNAVAILABLE_CODE,
   SESSION_UNAVAILABLE_NOTICE,
 } from "./attach.ts";
@@ -493,7 +494,7 @@ export class HermesClient {
     return this.attachSession("session.resume", sessionId, profile);
   }
 
-  /** Runtime id of a live session. Does not replace session.resume. */
+  /** Runtime id of a live session. An unknown or dead runtime id, or a stored id, is 4001. */
   async activateSession(sessionId: string, profile?: string): Promise<AttachedSession> {
     return this.attachSession("session.activate", sessionId, profile);
   }

@@ -7,6 +7,7 @@ import test from "node:test";
 import {
   HermesClient,
   HermesError,
+  SESSION_ACTIVATE_REJECTED_CODE,
   SESSION_UNAVAILABLE_CODE,
   formatPush,
   httpFailureMessage,
@@ -528,6 +529,51 @@ test("test_bug_stale_session_resume_keeps_socket", async () => {
     const created = await gateway.createSession();
     const opened = await gateway.activateSession(created);
     assert.ok(opened.sessionId.length > 0);
+  } finally {
+    fake.stop();
+  }
+});
+
+test("test_bug_activate_unknown_runtime_returns_4001", async () => {
+  const fake = await startFake(true);
+  try {
+    const gateway = client(fake.port);
+    const material = await gateway.login("tester", "tester");
+    await gateway.connect(material.accessToken);
+    await assert.rejects(() => gateway.activateSession("missing-runtime"), (error: unknown) => {
+      assert.ok(error instanceof HermesError);
+      assert.equal(error.code, SESSION_ACTIVATE_REJECTED_CODE);
+      return true;
+    });
+    await assert.rejects(() => gateway.activateSession("sess-1"), (error: unknown) => {
+      assert.ok(error instanceof HermesError);
+      assert.equal(error.code, SESSION_ACTIVATE_REJECTED_CODE);
+      return true;
+    });
+    await assert.rejects(() => gateway.resumeSession("missing-stored"), (error: unknown) => {
+      assert.ok(error instanceof HermesError);
+      assert.equal(error.code, SESSION_UNAVAILABLE_CODE);
+      return true;
+    });
+    await postTestHook(fake.port, "/__test__/resume_reject", {
+      session_id: "live-1",
+      runtime_dead: true,
+    });
+    await assert.rejects(() => gateway.activateSession("live-1"), (error: unknown) => {
+      assert.ok(error instanceof HermesError);
+      assert.equal(error.code, SESSION_ACTIVATE_REJECTED_CODE);
+      return true;
+    });
+    const resumed = await gateway.resumeSession("sess-1");
+    assert.notEqual(resumed.sessionId, "live-1");
+    assert.equal(resumed.storedSessionId, "sess-1");
+    assert.equal(resumed.sessionKey, "sess-1");
+    await assert.rejects(() => gateway.activateSession("live-1"), (error: unknown) => {
+      assert.ok(error instanceof HermesError);
+      assert.equal(error.code, SESSION_ACTIVATE_REJECTED_CODE);
+      return true;
+    });
+    assert.ok((await gateway.listSessions()).some((row) => row.id === "sess-1"));
   } finally {
     fake.stop();
   }
