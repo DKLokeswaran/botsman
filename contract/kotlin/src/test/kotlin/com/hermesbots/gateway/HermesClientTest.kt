@@ -37,11 +37,17 @@ class HermesClientTest {
             }
 
             val ticket = runBlocking { gateway.ticket(material.accessToken) }
+            val closed = kotlinx.coroutines.CompletableDeferred<Unit>()
             val socket = http.newWebSocket(
                 okhttp3.Request.Builder().url("ws://127.0.0.1:$port/api/ws?ticket=$ticket").build(),
-                object : okhttp3.WebSocketListener() {},
+                object : okhttp3.WebSocketListener() {
+                    override fun onClosed(webSocket: okhttp3.WebSocket, code: Int, reason: String) {
+                        closed.complete(Unit)
+                    }
+                },
             )
             socket.close(1000, "done")
+            runBlocking { kotlinx.coroutines.withTimeout(5_000) { closed.await() } }
             val failed = kotlinx.coroutines.CompletableDeferred<Throwable?>()
             http.newWebSocket(
                 okhttp3.Request.Builder().url("ws://127.0.0.1:$port/api/ws?ticket=$ticket").build(),
