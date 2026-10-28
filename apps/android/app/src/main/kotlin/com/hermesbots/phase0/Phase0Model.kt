@@ -17,14 +17,19 @@ import com.hermesbots.gateway.LatestRelease
 import com.hermesbots.gateway.LoginMaterial
 import com.hermesbots.gateway.ProfileRow
 import com.hermesbots.gateway.PushRoute
+import com.hermesbots.gateway.RECONNECT_BACKOFF_CAP_MS
+import com.hermesbots.gateway.RESUME_RETRY_MS
 import com.hermesbots.gateway.ReleaseFile
+import com.hermesbots.gateway.ResumedSession
 import com.hermesbots.gateway.ServerRequest
 import com.hermesbots.gateway.SessionRow
 import com.hermesbots.gateway.TrackedMessage
 import com.hermesbots.gateway.formatAppVersion
+import com.hermesbots.gateway.isSessionAttachFailure
 import com.hermesbots.gateway.openRequestIds
 import com.hermesbots.gateway.parseLatest
 import com.hermesbots.gateway.parsePush
+import com.hermesbots.gateway.reconnectDelayMs
 import com.hermesbots.gateway.routeFocus
 import com.hermesbots.gateway.updateAvailable
 import java.io.File
@@ -127,6 +132,7 @@ class Phase0Model(app: Application) : AndroidViewModel(app) {
     private var pendingRelease: LatestRelease? = null
     private var reconnectJob: Job? = null
     private var intentionalClose = false
+    private val resumeRetryAfter = mutableMapOf<String, Long>()
 
     private val _state = MutableStateFlow(Phase0State())
     val state: StateFlow<Phase0State> = _state
@@ -353,6 +359,7 @@ class Phase0Model(app: Application) : AndroidViewModel(app) {
     fun openSession(sessionId: String, profile: String = "") {
         viewModelScope.launch {
             val current = client ?: return@launch
+            if (resumeBlocked(sessionId)) return@launch
             _state.update { it.copy(question = null) }
             try {
                 val opened = withContext(Dispatchers.IO) { current.resumeSession(sessionId, profile.ifBlank { null }) }
@@ -383,7 +390,12 @@ class Phase0Model(app: Application) : AndroidViewModel(app) {
                     placeFocus(route, opened.openRequests, shown)
                 }
             } catch (error: Exception) {
-                _state.update { it.copy(status = error.message ?: "Could not open the session") }
+                if (isSessionAttachFailure(error)) {
+                    markResumeBlocked(sessionId)
+                    dropStaleSession(sessionId)
+                } else {
+                    _state.update { it.copy(status = error.message ?: "Could not open the session") }
+                }
             }
         }
     }
@@ -497,7 +509,7 @@ class Phase0Model(app: Application) : AndroidViewModel(app) {
         if (_state.value.connected) followRoute()
     }
 
-    private suspend fun restore(saved: SavedLogin) {
+    private suspend fun restore(saved: SavedLogin): Int? {
         val url = _state.value.serverUrl
         try {
             val refreshed = withContext(Dispatchers.IO) {
@@ -511,6 +523,7 @@ class Phase0Model(app: Application) : AndroidViewModel(app) {
                 }
             }
             establish(refreshed)
+            return null
         } catch (error: Exception) {
             val message = error.message ?: "Refresh failed"
             if (error is HermesException && error.status == 401) secure.clearSecret()
@@ -523,6 +536,7 @@ class Phase0Model(app: Application) : AndroidViewModel(app) {
                     status = if (rejected) "Sign in again. $message" else message,
                 )
             }
+            return if (error is HermesException) error.retryAfter else null
         }
     }
 
@@ -552,18 +566,18 @@ class Phase0Model(app: Application) : AndroidViewModel(app) {
             if (route != null && route.sessionId.isNotEmpty() && route.sessionId != live) {
                 openSession(route.sessionId, route.profile)
             } else if (live != null) {
-                withContext(Dispatchers.IO) { next.resumeSession(live) }
-                mergeOpenHistory(next, live)
+                val resumed = resumeOrDrop(next, live) ?: return@withLock
+                mergeOpenHistory(next, resumed.sessionId)
                 replaying = true
                 val replay = try {
-                    withContext(Dispatchers.IO) { next.replay(live, seqs[live] ?: 0) }
+                    withContext(Dispatchers.IO) { next.replay(resumed.sessionId, seqs[resumed.sessionId] ?: 0) }
                 } finally {
                     replaying = false
                 }
-                syncOpenApprovals(live, replay.openRequests)
-                mergeOpenHistory(next, live)
+                syncOpenApprovals(resumed.sessionId, replay.openRequests)
+                mergeOpenHistory(next, resumed.sessionId)
                 if (replay.truncated) {
-                    openSession(live)
+                    openSession(resumed.sessionId)
                 } else if (route != null && (route.sessionId.isEmpty() || route.sessionId == live)) {
                     pendingRoute = null
                     placeFocus(route, replay.openRequests, _state.value.messages)
@@ -779,7 +793,12 @@ class Phase0Model(app: Application) : AndroidViewModel(app) {
                 if (attach) {
                     try {
                         withContext(Dispatchers.IO) { current.resumeSession(live) }
-                    } catch (_: Exception) {
+                    } catch (error: Exception) {
+                        if (isSessionAttachFailure(error)) {
+                            markResumeBlocked(live)
+                            dropStaleSession(live)
+                            return@launch
+                        }
                         // History can still move if this socket was already attached.
                     }
                 }
@@ -809,7 +828,6 @@ class Phase0Model(app: Application) : AndroidViewModel(app) {
             var wait = 1_000L
             _state.update { it.copy(reconnecting = true, connected = false, status = "Reconnecting") }
             while (true) {
-                delay(wait)
                 val saved = secure.load()
                 if (saved == null || saved.refreshToken.isEmpty()) {
                     _state.update {
@@ -818,18 +836,45 @@ class Phase0Model(app: Application) : AndroidViewModel(app) {
                     }
                     return@launch
                 }
-                try {
-                    restore(saved)
-                    if (_state.value.connected) return@launch
-                } catch (error: Exception) {
-                    if (error is HermesException && error.status == 401) {
-                        secure.clearSecret()
-                        _state.update { it.copy(reconnecting = false, connected = false, username = saved.username, status = "Sign in again") }
-                        return@launch
-                    }
-                }
-                wait = (wait * 2).coerceAtMost(15_000)
+                var retryAfter: Int? = null
+                retryAfter = restore(saved)
+                if (_state.value.connected) return@launch
+                if (!_state.value.reconnecting) return@launch
+                wait = (wait * 2).coerceAtMost(RECONNECT_BACKOFF_CAP_MS)
+                delay(reconnectDelayMs(wait, retryAfter))
             }
+        }
+    }
+
+    private fun resumeBlocked(sessionId: String): Boolean =
+        System.currentTimeMillis() < (resumeRetryAfter[sessionId] ?: 0L)
+
+    private fun markResumeBlocked(sessionId: String) {
+        resumeRetryAfter[sessionId] = System.currentTimeMillis() + RESUME_RETRY_MS
+    }
+
+    private suspend fun resumeOrDrop(client: HermesClient, sessionId: String, profile: String? = null): ResumedSession? {
+        if (resumeBlocked(sessionId)) {
+            dropStaleSession(sessionId)
+            return null
+        }
+        try {
+            return withContext(Dispatchers.IO) { client.resumeSession(sessionId, profile) }
+        } catch (error: Exception) {
+            if (!isSessionAttachFailure(error)) throw error
+            markResumeBlocked(sessionId)
+            dropStaleSession(sessionId)
+            return null
+        }
+    }
+
+    private fun dropStaleSession(sessionId: String) {
+        resumeRetryAfter.remove(sessionId)
+        seqs.remove(sessionId)
+        applyApproval { book -> ApprovalResult(book.filterKeys { it != sessionId }, emptyList()) }
+        _state.update { current ->
+            if (current.liveSessionId != null && current.liveSessionId != sessionId) return@update current
+            afterStaleSessionDropped(current)
         }
     }
 

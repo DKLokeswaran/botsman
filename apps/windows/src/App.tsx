@@ -15,11 +15,15 @@ import {
 import {
   HermesClient,
   HermesError,
+  RECONNECT_BACKOFF_CAP_MS,
+  RESUME_RETRY_MS,
   formatAppVersion,
   formatPush,
+  isSessionAttachFailure,
   openRequestIds,
   parseLatest,
   parsePush,
+  reconnectDelayMs,
   routeFocus,
   updateAvailable,
   type GatewayEvent,
@@ -39,6 +43,7 @@ import { Reply, UserLine } from "./markdown";
 import { tauriHttp, tauriSocket } from "./gateway";
 import {
   RESOLVED_CARD_MS,
+  SESSION_UNAVAILABLE_NOTICE as STALE_SESSION_NOTICE,
   choiceLabel,
   expireResolved,
   mergeHistory,
@@ -258,6 +263,7 @@ export function App() {
   const approvalsRef = useRef<ApprovalBook>({});
   const clearTimers = useRef<Record<string, ReturnType<typeof setTimeout>>>({});
   const replaying = useRef(false);
+  const resumeRetryAfter = useRef<Record<string, number>>({});
   const refreshQueue = useRef(Promise.resolve());
   const refreshHandle = useRef<(attach: boolean) => void>(() => undefined);
 
@@ -613,6 +619,53 @@ export function App() {
 
   refreshHandle.current = enqueueRefresh;
 
+  function resumeBlocked(sessionId: string): boolean {
+    return Date.now() < (resumeRetryAfter.current[sessionId] ?? 0);
+  }
+
+  function markResumeBlocked(sessionId: string): void {
+    resumeRetryAfter.current[sessionId] = Date.now() + RESUME_RETRY_MS;
+  }
+
+  function dropStaleSession(sessionId: string): void {
+    delete resumeRetryAfter.current[sessionId];
+    delete seqs.current[sessionId];
+    const nextBook = { ...approvalsRef.current };
+    delete nextBook[sessionId];
+    applyApproval({ book: nextBook, effects: [] });
+    if (liveRef.current !== null && liveRef.current !== sessionId) {
+      return;
+    }
+    liveRef.current = null;
+    linesRef.current = [];
+    setLiveId(null);
+    setLines([]);
+    rememberQuestion(null);
+    setShowCommand(false);
+    setStatus(STALE_SESSION_NOTICE);
+  }
+
+  async function resumeOrDrop(
+    client: HermesClient,
+    sessionId: string,
+    profile?: string,
+  ): Promise<{ sessionId: string; messages: { role: string; text: string; rowId: string }[]; openRequests: ServerRequest[] } | null> {
+    if (resumeBlocked(sessionId)) {
+      dropStaleSession(sessionId);
+      return null;
+    }
+    try {
+      return await client.resumeSession(sessionId, profile);
+    } catch (error) {
+      if (!isSessionAttachFailure(error)) {
+        throw error;
+      }
+      markResumeBlocked(sessionId);
+      dropStaleSession(sessionId);
+      return null;
+    }
+  }
+
   async function refreshLive(attach: boolean) {
     const client = clientRef.current;
     if (!client) return;
@@ -624,7 +677,12 @@ export function App() {
       if (attach) {
         try {
           await client.resumeSession(live);
-        } catch {
+        } catch (error) {
+          if (isSessionAttachFailure(error)) {
+            markResumeBlocked(live);
+            dropStaleSession(live);
+            return;
+          }
           // History can still move if this socket was already attached.
         }
       }
@@ -910,19 +968,22 @@ export function App() {
     if (route?.sessionId && route.sessionId !== live) {
       await openSession(route.sessionId, route.profile);
     } else if (live) {
-      await client.resumeSession(live);
-      await mergeOpenHistory(client, live);
+      const resumed = await resumeOrDrop(client, live);
+      if (!resumed) {
+        return;
+      }
+      await mergeOpenHistory(client, resumed.sessionId);
       replaying.current = true;
       let replay;
       try {
-        replay = await client.replay(live, seqs.current[live] ?? 0);
+        replay = await client.replay(resumed.sessionId, seqs.current[resumed.sessionId] ?? 0);
       } finally {
         replaying.current = false;
       }
-      syncOpenApprovals(live, replay.openRequests);
-      await mergeOpenHistory(client, live);
+      syncOpenApprovals(resumed.sessionId, replay.openRequests);
+      await mergeOpenHistory(client, resumed.sessionId);
       if (replay.truncated) {
-        await openSession(live);
+        await openSession(resumed.sessionId);
       } else if (route && (!route.sessionId || route.sessionId === live)) {
         pendingRoute.current = null;
         placeFocus(route, replay.openRequests, linesRef.current);
@@ -932,7 +993,7 @@ export function App() {
     }
   }
 
-  async function restore(saved: Vault, url: string): Promise<boolean> {
+  async function restore(saved: Vault, url: string): Promise<{ ok: boolean; retryAfter: number | null }> {
     setStatus("Signing in");
     const probe = new HermesClient({ serverUrl: url, http: tauriHttp(), socket: tauriSocket() });
     try {
@@ -942,9 +1003,10 @@ export function App() {
         provider: saved.provider,
       });
       await openClient(url, material);
-      return true;
+      return { ok: true, retryAfter: null };
     } catch (error) {
       const message = error instanceof Error ? error.message : "Refresh failed";
+      const retryAfter = error instanceof HermesError ? error.retryAfter : null;
       if (error instanceof HermesError && error.status === 401) {
         materialRef.current = null;
         await invoke("vault_clear_secret").catch(() => undefined);
@@ -955,7 +1017,7 @@ export function App() {
       }
       setUsername(saved.username);
       setConnected(false);
-      return false;
+      return { ok: false, retryAfter };
     } finally {
       probe.close();
     }
@@ -976,15 +1038,17 @@ export function App() {
         setReconnecting(false);
         return;
       }
-      const ok = await restore(saved, url);
-      if (ok) {
+      let retryAfter: number | null = null;
+      const result = await restore(saved, url);
+      if (result.ok) {
         return;
       }
+      retryAfter = result.retryAfter;
       if (!materialRef.current?.refreshToken) {
         return;
       }
-      await new Promise((resolve) => setTimeout(resolve, wait));
-      wait = Math.min(wait * 2, 15000);
+      wait = Math.min(wait * 2, RECONNECT_BACKOFF_CAP_MS);
+      await new Promise((resolve) => setTimeout(resolve, reconnectDelayMs(wait, retryAfter)));
     }
   }
 
@@ -1012,6 +1076,9 @@ export function App() {
     if (!client) {
       return;
     }
+    if (resumeBlocked(sessionId)) {
+      return;
+    }
     rememberQuestion(null);
     try {
       const opened = await client.resumeSession(sessionId, profile || undefined);
@@ -1034,6 +1101,11 @@ export function App() {
         placeFocus(route, opened.openRequests, next);
       }
     } catch (error) {
+      if (isSessionAttachFailure(error)) {
+        markResumeBlocked(sessionId);
+        dropStaleSession(sessionId);
+        return;
+      }
       setStatus(error instanceof Error ? error.message : "Could not open the session");
     }
   }

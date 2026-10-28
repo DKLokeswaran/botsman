@@ -26,7 +26,12 @@ import org.json.JSONObject
  * Written from the pinned OpenRPC contract. HTTP and the socket stay on
  * OkHttp, which is what the Android app uses instead of a WebView.
  */
-class HermesException(message: String, val status: Int? = null, val code: Int? = null) : Exception(message)
+class HermesException(
+    message: String,
+    val status: Int? = null,
+    val code: Int? = null,
+    val retryAfter: Int? = null,
+) : Exception(message)
 
 private val secretQuery = Regex("((?:^|[\\s?&])(?:ticket|token|access_token|refresh_token|password)=)[^&#\\s\"']*", RegexOption.IGNORE_CASE)
 private val secretJson = Regex("(\"(?:password|access_token|refresh_token|ticket|token)\"\\s*:\\s*\")[^\"]*(\")", RegexOption.IGNORE_CASE)
@@ -176,7 +181,13 @@ class HermesClient(
                 return LoginMaterial(username, access, refresh, provider, null)
             }
             val raw = it.body?.string().orEmpty()
-            if (it.code != 200) throw HermesException(httpFailureMessage("Login failed", it.code, raw), it.code)
+            if (it.code != 200) {
+                throw HermesException(
+                    httpFailureMessage("Login failed", it.code, raw),
+                    it.code,
+                    retryAfter = readRetryAfterSeconds(it),
+                )
+            }
             throw HermesException("Login response did not include session cookies", it.code)
         }
     }
@@ -189,7 +200,13 @@ class HermesClient(
         val response = post(url, body, "Refresh failed")
         response.use {
             val raw = it.body?.string().orEmpty()
-            if (it.code != 200) throw HermesException(httpFailureMessage("Refresh failed", it.code, raw), it.code)
+            if (it.code != 200) {
+                throw HermesException(
+                    httpFailureMessage("Refresh failed", it.code, raw),
+                    it.code,
+                    retryAfter = readRetryAfterSeconds(it),
+                )
+            }
             val payload = try {
                 JSONObject(raw)
             } catch (_: Exception) {
