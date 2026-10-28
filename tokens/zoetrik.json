@@ -1,0 +1,47 @@
+{
+  "name": "Zoetrik",
+  "source": "https://flavors.design/f/zoetrik",
+  "fonts": {
+    "display": "Orbitron",
+    "label": "Tomorrow",
+    "body": "Inter",
+    "mono": "Fragment Mono"
+  },
+  "radius": { "sm": 3, "md": 4, "lg": 8 },
+  "dark": {
+    "bg": "#000000",
+    "bg2": "#111111",
+    "bg3": "#151515",
+    "btn": "#1d1d1d",
+    "fg": "#ffffff",
+    "fgMuted": "#999999",
+    "accent": "#ffa41c",
+    "accentFg": "#000000",
+    "border": "#262626",
+    "green": "#71ff19",
+    "cyan": "#19f2ff",
+    "blue": "#0099ff",
+    "mint": "#78facb",
+    "magenta": "#c8287f",
+    "paper": "#ebebeb",
+    "error": "#f87171"
+  },
+  "light": {
+    "bg": "#f2f0eb",
+    "bg2": "#e8e5de",
+    "bg3": "#dedcd7",
+    "btn": "#111111",
+    "fg": "#111111",
+    "fgMuted": "#4e4c47",
+    "accent": "#b73208",
+    "accentFg": "#ffffff",
+    "border": "#d4d0c6",
+    "green": "#146b12",
+    "cyan": "#0b6e78",
+    "blue": "#1f6fe0",
+    "mint": "#0f6b52",
+    "magenta": "#c8287f",
+    "paper": "#ffffff",
+    "error": "#b42318"
+  }
+}

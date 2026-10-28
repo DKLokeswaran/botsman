@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<network-security-config>
+    <!-- Hermes on the tailnet is plain HTTP. Phase 0 allows cleartext so the
+         configurable server URL can be http://devbox...:9119. -->
+    <base-config cleartextTrafficPermitted="true" />
+</network-security-config>

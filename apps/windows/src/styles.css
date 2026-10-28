@@ -1,0 +1,71 @@
+@import "tailwindcss";
+@import "../../../tokens/zoetrik.css";
+
+@font-face {
+  font-family: "Orbitron";
+  src: url("../../../tokens/fonts/Orbitron-Variable.ttf") format("truetype");
+  font-weight: 400 900;
+  font-display: swap;
+}
+@font-face {
+  font-family: "Tomorrow";
+  src: url("../../../tokens/fonts/Tomorrow-SemiBold.ttf") format("truetype");
+  font-weight: 600;
+  font-display: swap;
+}
+@font-face {
+  font-family: "Inter";
+  src: url("../../../tokens/fonts/Inter-Variable.ttf") format("truetype");
+  font-weight: 400 700;
+  font-display: swap;
+}
+@font-face {
+  font-family: "Fragment Mono";
+  src: url("../../../tokens/fonts/FragmentMono-Regular.ttf") format("truetype");
+  font-weight: 400;
+  font-display: swap;
+}
+
+@theme inline {
+  --color-background: var(--bg);
+  --color-foreground: var(--fg);
+  --color-primary: var(--accent);
+  --color-primary-foreground: var(--accent-fg);
+  --color-card: var(--bg-2);
+  --color-muted-foreground: var(--fg-muted);
+  --color-border: var(--line);
+  --font-display: "Orbitron", sans-serif;
+  --font-label: "Tomorrow", sans-serif;
+  --font-sans: "Inter", system-ui, sans-serif;
+  --font-mono: "Fragment Mono", ui-monospace, monospace;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+}
+
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--fg);
+  font-family: var(--font-body);
+}
+
+.reply :where(p, ul, ol) {
+  margin: 0.3rem 0;
+}
+.reply :where(pre) {
+  overflow-x: auto;
+  background: var(--bg-3);
+  border-radius: 4px;
+  padding: 0.6rem 0.75rem;
+}
+.reply :where(code) {
+  font-family: var(--font-mono);
+  font-size: 0.9em;
+}
+.reply :where(a) {
+  color: var(--cyan);
+}

@@ -1,0 +1,39 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "default",
+  "description": "Phase 0 window. Hermes traffic is native HTTP and WebSocket, any host the user types.",
+  "windows": ["main"],
+  "permissions": [
+    "core:default",
+    "core:window:allow-show",
+    "core:window:allow-hide",
+    "core:window:allow-unminimize",
+    "core:window:allow-set-focus",
+    "core:window:allow-is-visible",
+    "core:window:allow-is-minimized",
+    "core:window:allow-close",
+    "core:tray:default",
+    {
+      "identifier": "http:default",
+      "allow": [
+        { "url": "http://*:*/*" },
+        { "url": "http://*:*" },
+        { "url": "https://*:*/*" },
+        { "url": "https://*:*" }
+      ]
+    },
+    {
+      "identifier": "websocket:default",
+      "allow": [
+        { "url": "ws://*:*/*" },
+        { "url": "ws://*:*" },
+        { "url": "wss://*:*/*" },
+        { "url": "wss://*:*" }
+      ]
+    },
+    "notification:default",
+    "autostart:allow-enable",
+    "autostart:allow-disable",
+    "autostart:allow-is-enabled"
+  ]
+}

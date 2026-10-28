@@ -1,0 +1,88 @@
+name: phase0
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+    paths:
+      - "apps/**"
+      - "contract/**"
+      - "tokens/**"
+      - "notifier/**"
+      - ".github/workflows/phase0.yml"
+  push:
+    branches: [main]
+    paths:
+      - "apps/**"
+      - "contract/**"
+      - "tokens/**"
+      - "notifier/**"
+      - ".github/workflows/phase0.yml"
+
+concurrency:
+  group: phase0-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  ubuntu:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: |
+            contract/ts/package-lock.json
+            apps/windows/package-lock.json
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "21"
+      - uses: android-actions/setup-android@v3
+      - name: Android SDK 37
+        run: |
+          yes | sdkmanager --licenses >/dev/null || true
+          sdkmanager "platforms;android-37.0" "build-tools;36.0.0"
+      - name: Contract, tokens, notifier, Windows typecheck
+        run: |
+          python3 contract/check_contract.py
+          python3 tokens/build_tokens.py --check
+          python3 notifier/test_notify.py
+          npm ci --prefix contract/ts
+          npm test --prefix contract/ts
+          npx --prefix contract/ts tsc --noEmit
+          npm ci --prefix apps/windows
+          npm run check --prefix apps/windows
+      - name: Kotlin client tests and debug APK
+        working-directory: apps/android
+        run: chmod +x ./gradlew && ./gradlew :hermes-client:test assembleDebug --no-daemon
+      - uses: actions/upload-artifact@v4
+        with:
+          name: hermes-bots-android-debug
+          path: apps/android/app/build/outputs/apk/debug/*.apk
+          if-no-files-found: error
+
+  windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: apps/windows/package-lock.json
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: swatinem/rust-cache@v2
+        with:
+          workspaces: apps/windows/src-tauri
+      - name: Frontend dependencies
+        working-directory: apps/windows
+        run: npm ci
+      - name: NSIS installer
+        working-directory: apps/windows
+        run: npm run tauri build
+      - uses: actions/upload-artifact@v4
+        with:
+          name: hermes-bots-windows-setup
+          path: apps/windows/src-tauri/target/release/bundle/nsis/*-setup.exe
+          if-no-files-found: error

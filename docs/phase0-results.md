@@ -1,0 +1,52 @@
+# Phase 0 results
+
+This file records what was exercised while the test apps were built, and what still needs a Windows 11 PC and an Android phone on the tailnet.
+
+## Verified here
+
+- Hermes v0.22.5 contract file is pinned. `contract/check_contract.py` accepts it. The clients call 13 methods that are in the file. `gateway.ping` is not in the file, which matches the gateway source.
+- The TypeScript client tests pass against `contract/fake/hermes_fake.py`: bad password, cookie login, single-use ticket, refresh rotation, `gateway.ready`, `client.capabilities`, one approval, profiles, sessions, a prompt and `message.complete`, then a second connection that refreshes and replays with `session.events.since`.
+- The Kotlin client tests pass against the same fake server for the same cases.
+- `notifier/test_notify.py` passes. Dry-run against the fake server prints an approval and a finished reply, and does not answer the approval.
+- `tokens/build_tokens.py --check` matches `tokens/zoetrik.json`.
+- The Windows frontend typechecks and `vite build` succeeds.
+- `cargo check` of the Tauri shell succeeded on Linux, including the tray, native HTTP, WebSocket, notification, autostart, and single-instance plugins. The Credential Manager and AppUserModelID code is `cfg(windows)` and was not compiled on this machine. The Windows CI job is the build of that code.
+- `./gradlew :hermes-client:test assembleDebug` succeeded on this machine. The debug APK is `apps/android/app/build/outputs/apk/debug/app-debug.apk`. The copy to install is the CI artifact, not a file from the repo.
+
+The fake server's only account is `tester` / `tester`. That pair is not a Hermes login and is not a secret.
+
+## Needs your devices
+
+- Password login against the real Hermes on devbox, from both apps.
+- Credential Manager and the Android Keystore across a real restart, and the prefilled username after a real expiry.
+- A real profile list, a real session, a real model reply, markdown from that reply, and a real approval card.
+- A dropped Tailscale socket and `session.events.since` against the real gateway.
+- Tamil and Hindi input on a real keyboard and a real Android IME.
+- Image paste and the file picker on both devices. Thumbnails only. No upload.
+- UnifiedPush with ntfy installed on the phone, including a notification that opens the app.
+- The Windows tray, close-to-tray, single instance, autostart, and a toast from the installed unsigned exe. SmartScreen and Smart App Control are described in the test plan.
+- The notifier process actually running on devbox, bound to the Tailscale address, posting to your topic or to the phone endpoint.
+
+## What the Hermes report got wrong
+
+The API report is right about port 9119, password login returning cookies, the 30-second single-use ws-ticket, CORS limited to localhost, `client.capabilities` with `server_requests: true`, and replay through `session.events.since`.
+
+One name is off. The report says `ping` is answered on the read thread and that the client should send `ping` on a timer. In v0.22.5 the heartbeat method is `gateway.ping`. The gateway answers that on the WebSocket read thread, and it is not in the OpenRPC file. `ping` is a normal OpenRPC method and is queued with the other calls. The test apps heartbeat with `gateway.ping`.
+
+`hermes serve` and `hermes dashboard` share one server. `serve` is headless. `dashboard` also serves the browser UI. The report already says that.
+
+`session_authority` is only present when the messaging gateway mounted the dashboard. A normal `hermes serve` does not set it. The apps speak the legacy session methods and show the flag when it is true.
+
+## Judgment calls
+
+- minSdk is 26. compileSdk is 37 because current Compose (1.12, BOM 2026.09.00) requires it. The Android Gradle Plugin is 9.4.1 with built-in Kotlin 2.4.21, which is what that plugin set accepts. targetSdk is 35 so the process stays on Android 15 rules, including edge-to-edge. The screen pads with the safe drawing insets unioned with the IME inset.
+- UnifiedPush and `security-crypto` both ship Tink classes. The JVM `tink` jar is excluded so the Android `tink-android` jar is the one that is packaged.
+- The saved secret is the refresh token, plus the username and provider. The password is not written. The server URL is ordinary preferences, not a secret.
+- The Windows vault is the `keyring` crate talking to Credential Manager, behind Tauri commands. The official Tauri plugins do not wrap Credential Manager. Stronghold was not used.
+- The notifier joins sessions that are already live. It advertises `server_requests` so Hermes does not drop a question when the notifier is the only socket. It never answers. A real Allow or Deny from an app still settles the question. See `notifier/README.md`.
+- The clients are a thin hand-written set checked against the contract, not generated wrappers for all 258 methods.
+- Phase 0 approval buttons are Allow once and Deny. Unknown server requests from the apps are answered with `{value: ""}` so a question the test UI cannot show does not sit forever. That answer does settle the question.
+- Android image paste is a **Paste image** button. A Compose text field does not receive an image paste the way a Windows textarea does.
+- Attachments are shown and not uploaded.
+- The Windows installer is an unsigned per-user NSIS exe. No paid signing.
+- CI runs on pull requests and on pushes to `main`, with path filters, so a push to the pull request branch is not built a second time. The repository is private and the workflows stay on the free runners.

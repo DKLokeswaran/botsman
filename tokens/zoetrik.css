@@ -1,0 +1,76 @@
+/* Generated from tokens/zoetrik.json. Do not edit by hand. */
+:root, :root[data-theme='light'] {
+  --bg: #f2f0eb;
+  --bg-2: #e8e5de;
+  --bg-3: #dedcd7;
+  --btn: #111111;
+  --fg: #111111;
+  --fg-muted: #4e4c47;
+  --accent: #b73208;
+  --accent-fg: #ffffff;
+  --line: #d4d0c6;
+  --green: #146b12;
+  --cyan: #0b6e78;
+  --blue: #1f6fe0;
+  --mint: #0f6b52;
+  --magenta: #c8287f;
+  --paper: #ffffff;
+  --error: #b42318;
+}
+:root[data-theme='dark'] {
+  --bg: #000000;
+  --bg-2: #111111;
+  --bg-3: #151515;
+  --btn: #1d1d1d;
+  --fg: #ffffff;
+  --fg-muted: #999999;
+  --accent: #ffa41c;
+  --accent-fg: #000000;
+  --line: #262626;
+  --green: #71ff19;
+  --cyan: #19f2ff;
+  --blue: #0099ff;
+  --mint: #78facb;
+  --magenta: #c8287f;
+  --paper: #ebebeb;
+  --error: #f87171;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme='light']) {
+  --bg: #000000;
+  --bg-2: #111111;
+  --bg-3: #151515;
+  --btn: #1d1d1d;
+  --fg: #ffffff;
+  --fg-muted: #999999;
+  --accent: #ffa41c;
+  --accent-fg: #000000;
+  --line: #262626;
+  --green: #71ff19;
+  --cyan: #19f2ff;
+  --blue: #0099ff;
+  --mint: #78facb;
+  --magenta: #c8287f;
+  --paper: #ebebeb;
+  --error: #f87171;
+}
+}
+:root {
+  --font-display: "Orbitron", sans-serif;
+  --font-label: "Tomorrow", sans-serif;
+  --font-body: "Inter", system-ui, sans-serif;
+  --font-mono: "Fragment Mono", ui-monospace, monospace;
+  --radius: 4px;
+  --radius-sm: 3px;
+  --radius-lg: 8px;
+  --background: var(--bg);
+  --foreground: var(--fg);
+  --card: var(--bg-2);
+  --card-foreground: var(--fg);
+  --primary: var(--accent);
+  --primary-foreground: var(--accent-fg);
+  --muted-foreground: var(--fg-muted);
+  --border: var(--line);
+  --input: var(--line);
+  --ring: var(--accent);
+}
