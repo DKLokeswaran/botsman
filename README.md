@@ -27,4 +27,12 @@ cd apps/android && ./gradlew :hermes-client:test assembleDebug
 cd apps/windows && npm run check
 ```
 
-GitHub Actions builds an unsigned Windows NSIS installer (`hermes-bots-windows-setup`) and a debug APK (`hermes-bots-android-debug`). Signing is not set up. See `docs/phase0-test-plan.md`.
+GitHub Actions (`.github/workflows/phase0.yml`) runs jobs on different triggers to save Windows minutes (billed 2× on private repos):
+
+| Job | When it runs |
+| --- | --- |
+| **ubuntu** | Pull requests (opened, updated, reopened) when paths under `apps/`, `contract/`, `tokens/`, `notifier/`, or the workflow file change. Docs-only PRs are skipped. Runs contract/tokens/notifier checks, Windows typecheck and Playwright e2e, and Android unit tests including Roborazzi screenshots. |
+| **windows** | Push to `main` or `cursor/phase0-test-apps-df43` (same path filters), or manual **workflow_dispatch**. Builds the NSIS installer with `GITHUB_RUN_NUMBER` version stamping. Not run on pull requests. |
+| **android-artifacts** | Same as **windows**. Assembles and uploads the debug APK only; unit tests stay on PRs in **ubuntu**. |
+
+Artifacts: unsigned Windows NSIS installer (`hermes-bots-windows-setup`) and debug APK (`hermes-bots-android-debug`). Signing is not set up. See `docs/phase0-test-plan.md`.
