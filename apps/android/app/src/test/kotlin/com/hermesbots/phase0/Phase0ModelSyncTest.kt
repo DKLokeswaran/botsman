@@ -162,4 +162,18 @@ class Phase0ModelSyncTest {
         assertEquals("Hello from Hermes and more", streamed[0].text)
         assertEquals("9", streamed[0].messageId)
     }
+
+    @Test
+    fun test_bug_stale_session_resume_shows_list() {
+        val dropped = afterStaleSessionDropped(
+            Phase0State(
+                liveSessionId = "live-1",
+                messages = listOf(ChatLine("user", "hello")),
+                status = "Connected",
+            ),
+        )
+        assertNull(dropped.liveSessionId)
+        assertEquals(0, dropped.messages.size)
+        assertEquals("That chat is no longer available", dropped.status)
+    }
 }

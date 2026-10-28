@@ -54,6 +54,19 @@ fun toolResultText(result: String, resultText: String, summary: String): String 
     return listOf(result, resultText, summary).joinToString("\n")
 }
 
+/** Clear the open chat after session.resume / session.activate returns session not found. */
+fun afterStaleSessionDropped(state: Phase0State, notice: String = "That chat is no longer available"): Phase0State {
+    return state.copy(
+        liveSessionId = null,
+        messages = emptyList(),
+        approval = null,
+        question = null,
+        focus = null,
+        showCommand = false,
+        status = notice,
+    )
+}
+
 fun mergeHistory(local: List<ChatLine>, history: List<HistoryEntry>): List<ChatLine> {
     val used = mutableSetOf<Int>()
     val merged = mutableListOf<ChatLine>()

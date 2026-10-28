@@ -8,6 +8,8 @@ import {
   LABEL_DENIED_ELSEWHERE,
   LABEL_TIMED_OUT,
   RESOLVED_CARD_MS,
+  SESSION_UNAVAILABLE_NOTICE,
+  afterStaleSessionDropped,
   choiceLabel,
   expireResolved,
   mergeHistory,
@@ -173,4 +175,15 @@ test("test_bug_history_merge_message_from_other_device", () => {
   assert.equal(streamed.length, 1);
   assert.equal(streamed[0]?.text, "Hello from Hermes and more");
   assert.equal(streamed[0]?.messageId, "9");
+});
+
+test("test_bug_stale_session_resume_shows_list", () => {
+  const dropped = afterStaleSessionDropped({
+    liveId: "live-1",
+    lines: [{ role: "user", text: "hello", messageId: "", seq: null }],
+    status: "Connected",
+  });
+  assert.equal(dropped.liveId, null);
+  assert.equal(dropped.lines.length, 0);
+  assert.equal(dropped.status, SESSION_UNAVAILABLE_NOTICE);
 });

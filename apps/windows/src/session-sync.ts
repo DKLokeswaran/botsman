@@ -85,6 +85,21 @@ export function toolResultText(payload: Record<string, unknown>): string {
     .join("\n");
 }
 
+export const SESSION_UNAVAILABLE_NOTICE = "That chat is no longer available";
+
+/** Clear the open chat after session.resume / session.activate returns session not found. */
+export function afterStaleSessionDropped<T extends { liveId: string | null; lines: TranscriptLine[]; status: string }>(
+  view: T,
+  notice: string = SESSION_UNAVAILABLE_NOTICE,
+): T {
+  return {
+    ...view,
+    liveId: null,
+    lines: [],
+    status: notice,
+  };
+}
+
 export function mergeHistory(local: TranscriptLine[], history: HistoryEntry[]): TranscriptLine[] {
   const used = new Set<number>();
   const merged: TranscriptLine[] = [];

@@ -6,7 +6,9 @@ import java.util.concurrent.TimeUnit
 import kotlinx.coroutines.async
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.yield
+import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.OkHttpClient
+import okhttp3.RequestBody.Companion.toRequestBody
 import org.json.JSONObject
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertNotEquals
@@ -320,12 +322,43 @@ class HermesClientTest {
             second.close()
         }
     }
+
+    @Test
+    fun test_bug_stale_session_resume_keeps_socket() = withFake(testHooks = true) { port, http ->
+        val gateway = HermesClient("http://127.0.0.1:$port", http)
+        try {
+            val material = runBlocking { gateway.login("tester", "tester") }
+            runBlocking { gateway.connect(material.accessToken) }
+            runBlocking { gateway.resumeSession("sess-1") }
+            postTestHook(http, port, "/__test__/resume_reject", mapOf(
+                "session_id" to "live-1",
+                "code" to SESSION_UNAVAILABLE_CODE,
+                "message" to "session not found",
+            ))
+            val rejected = assertThrows<HermesException> {
+                runBlocking { gateway.resumeSession("sess-1") }
+            }
+            assertEquals(SESSION_UNAVAILABLE_CODE, rejected.code)
+            val sessions = runBlocking { gateway.listSessions() }
+            assertTrue(sessions.isNotEmpty())
+            val created = runBlocking { gateway.createSession() }
+            val opened = runBlocking { gateway.resumeSession(created) }
+            assertTrue(opened.sessionId.isNotEmpty())
+        } finally {
+            gateway.close()
+        }
+    }
 }
 
-private fun withFake(block: (Int, OkHttpClient) -> Unit) {
+private fun withFake(testHooks: Boolean = false, block: (Int, OkHttpClient) -> Unit) {
     val script = findFakeScript()
     val process = ProcessBuilder("python3", script.absolutePath, "--port", "0")
         .redirectErrorStream(false)
+        .also { builder ->
+            if (testHooks) {
+                builder.environment()["HERMES_FAKE_TEST_HOOKS"] = "1"
+            }
+        }
         .start()
     val http = OkHttpClient.Builder().build()
     try {
@@ -350,4 +383,15 @@ private fun findFakeScript(): File {
         dir = dir.parentFile ?: error("hermes_fake.py not found")
     }
     error("hermes_fake.py not found")
+}
+
+private fun postTestHook(http: OkHttpClient, port: Int, path: String, body: Map<String, Any>) {
+    val media = "application/json".toMediaType()
+    val request = okhttp3.Request.Builder()
+        .url("http://127.0.0.1:$port$path")
+        .post(org.json.JSONObject(body).toString().toRequestBody(media))
+        .build()
+    http.newCall(request).execute().use { response ->
+        assertEquals(200, response.code)
+    }
 }

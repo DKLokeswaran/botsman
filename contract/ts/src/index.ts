@@ -6,6 +6,8 @@
  * Windows app can use Tauri's native plugins and the tests can use Node.
  */
 
+import { parseRetryAfterSeconds } from "./attach.ts";
+
 export interface Header {
   name: string;
   value: string;
@@ -99,6 +101,15 @@ export {
   type TrackedMessage,
 } from "./push.ts";
 export {
+  isSessionAttachFailure,
+  parseRetryAfterSeconds,
+  reconnectDelayMs,
+  RECONNECT_BACKOFF_CAP_MS,
+  RESUME_RETRY_MS,
+  SESSION_UNAVAILABLE_CODE,
+  SESSION_UNAVAILABLE_NOTICE,
+} from "./attach.ts";
+export {
   formatAppVersion,
   parseLatest,
   updateAvailable,
@@ -117,12 +128,19 @@ export interface ReplayResult {
 export class HermesError extends Error {
   status: number | null;
   code: number | null;
+  retryAfter: number | null;
 
-  constructor(message: string, status: number | null = null, code: number | null = null) {
+  constructor(
+    message: string,
+    status: number | null = null,
+    code: number | null = null,
+    retryAfter: number | null = null,
+  ) {
     super(message);
     this.name = "HermesError";
     this.status = status;
     this.code = code;
+    this.retryAfter = retryAfter;
   }
 }
 
@@ -323,7 +341,12 @@ export class HermesClient {
       return { username, accessToken, refreshToken, provider, expiresAt: null };
     }
     if (response.status !== 200) {
-      throw new HermesError(httpFailureMessage("Login failed", response.status, response.body), response.status);
+      throw new HermesError(
+        httpFailureMessage("Login failed", response.status, response.body),
+        response.status,
+        null,
+        parseRetryAfterSeconds(response.headers),
+      );
     }
     throw new HermesError("Login response did not include session cookies", response.status);
   }
@@ -337,7 +360,12 @@ export class HermesClient {
       body: JSON.stringify({ refresh_token: material.refreshToken, provider: material.provider }),
     }, "Refresh failed");
     if (response.status !== 200) {
-      throw new HermesError(httpFailureMessage("Refresh failed", response.status, response.body), response.status);
+      throw new HermesError(
+        httpFailureMessage("Refresh failed", response.status, response.body),
+        response.status,
+        null,
+        parseRetryAfterSeconds(response.headers),
+      );
     }
     let body: Record<string, unknown>;
     try {

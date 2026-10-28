@@ -7,6 +7,7 @@ import test from "node:test";
 import {
   HermesClient,
   HermesError,
+  SESSION_UNAVAILABLE_CODE,
   formatPush,
   nodeHttp,
   nodeSocket,
@@ -21,10 +22,11 @@ import {
 const here = path.dirname(fileURLToPath(import.meta.url));
 const fakeScript = path.resolve(here, "../../fake/hermes_fake.py");
 
-function startFake(): Promise<{ port: number; stop: () => void }> {
+function startFake(withHooks = false): Promise<{ port: number; stop: () => void }> {
   return new Promise((resolve, reject) => {
     const proc: ChildProcess = spawn("python3", [fakeScript, "--port", "0"], {
       stdio: ["ignore", "pipe", "pipe"],
+      env: withHooks ? { ...process.env, HERMES_FAKE_TEST_HOOKS: "1" } : process.env,
     });
     let buffer = "";
     const timer = setTimeout(() => reject(new Error("fake server did not start")), 5000);
@@ -402,4 +404,39 @@ test("login surfaces Hermes detail and transport errors without secrets", async 
     assert.equal(error.message.includes(kept.refreshToken), false);
     return true;
   });
+});
+
+async function postTestHook(port: number, path: string, body: Record<string, unknown>): Promise<void> {
+  const response = await fetch(`http://127.0.0.1:${port}${path}`, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify(body),
+  });
+  assert.equal(response.status, 200);
+}
+
+test("test_bug_stale_session_resume_keeps_socket", async () => {
+  const fake = await startFake(true);
+  try {
+    const gateway = client(fake.port);
+    const material = await gateway.login("tester", "tester");
+    await gateway.connect(material.accessToken);
+    await gateway.resumeSession("sess-1");
+    await postTestHook(fake.port, "/__test__/resume_reject", {
+      session_id: "live-1",
+      code: SESSION_UNAVAILABLE_CODE,
+      message: "session not found",
+    });
+    await assert.rejects(() => gateway.resumeSession("sess-1"), (error: unknown) => {
+      assert.ok(error instanceof HermesError);
+      assert.equal(error.code, SESSION_UNAVAILABLE_CODE);
+      return true;
+    });
+    assert.ok((await gateway.listSessions()).length >= 1);
+    const created = await gateway.createSession();
+    const opened = await gateway.resumeSession(created);
+    assert.ok(opened.sessionId.length > 0);
+  } finally {
+    fake.stop();
+  }
 });
