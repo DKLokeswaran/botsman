@@ -54,3 +54,4 @@ Leave `HERMES_FAKE_TEST_HOOKS` unset for contract tests and the notifier. The fa
 | 2026-10-28 | Deny shows as Denied on the other device, and the card does not leak into other sessions. | `test_bug_deny_scoped_to_session` |
 | 2026-10-28 | The conversation auto-scrolls after Send. | `test_bug_autoscroll_after_send` |
 | 2026-10-28 | A message from device A appears live on device B. | `test_bug_message_syncs_to_other_device` |
+| 2026-10-28 | Light-mode code-card Copy used accent `#b73208` on `bg3` at 4.41:1, below WCAG AA 4.5:1. Light accent is `#b43208` (4.51:1 on `bg3`). Token checks include accent on `bg2` and `bg3`. Android `ZoetrikColors.kt` is generated from `tokens/zoetrik.json`. Covered by `tokens/test_regressions.py`, `apps/windows/contrast.regression.test.mjs`, and `CopyButtonContrastRegression.kt`. | `test_bug_light_mode_copy_button_contrast` |

@@ -6,7 +6,6 @@ import androidx.compose.material3.Typography
 import androidx.compose.material3.darkColorScheme
 import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.Font
 import androidx.compose.ui.text.font.FontFamily
@@ -31,34 +30,34 @@ private val Inter = FontFamily(
 )
 val FragmentMono = FontFamily(Font(R.font.fragment_mono, FontWeight.Normal))
 
-private val Dark = darkColorScheme(
-    primary = Color(0xFFFFA41C),
-    onPrimary = Color(0xFF000000),
-    background = Color(0xFF000000),
-    onBackground = Color(0xFFFFFFFF),
-    surface = Color(0xFF111111),
-    onSurface = Color(0xFFFFFFFF),
-    surfaceVariant = Color(0xFF151515),
-    onSurfaceVariant = Color(0xFF999999),
-    outline = Color(0xFF262626),
-    error = Color(0xFFF87171),
-    tertiary = Color(0xFF1D1D1D),
-    onTertiary = Color(0xFFFFFFFF),
+private fun lightScheme(colors: MaterialScheme) = lightColorScheme(
+    primary = colors.primary,
+    onPrimary = colors.onPrimary,
+    background = colors.background,
+    onBackground = colors.onBackground,
+    surface = colors.surface,
+    onSurface = colors.onSurface,
+    surfaceVariant = colors.surfaceVariant,
+    onSurfaceVariant = colors.onSurfaceVariant,
+    outline = colors.outline,
+    error = colors.error,
+    tertiary = colors.tertiary,
+    onTertiary = colors.onTertiary,
 )
 
-private val Light = lightColorScheme(
-    primary = Color(0xFFB73208),
-    onPrimary = Color(0xFFFFFFFF),
-    background = Color(0xFFF2F0EB),
-    onBackground = Color(0xFF111111),
-    surface = Color(0xFFE8E5DE),
-    onSurface = Color(0xFF111111),
-    surfaceVariant = Color(0xFFDEDCD7),
-    onSurfaceVariant = Color(0xFF4E4C47),
-    outline = Color(0xFFD4D0C6),
-    error = Color(0xFFB42318),
-    tertiary = Color(0xFF111111),
-    onTertiary = Color(0xFFFFFFFF),
+private fun darkScheme(colors: MaterialScheme) = darkColorScheme(
+    primary = colors.primary,
+    onPrimary = colors.onPrimary,
+    background = colors.background,
+    onBackground = colors.onBackground,
+    surface = colors.surface,
+    onSurface = colors.onSurface,
+    surfaceVariant = colors.surfaceVariant,
+    onSurfaceVariant = colors.onSurfaceVariant,
+    outline = colors.outline,
+    error = colors.error,
+    tertiary = colors.tertiary,
+    onTertiary = colors.onTertiary,
 )
 
 private val Type = Typography(
@@ -70,8 +69,9 @@ private val Type = Typography(
 
 @Composable
 fun ZoetrikTheme(darkTheme: Boolean = isSystemInDarkTheme(), content: @Composable () -> Unit) {
+    val colors = if (darkTheme) ZoetrikColors.Dark else ZoetrikColors.Light
     MaterialTheme(
-        colorScheme = if (darkTheme) Dark else Light,
+        colorScheme = if (darkTheme) darkScheme(colors) else lightScheme(colors),
         typography = Type,
         content = content,
     )

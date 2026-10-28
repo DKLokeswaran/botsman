@@ -8,6 +8,7 @@ on:
       - "contract/**"
       - "tokens/**"
       - "notifier/**"
+      - "docs/**"
       - ".github/workflows/phase0.yml"
   push:
     branches: [main]
@@ -16,6 +17,7 @@ on:
       - "contract/**"
       - "tokens/**"
       - "notifier/**"
+      - "docs/**"
       - ".github/workflows/phase0.yml"
 
 concurrency:
@@ -45,6 +47,7 @@ jobs:
         run: |
           python3 contract/check_contract.py
           python3 tokens/build_tokens.py --check
+          python3 -m unittest tokens/test_regressions.py
           python3 notifier/test_notify.py
           npm ci --prefix contract/ts
           npm test --prefix contract/ts

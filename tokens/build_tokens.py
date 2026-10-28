@@ -10,6 +10,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent
 SOURCE = ROOT / "zoetrik.json"
 CSS = ROOT / "zoetrik.css"
+KOTLIN = ROOT.parent / "apps/android/app/src/main/kotlin/com/hermesbots/phase0/ZoetrikColors.kt"
 
 MAP = {
     "bg": "bg",
@@ -75,6 +76,65 @@ def render() -> str:
     )
 
 
+def kotlin_color(hex_color: str) -> str:
+    raw = hex_color.removeprefix("#").upper()
+    return f"Color(0xFF{raw})"
+
+
+def kotlin_scheme(name: str, colors: dict) -> str:
+    mapping = {
+        "primary": "accent",
+        "onPrimary": "accentFg",
+        "background": "bg",
+        "onBackground": "fg",
+        "surface": "bg2",
+        "onSurface": "fg",
+        "surfaceVariant": "bg3",
+        "onSurfaceVariant": "fgMuted",
+        "outline": "border",
+        "error": "error",
+        "tertiary": "btn",
+        "onTertiary": "btnFg",
+    }
+    lines = [f"    val {name} = MaterialScheme("]
+    for field, key in mapping.items():
+        lines.append(f"        {field} = {kotlin_color(colors[key])},")
+    lines.append("    )")
+    return "\n".join(lines)
+
+
+def render_kotlin(data: dict) -> str:
+    return "\n".join(
+        [
+            "// Generated from tokens/zoetrik.json. Do not edit by hand.",
+            "package com.hermesbots.phase0",
+            "",
+            "import androidx.compose.ui.graphics.Color",
+            "",
+            "data class MaterialScheme(",
+            "    val primary: Color,",
+            "    val onPrimary: Color,",
+            "    val background: Color,",
+            "    val onBackground: Color,",
+            "    val surface: Color,",
+            "    val onSurface: Color,",
+            "    val surfaceVariant: Color,",
+            "    val onSurfaceVariant: Color,",
+            "    val outline: Color,",
+            "    val error: Color,",
+            "    val tertiary: Color,",
+            "    val onTertiary: Color,",
+            ")",
+            "",
+            "object ZoetrikColors {",
+            kotlin_scheme("Light", data["light"]),
+            kotlin_scheme("Dark", data["dark"]),
+            "}",
+            "",
+        ]
+    )
+
+
 def channel(value: int) -> float:
     scaled = value / 255
     if scaled <= 0.04045:
@@ -104,6 +164,8 @@ PAIRS = (
     ("fgMuted", "bg3"),
     ("accentFg", "accent"),
     ("btnFg", "btn"),
+    ("accent", "bg2"),
+    ("accent", "bg3"),
     ("error", "bg"),
     ("error", "bg2"),
     ("error", "bg3"),
@@ -130,15 +192,22 @@ def main() -> int:
             print(problem, file=sys.stderr)
         return 1
     text = render()
+    kotlin = render_kotlin(data)
     if "--check" in sys.argv:
         current = CSS.read_text(encoding="utf-8") if CSS.exists() else ""
         if current != text:
             print("tokens/zoetrik.css is stale. Run tokens/build_tokens.py", file=sys.stderr)
             return 1
+        current_kotlin = KOTLIN.read_text(encoding="utf-8") if KOTLIN.exists() else ""
+        if current_kotlin != kotlin:
+            print(f"{KOTLIN} is stale. Run tokens/build_tokens.py", file=sys.stderr)
+            return 1
         print("tokens match zoetrik.json")
         return 0
     CSS.write_text(text, encoding="utf-8")
+    KOTLIN.write_text(kotlin, encoding="utf-8")
     print(f"wrote {CSS}")
+    print(f"wrote {KOTLIN}")
     return 0
 
 
