@@ -10,8 +10,9 @@ This file records what was exercised while the test apps were built, and what st
 - `notifier/test_notify.py` passes. Dry-run against the fake server prints an approval and a finished reply, and does not answer the approval.
 - `tokens/build_tokens.py --check` matches `tokens/zoetrik.json`.
 - The Windows frontend typechecks and `vite build` succeeds.
-- `cargo check` of the Tauri shell succeeded on Linux, including the tray, native HTTP, WebSocket, notification, autostart, and single-instance plugins. The Credential Manager and AppUserModelID code is `cfg(windows)` and was not compiled on this machine. The Windows CI job is the build of that code.
-- `./gradlew :hermes-client:test assembleDebug` succeeded on this machine. The debug APK is `apps/android/app/build/outputs/apk/debug/app-debug.apk`. The copy to install is the CI artifact, not a file from the repo.
+- `cargo check` of the Tauri shell succeeded on Linux, including the tray, native HTTP, WebSocket, notification, autostart, and single-instance plugins. The Credential Manager and AppUserModelID code is `cfg(windows)`.
+- The Windows CI job passed on run 40610659845. The unsigned installer is the artifact `hermes-bots-windows-setup`.
+- `./gradlew :hermes-client:test assembleDebug` succeeded on this machine. The debug APK is `apps/android/app/build/outputs/apk/debug/app-debug.apk`. The copy to install is the CI artifact `hermes-bots-android-debug`, once the Ubuntu job is green. The first Ubuntu run failed in `android-actions/setup-android` because that action still installs the removed SDK package `tools`. The workflow now uses the SDK already on the runner.
 
 The fake server's only account is `tester` / `tester`. That pair is not a Hermes login and is not a secret.
 
