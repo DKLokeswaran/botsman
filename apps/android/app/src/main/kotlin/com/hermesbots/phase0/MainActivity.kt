@@ -60,6 +60,9 @@ class MainActivity : ComponentActivity() {
                     onPickImage = { pickImage.launch("image/*") },
                     onPickFile = { pickFile.launch(arrayOf("*/*")) },
                     onRegisterPush = { registerUnifiedPush(this) },
+                    onUpdateBase = { model.update(updateBase = it) },
+                    onCheckUpdate = model::checkForUpdate,
+                    onApplyUpdate = { model.applyUpdate(this) },
                 )
             }
         }

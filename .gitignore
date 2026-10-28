@@ -1,5 +1,7 @@
 node_modules/
 dist/
+!notifier/dist/
+!notifier/dist/README.md
 target/
 .gradle/
 build/

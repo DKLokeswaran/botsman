@@ -66,22 +66,25 @@ import kotlinx.coroutines.delay
 @Composable
 fun Phase0Screen(
     state: Phase0State,
-    onServer: (String) -> Unit,
-    onUsername: (String) -> Unit,
-    onPassword: (String) -> Unit,
-    onLogin: () -> Unit,
-    onOpen: (String) -> Unit,
-    onNew: () -> Unit,
-    onDraft: (String) -> Unit,
-    onSend: () -> Unit,
-    onAllow: () -> Unit,
-    onDeny: () -> Unit,
-    onToggleCommand: () -> Unit,
-    onIme: (String) -> Unit,
-    onPaste: () -> Unit,
-    onPickImage: () -> Unit,
-    onPickFile: () -> Unit,
-    onRegisterPush: () -> Unit,
+    onServer: (String) -> Unit = {},
+    onUsername: (String) -> Unit = {},
+    onPassword: (String) -> Unit = {},
+    onLogin: () -> Unit = {},
+    onOpen: (String) -> Unit = {},
+    onNew: () -> Unit = {},
+    onDraft: (String) -> Unit = {},
+    onSend: () -> Unit = {},
+    onAllow: () -> Unit = {},
+    onDeny: () -> Unit = {},
+    onToggleCommand: () -> Unit = {},
+    onIme: (String) -> Unit = {},
+    onPaste: () -> Unit = {},
+    onPickImage: () -> Unit = {},
+    onPickFile: () -> Unit = {},
+    onRegisterPush: () -> Unit = {},
+    onUpdateBase: (String) -> Unit = {},
+    onCheckUpdate: () -> Unit = {},
+    onApplyUpdate: () -> Unit = {},
 ) {
     val scheme = MaterialTheme.colorScheme
     Column(
@@ -92,7 +95,8 @@ fun Phase0Screen(
             .padding(horizontal = 16.dp),
     ) {
         Text("HERMES BOTS", style = MaterialTheme.typography.headlineMedium, color = scheme.onBackground, modifier = Modifier.padding(top = 12.dp))
-        Text(state.status.uppercase(), style = MaterialTheme.typography.labelMedium, color = scheme.primary, modifier = Modifier.padding(bottom = 8.dp))
+        Text(state.status.uppercase(), style = MaterialTheme.typography.labelMedium, color = scheme.primary)
+        Text(state.appVersion, style = MaterialTheme.typography.bodyMedium, color = scheme.onSurfaceVariant, modifier = Modifier.padding(bottom = 8.dp))
         if (state.reconnecting) {
             Text(
                 "RECONNECTING",
@@ -103,7 +107,7 @@ fun Phase0Screen(
         }
         Column(Modifier.weight(1f).verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             if (!state.connected) {
-                LoginBlock(state, onServer, onUsername, onPassword, onLogin, onRegisterPush)
+                LoginBlock(state, onServer, onUpdateBase, onUsername, onPassword, onLogin, onRegisterPush)
             } else {
                 ChatBlock(state, onOpen, onNew, onAllow, onDeny, onToggleCommand)
             }
@@ -111,6 +115,7 @@ fun Phase0Screen(
         if (state.connected) {
             Composer(state, onDraft, onSend, onPaste, onPickImage, onPickFile)
         }
+        AboutBlock(state, onUpdateBase, onCheckUpdate, onApplyUpdate)
         Text("IME", style = MaterialTheme.typography.labelMedium, color = scheme.onSurfaceVariant, modifier = Modifier.padding(top = 8.dp))
         OutlinedTextField(
             value = state.ime,
@@ -126,12 +131,14 @@ fun Phase0Screen(
 private fun LoginBlock(
     state: Phase0State,
     onServer: (String) -> Unit,
+    onUpdateBase: (String) -> Unit,
     onUsername: (String) -> Unit,
     onPassword: (String) -> Unit,
     onLogin: () -> Unit,
     onRegisterPush: () -> Unit,
 ) {
     OutlinedTextField(state.serverUrl, onServer, Modifier.fillMaxWidth(), label = { Text("Hermes server") }, singleLine = true)
+    OutlinedTextField(state.updateBase, onUpdateBase, Modifier.fillMaxWidth(), label = { Text("Update server") }, singleLine = true)
     OutlinedTextField(state.username, onUsername, Modifier.fillMaxWidth(), label = { Text("Username") }, singleLine = true)
     OutlinedTextField(state.password, onPassword, Modifier.fillMaxWidth(), label = { Text("Password") }, singleLine = true)
     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -445,13 +452,43 @@ private val AttachIcon = glyph("M16.5,6v11.5c0,2.21 -1.79,4 -4,4s-4,-1.79 -4,-4V
 private val SendIcon = glyph("M2.01,21L23,12 2.01,3 2,10l15,2 -15,2z")
 
 @Composable
+private fun AboutBlock(
+    state: Phase0State,
+    onUpdateBase: (String) -> Unit,
+    onCheckUpdate: () -> Unit,
+    onApplyUpdate: () -> Unit,
+) {
+    Text("ABOUT", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.primary, modifier = Modifier.padding(top = 8.dp))
+    Text(state.appVersion, color = MaterialTheme.colorScheme.onBackground)
+    if (state.connected) {
+        OutlinedTextField(state.updateBase, onUpdateBase, Modifier.fillMaxWidth(), label = { Text("Update server") }, singleLine = true)
+    }
+    when (state.updatePhase) {
+        "available" -> Text("Update available: ${state.updateVersion}", color = MaterialTheme.colorScheme.onBackground)
+        "working" -> Text(state.updateDetail.ifBlank { "Downloading the update" }, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        "checking" -> Text("Checking for updates", color = MaterialTheme.colorScheme.onSurfaceVariant)
+        "error" -> Text(state.updateDetail, color = MaterialTheme.colorScheme.error)
+    }
+    FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        when (state.updatePhase) {
+            "available", "working" -> Slab("Update", onApplyUpdate)
+            "current" -> Slab("Up to date") {}
+        }
+        Slab("Check for updates", onCheckUpdate)
+    }
+    if (state.updatePhase == "available" && state.updateDetail.isNotEmpty()) {
+        Text(state.updateDetail, color = MaterialTheme.colorScheme.error)
+    }
+}
+
+@Composable
 private fun Slab(label: String, onClick: () -> Unit) {
     Button(
         onClick = onClick,
         shape = MaterialTheme.shapes.extraSmall,
         colors = ButtonDefaults.buttonColors(
-            containerColor = MaterialTheme.colorScheme.surfaceVariant,
-            contentColor = MaterialTheme.colorScheme.onSurface,
+            containerColor = MaterialTheme.colorScheme.tertiary,
+            contentColor = MaterialTheme.colorScheme.onTertiary,
         ),
     ) {
         Text(label.uppercase(), style = MaterialTheme.typography.labelMedium)

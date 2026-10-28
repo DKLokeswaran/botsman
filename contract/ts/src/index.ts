@@ -98,6 +98,13 @@ export {
   type RouteFocus,
   type TrackedMessage,
 } from "./push.ts";
+export {
+  formatAppVersion,
+  parseLatest,
+  updateAvailable,
+  type LatestRelease,
+  type ReleaseFile,
+} from "./update.ts";
 
 export interface ReplayResult {
   events: GatewayEvent[];

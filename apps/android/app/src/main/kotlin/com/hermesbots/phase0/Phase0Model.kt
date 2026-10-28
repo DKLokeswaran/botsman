@@ -8,19 +8,27 @@ import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
+import android.app.Activity
 import com.hermesbots.gateway.GatewayEvent
 import com.hermesbots.gateway.HermesClient
 import com.hermesbots.gateway.HermesException
 import com.hermesbots.gateway.HermesListener
+import com.hermesbots.gateway.LatestRelease
 import com.hermesbots.gateway.LoginMaterial
 import com.hermesbots.gateway.ProfileRow
 import com.hermesbots.gateway.PushRoute
+import com.hermesbots.gateway.ReleaseFile
 import com.hermesbots.gateway.ServerRequest
 import com.hermesbots.gateway.SessionRow
 import com.hermesbots.gateway.TrackedMessage
+import com.hermesbots.gateway.formatAppVersion
 import com.hermesbots.gateway.openRequestIds
+import com.hermesbots.gateway.parseLatest
 import com.hermesbots.gateway.parsePush
 import com.hermesbots.gateway.routeFocus
+import com.hermesbots.gateway.updateAvailable
+import java.io.File
+import java.security.MessageDigest
 import java.util.Collections
 import java.util.concurrent.TimeUnit
 import kotlinx.coroutines.Dispatchers
@@ -34,10 +42,12 @@ import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import okhttp3.OkHttpClient
+import okhttp3.Request
 import org.json.JSONArray
 import org.json.JSONObject
 
 private const val DEFAULT_SERVER = "http://100.113.35.96:9119"
+private const val DEFAULT_UPDATE = "http://100.113.35.96:8711"
 private const val LEGACY_SERVER = "http://devbox.tail2eeb02.ts.net:9119"
 
 data class ChatLine(val role: String, val text: String, val messageId: String = "", val seq: Int? = null)
@@ -68,6 +78,11 @@ data class StagedFile(val name: String, val image: ImageBitmap?)
 
 data class Phase0State(
     val serverUrl: String = DEFAULT_SERVER,
+    val updateBase: String = DEFAULT_UPDATE,
+    val appVersion: String = "0.1.0 (build dev, dev)",
+    val updatePhase: String = "checking",
+    val updateDetail: String = "",
+    val updateVersion: String = "",
     val username: String = "",
     val password: String = "",
     val status: String = "Signed out",
@@ -103,6 +118,7 @@ class Phase0Model(app: Application) : AndroidViewModel(app) {
     private val resolvedApprovals = Collections.synchronizedSet(mutableSetOf<String>())
     private val answeredHere = Collections.synchronizedSet(mutableSetOf<String>())
     private var pendingRoute: PushRoute? = null
+    private var pendingRelease: LatestRelease? = null
     private var reconnectJob: Job? = null
     private var intentionalClose = false
 
@@ -230,9 +246,13 @@ class Phase0Model(app: Application) : AndroidViewModel(app) {
         if (serverUrl != storedUrl) {
             plain.edit().putString("server_url", serverUrl).apply()
         }
+        val storedUpdate = plain.getString("update_base", null)?.trim()?.trimEnd('/')
+        val updateBase = if (storedUpdate.isNullOrEmpty()) DEFAULT_UPDATE else storedUpdate
         _state.update {
             it.copy(
                 serverUrl = serverUrl,
+                updateBase = updateBase,
+                appVersion = formatAppVersion(BuildConfig.HERMES_VERSION_NAME, BuildConfig.HERMES_BUILD, BuildConfig.HERMES_SHA),
                 username = saved?.username ?: "",
                 pushEndpoint = endpoint.getString(PUSH_ENDPOINT, "") ?: "",
                 pushStatus = endpoint.getString(PUSH_STATUS, it.pushStatus) ?: it.pushStatus,
@@ -249,9 +269,20 @@ class Phase0Model(app: Application) : AndroidViewModel(app) {
         if (!saved?.refreshToken.isNullOrEmpty()) {
             viewModelScope.launch { restore(saved) }
         }
+        checkForUpdate()
     }
 
-    fun update(serverUrl: String? = null, username: String? = null, password: String? = null, draft: String? = null, ime: String? = null) {
+    fun update(
+        serverUrl: String? = null,
+        username: String? = null,
+        password: String? = null,
+        draft: String? = null,
+        ime: String? = null,
+        updateBase: String? = null,
+    ) {
+        if (updateBase != null) {
+            plain.edit().putString("update_base", updateBase.trim()).apply()
+        }
         _state.update {
             it.copy(
                 serverUrl = serverUrl ?: it.serverUrl,
@@ -259,6 +290,7 @@ class Phase0Model(app: Application) : AndroidViewModel(app) {
                 password = password ?: it.password,
                 draft = draft ?: it.draft,
                 ime = ime ?: it.ime,
+                updateBase = updateBase ?: it.updateBase,
             )
         }
     }
@@ -644,6 +676,98 @@ class Phase0Model(app: Application) : AndroidViewModel(app) {
                 }
                 wait = (wait * 2).coerceAtMost(15_000)
             }
+        }
+    }
+
+    fun checkForUpdate() {
+        val base = _state.value.updateBase.trim().trimEnd('/')
+        val url = "$base/latest.json"
+        viewModelScope.launch {
+            _state.update { it.copy(updatePhase = "checking", updateDetail = "") }
+            try {
+                val raw = withContext(Dispatchers.IO) {
+                    val response = http.newCall(Request.Builder().url(url).build()).execute()
+                    response.use { body ->
+                        val text = body.body?.string().orEmpty()
+                        if (!body.isSuccessful) {
+                            throw IllegalStateException("Update check failed (${body.code}) from $url. ${text.take(180)}")
+                        }
+                        text
+                    }
+                }
+                val parsed = parseLatest(raw)
+                    ?: throw IllegalStateException("Update check failed from $url. latest.json is not the expected shape.")
+                pendingRelease = parsed
+                if (updateAvailable(BuildConfig.HERMES_BUILD, parsed.build)) {
+                    _state.update { it.copy(updatePhase = "available", updateVersion = parsed.version, updateDetail = "") }
+                } else {
+                    _state.update { it.copy(updatePhase = "current", updateVersion = "", updateDetail = "") }
+                }
+            } catch (error: Exception) {
+                pendingRelease = null
+                val message = error.message?.takeIf { it.isNotBlank() } ?: error.javaClass.simpleName
+                val detail = if (message.contains(url)) message else "Update check failed from $url. $message"
+                _state.update { it.copy(updatePhase = "error", updateDetail = detail) }
+            }
+        }
+    }
+
+    fun applyUpdate(activity: Activity) {
+        val artifact = pendingRelease?.android ?: return
+        viewModelScope.launch {
+            _state.update { it.copy(updatePhase = "working", updateDetail = "Downloading the update") }
+            try {
+                val file = withContext(Dispatchers.IO) { downloadVerified(artifact) }
+                val blocked = withContext(Dispatchers.Main) { installDownloadedApk(activity, file) }
+                _state.update {
+                    it.copy(
+                        updatePhase = "available",
+                        updateDetail = blocked ?: "Confirm the install in the system dialog.",
+                    )
+                }
+            } catch (error: Exception) {
+                val message = error.message?.takeIf { it.isNotBlank() } ?: error.javaClass.simpleName
+                _state.update { it.copy(updatePhase = "available", updateDetail = message) }
+            }
+        }
+    }
+
+    private fun downloadVerified(file: ReleaseFile): File {
+        val client = http.newBuilder().readTimeout(120, TimeUnit.SECONDS).build()
+        val response = client.newCall(Request.Builder().url(file.url).build()).execute()
+        response.use { resp ->
+            if (!resp.isSuccessful) {
+                val text = resp.body?.string().orEmpty().take(180)
+                throw IllegalStateException("Download failed (${resp.code}) from ${file.url}. $text")
+            }
+            val body = resp.body ?: throw IllegalStateException("Download failed from ${file.url}. The body was empty.")
+            val dir = File(getApplication<Application>().cacheDir, "updates").apply { mkdirs() }
+            val out = File(dir, "hermes-bots-update.apk")
+            val digest = MessageDigest.getInstance("SHA-256")
+            var total = 0L
+            body.byteStream().use { input ->
+                out.outputStream().use { output ->
+                    val buffer = ByteArray(8192)
+                    while (true) {
+                        val read = input.read(buffer)
+                        if (read < 0) break
+                        total += read
+                        if (file.size > 0 && total > file.size) {
+                            throw IllegalStateException("Download from ${file.url} is larger than ${file.size} bytes.")
+                        }
+                        digest.update(buffer, 0, read)
+                        output.write(buffer, 0, read)
+                    }
+                }
+            }
+            if (file.size > 0 && total != file.size) {
+                throw IllegalStateException("Download size mismatch from ${file.url}. Expected ${file.size} bytes, got $total.")
+            }
+            val actual = digest.digest().joinToString("") { "%02x".format(it) }
+            if (!actual.equals(file.sha256.trim(), ignoreCase = true)) {
+                throw IllegalStateException("SHA-256 mismatch for ${file.url}. Expected ${file.sha256}, got $actual.")
+            }
+            return out
         }
     }
 

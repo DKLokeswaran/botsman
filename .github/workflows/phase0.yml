@@ -53,11 +53,16 @@ jobs:
           npm run check --prefix apps/windows
       - name: Kotlin client tests and debug APK
         working-directory: apps/android
-        run: chmod +x ./gradlew && ./gradlew :hermes-client:test assembleDebug --no-daemon
+        run: chmod +x ./gradlew && ./gradlew :hermes-client:test :app:testDebugUnitTest assembleDebug --no-daemon
       - uses: actions/upload-artifact@v7
         with:
           name: hermes-bots-android-debug
           path: apps/android/app/build/outputs/apk/debug/*.apk
+          if-no-files-found: error
+      - uses: actions/upload-artifact@v7
+        with:
+          name: hermes-bots-android-screenshots
+          path: apps/android/app/build/outputs/roborazzi/*.png
           if-no-files-found: error
 
   windows:
@@ -76,6 +81,8 @@ jobs:
       - name: Frontend dependencies
         working-directory: apps/windows
         run: npm ci
+      - name: Stamp installer version
+        run: node scripts/stamp_version.mjs
       - name: NSIS installer
         working-directory: apps/windows
         run: npm run tauri build

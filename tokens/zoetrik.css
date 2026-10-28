@@ -4,6 +4,7 @@
   --bg-2: #e8e5de;
   --bg-3: #dedcd7;
   --btn: #111111;
+  --btn-fg: #ffffff;
   --fg: #111111;
   --fg-muted: #4e4c47;
   --accent: #b73208;
@@ -22,6 +23,7 @@
   --bg-2: #111111;
   --bg-3: #151515;
   --btn: #1d1d1d;
+  --btn-fg: #ffffff;
   --fg: #ffffff;
   --fg-muted: #999999;
   --accent: #ffa41c;
@@ -41,6 +43,7 @@
   --bg-2: #111111;
   --bg-3: #151515;
   --btn: #1d1d1d;
+  --btn-fg: #ffffff;
   --fg: #ffffff;
   --fg-muted: #999999;
   --accent: #ffa41c;

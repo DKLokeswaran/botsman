@@ -16,6 +16,7 @@ MAP = {
     "bg2": "bg-2",
     "bg3": "bg-3",
     "btn": "btn",
+    "btnFg": "btn-fg",
     "fg": "fg",
     "fgMuted": "fg-muted",
     "accent": "accent",
@@ -74,7 +75,60 @@ def render() -> str:
     )
 
 
+def channel(value: int) -> float:
+    scaled = value / 255
+    if scaled <= 0.04045:
+        return scaled / 12.92
+    return ((scaled + 0.055) / 1.055) ** 2.4
+
+
+def luminance(hex_color: str) -> float:
+    raw = hex_color.removeprefix("#")
+    red, green, blue = int(raw[0:2], 16), int(raw[2:4], 16), int(raw[4:6], 16)
+    return 0.2126 * channel(red) + 0.7152 * channel(green) + 0.0722 * channel(blue)
+
+
+def contrast(foreground: str, background: str) -> float:
+    lighter = max(luminance(foreground), luminance(background))
+    darker = min(luminance(foreground), luminance(background))
+    return (lighter + 0.05) / (darker + 0.05)
+
+
+# Each foreground sits on these backgrounds. Button text is btnFg, not fg.
+PAIRS = (
+    ("fg", "bg"),
+    ("fg", "bg2"),
+    ("fg", "bg3"),
+    ("fgMuted", "bg"),
+    ("fgMuted", "bg2"),
+    ("fgMuted", "bg3"),
+    ("accentFg", "accent"),
+    ("btnFg", "btn"),
+    ("error", "bg"),
+    ("error", "bg2"),
+    ("error", "bg3"),
+)
+
+
+def check_contrast(data: dict) -> list[str]:
+    problems = []
+    for theme in ("light", "dark"):
+        colors = data[theme]
+        for foreground, background in PAIRS:
+            ratio = contrast(colors[foreground], colors[background])
+            if ratio < 4.5:
+                problems.append(f"{theme} {foreground} on {background} is {ratio:.2f}:1")
+    return problems
+
+
 def main() -> int:
+    data = json.loads(SOURCE.read_text(encoding="utf-8"))
+    problems = check_contrast(data)
+    if problems:
+        print("token contrast is below WCAG AA 4.5:1", file=sys.stderr)
+        for problem in problems:
+            print(problem, file=sys.stderr)
+        return 1
     text = render()
     if "--check" in sys.argv:
         current = CSS.read_text(encoding="utf-8") if CSS.exists() else ""

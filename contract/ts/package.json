@@ -7,7 +7,7 @@
     ".": "./src/index.ts"
   },
   "scripts": {
-    "test": "node --experimental-strip-types --test test/client.test.ts",
+    "test": "node --experimental-strip-types --test test/client.test.ts test/update.test.ts",
     "check": "tsc --noEmit"
   },
   "devDependencies": {

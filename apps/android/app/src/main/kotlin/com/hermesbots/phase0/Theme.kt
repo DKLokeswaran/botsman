@@ -42,6 +42,8 @@ private val Dark = darkColorScheme(
     onSurfaceVariant = Color(0xFF999999),
     outline = Color(0xFF262626),
     error = Color(0xFFF87171),
+    tertiary = Color(0xFF1D1D1D),
+    onTertiary = Color(0xFFFFFFFF),
 )
 
 private val Light = lightColorScheme(
@@ -55,6 +57,8 @@ private val Light = lightColorScheme(
     onSurfaceVariant = Color(0xFF4E4C47),
     outline = Color(0xFFD4D0C6),
     error = Color(0xFFB42318),
+    tertiary = Color(0xFF111111),
+    onTertiary = Color(0xFFFFFFFF),
 )
 
 private val Type = Typography(
@@ -65,9 +69,9 @@ private val Type = Typography(
 )
 
 @Composable
-fun ZoetrikTheme(content: @Composable () -> Unit) {
+fun ZoetrikTheme(darkTheme: Boolean = isSystemInDarkTheme(), content: @Composable () -> Unit) {
     MaterialTheme(
-        colorScheme = if (isSystemInDarkTheme()) Dark else Light,
+        colorScheme = if (darkTheme) Dark else Light,
         typography = Type,
         content = content,
     )

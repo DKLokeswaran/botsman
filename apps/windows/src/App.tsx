@@ -2,22 +2,28 @@ import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { disable, enable, isEnabled } from "@tauri-apps/plugin-autostart";
+import { fetch as nativeFetch } from "@tauri-apps/plugin-http";
 import { isPermissionGranted, onAction, requestPermission, sendNotification } from "@tauri-apps/plugin-notification";
 import { useEffect, useRef, useState } from "react";
 import {
   HermesClient,
   HermesError,
+  formatAppVersion,
   formatPush,
   openRequestIds,
+  parseLatest,
   parsePush,
   routeFocus,
+  updateAvailable,
   type GatewayEvent,
+  type LatestRelease,
   type LoginMaterial,
   type ProfileRow,
   type PushRoute,
   type ServerRequest,
   type SessionRow,
 } from "@hermes-bots/gateway-client";
+import { buildNumber, commitSha, versionName } from "./build-info";
 import { Button } from "./components/ui/button";
 import { Input } from "./components/ui/input";
 import { Textarea } from "./components/ui/textarea";
@@ -26,7 +32,53 @@ import { tauriHttp, tauriSocket } from "./gateway";
 
 const DEFAULT_SERVER = "http://100.113.35.96:9119";
 const LEGACY_SERVER = "http://devbox.tail2eeb02.ts.net:9119";
+const DEFAULT_UPDATE = "http://100.113.35.96:8711";
 const SERVER_KEY = "hermes-bots-server";
+const UPDATE_KEY = "hermes-bots-update-base";
+const APP_VERSION = formatAppVersion(versionName, buildNumber, commitSha);
+
+type UpdatePhase = "checking" | "available" | "working" | "current" | "error";
+
+type UpdateView = {
+  phase: UpdatePhase;
+  version: string;
+  detail: string;
+  release: LatestRelease | null;
+};
+
+async function loadLatest(base: string): Promise<UpdateView> {
+  const root = base.trim().replace(/\/+$/, "");
+  const url = `${root}/latest.json`;
+  try {
+    const response = await nativeFetch(url, { method: "GET", connectTimeout: 20_000 });
+    const text = await response.text();
+    if (!response.ok) {
+      return {
+        phase: "error",
+        version: "",
+        detail: `Update check failed (${response.status}) from ${url}. ${text.slice(0, 180)}`,
+        release: null,
+      };
+    }
+    const parsed = parseLatest(text);
+    if (!parsed) {
+      return {
+        phase: "error",
+        version: "",
+        detail: `Update check failed from ${url}. latest.json is not the expected shape.`,
+        release: null,
+      };
+    }
+    if (updateAvailable(buildNumber, parsed.build)) {
+      return { phase: "available", version: parsed.version, detail: "", release: parsed };
+    }
+    return { phase: "current", version: "", detail: "", release: parsed };
+  } catch (error) {
+    const message = error instanceof Error && error.message ? error.message : String(error);
+    const detail = message.includes(url) ? message : `Update check failed from ${url}. ${message}`;
+    return { phase: "error", version: "", detail, release: null };
+  }
+}
 
 function preferredServer(stored: string | null): string {
   if (!stored) {
@@ -151,7 +203,12 @@ export function App() {
   const [ime, setIme] = useState("");
   const [staged, setStaged] = useState<Staged[]>([]);
   const [autostart, setAutostart] = useState(false);
+  const [updateBase, setUpdateBase] = useState(DEFAULT_UPDATE);
+  const [updatePhase, setUpdatePhase] = useState<UpdatePhase>("checking");
+  const [updateVersion, setUpdateVersion] = useState("");
+  const [updateDetail, setUpdateDetail] = useState("");
   const clientRef = useRef<HermesClient | null>(null);
+  const latestRef = useRef<LatestRelease | null>(null);
   const materialRef = useRef<LoginMaterial | null>(null);
   const seqs = useRef<Record<string, number>>({});
   const liveRef = useRef<string | null>(null);
@@ -234,6 +291,10 @@ export function App() {
       localStorage.setItem(SERVER_KEY, url);
     }
     setServerUrl(url);
+    const storedUpdate = localStorage.getItem(UPDATE_KEY);
+    const updateUrl = storedUpdate && storedUpdate.trim() ? storedUpdate.trim() : DEFAULT_UPDATE;
+    setUpdateBase(updateUrl);
+    void checkUpdates(updateUrl);
     void isEnabled()
       .then(setAutostart)
       .catch(() => undefined);
@@ -260,6 +321,42 @@ export function App() {
     // Boot once. restore is stable enough for the saved login on this screen.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  function rememberUpdateBase(value: string) {
+    setUpdateBase(value);
+    localStorage.setItem(UPDATE_KEY, value.trim());
+  }
+
+  function applyUpdateView(view: UpdateView) {
+    latestRef.current = view.release;
+    setUpdatePhase(view.phase);
+    setUpdateVersion(view.version);
+    setUpdateDetail(view.detail);
+  }
+
+  async function checkUpdates(base: string) {
+    setUpdatePhase("checking");
+    setUpdateDetail("");
+    applyUpdateView(await loadLatest(base));
+  }
+
+  async function applyWindowsUpdate() {
+    const artifact = latestRef.current?.windows;
+    if (!artifact) {
+      return;
+    }
+    setUpdatePhase("working");
+    setUpdateDetail("Downloading the update");
+    try {
+      await invoke("apply_update", { url: artifact.url, sha256: artifact.sha256, size: artifact.size });
+      setUpdatePhase("available");
+      setUpdateDetail("The installer is running. Confirm it, then reopen Hermes Bots.");
+    } catch (error) {
+      const message = error instanceof Error && error.message ? error.message : String(error);
+      setUpdatePhase("available");
+      setUpdateDetail(message);
+    }
+  }
 
   function rememberApproval(card: Approval | null) {
     approvalMirror.current = card;
@@ -808,6 +905,7 @@ export function App() {
         <div>
           <h1 className="font-[family-name:var(--font-display)] text-[22px] font-black tracking-wide">HERMES BOTS</h1>
           <p className="font-[family-name:var(--font-label)] text-[12px] tracking-[0.08em] text-primary uppercase">{status}</p>
+          <p className="text-sm text-muted-foreground">{APP_VERSION}</p>
         </div>
         <div className="flex gap-2">
           <Button type="button" onClick={() => void toast("Hermes Bots", "Test toast from the phase 0 app")}>
@@ -931,6 +1029,15 @@ export function App() {
               <Input value={serverUrl} onChange={(event) => setServerUrl(event.target.value)} autoCapitalize="off" spellCheck={false} />
             </label>
             <label className="block space-y-1">
+              <span className="font-[family-name:var(--font-label)] text-[12px] tracking-[0.08em] uppercase">Update server</span>
+              <Input
+                value={updateBase}
+                onChange={(event) => rememberUpdateBase(event.target.value)}
+                autoCapitalize="off"
+                spellCheck={false}
+              />
+            </label>
+            <label className="block space-y-1">
               <span className="font-[family-name:var(--font-label)] text-[12px] tracking-[0.08em] uppercase">Username</span>
               <Input value={username} onChange={(event) => setUsername(event.target.value)} autoCapitalize="off" spellCheck={false} />
             </label>
@@ -995,6 +1102,41 @@ export function App() {
           <p className="text-sm text-muted-foreground">A thumbnail stays on this machine. This build does not upload it.</p>
         </form>
       ) : null}
+      <div className="space-y-2 border-t border-[var(--line)] px-4 py-3">
+        <p className="font-[family-name:var(--font-label)] text-[12px] tracking-[0.08em] text-primary uppercase">About</p>
+        <p className="text-sm">{APP_VERSION}</p>
+        {connected ? (
+          <label className="block space-y-1">
+            <span className="font-[family-name:var(--font-label)] text-[12px] tracking-[0.08em] uppercase">Update server</span>
+            <Input
+              value={updateBase}
+              onChange={(event) => rememberUpdateBase(event.target.value)}
+              autoCapitalize="off"
+              spellCheck={false}
+            />
+          </label>
+        ) : null}
+        {updatePhase === "available" ? <p>Update available: {updateVersion}</p> : null}
+        {updatePhase === "working" ? <p className="text-sm text-muted-foreground">{updateDetail || "Downloading the update"}</p> : null}
+        {updatePhase === "checking" ? <p className="text-sm text-muted-foreground">Checking for updates</p> : null}
+        {updatePhase === "error" ? <p className="text-sm text-[var(--error)]">{updateDetail}</p> : null}
+        <div className="flex flex-wrap gap-2">
+          {updatePhase === "available" || updatePhase === "working" ? (
+            <Button type="button" onClick={() => void applyWindowsUpdate()}>
+              Update
+            </Button>
+          ) : null}
+          {updatePhase === "current" ? (
+            <Button type="button" onClick={() => undefined}>
+              Up to date
+            </Button>
+          ) : null}
+          <Button type="button" onClick={() => void checkUpdates(updateBase)}>
+            Check for updates
+          </Button>
+        </div>
+        {updatePhase === "available" && updateDetail ? <p className="text-sm text-[var(--error)]">{updateDetail}</p> : null}
+      </div>
       <div className="space-y-1 px-4 pb-4">
         <p className="font-[family-name:var(--font-label)] text-[12px] tracking-[0.08em] text-muted-foreground uppercase">
           Try Tamil and Hindi typing here

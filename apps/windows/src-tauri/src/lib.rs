@@ -1,3 +1,5 @@
+mod update;
+
 use std::sync::atomic::{AtomicBool, Ordering};
 
 use tauri::menu::{Menu, MenuItem};
@@ -131,6 +133,40 @@ fn vault_clear_secret() -> Result<(), String> {
     }
 }
 
+#[tauri::command]
+fn apply_update(app: tauri::AppHandle, url: String, sha256: String, size: u64) -> Result<(), String> {
+    let bytes = update::download(&url)?;
+    if size > 0 && bytes.len() as u64 != size {
+        return Err(format!(
+            "Download size mismatch from {url}. Expected {size} bytes, got {}.",
+            bytes.len()
+        ));
+    }
+    let actual = update::sha256_hex(&bytes);
+    if !actual.eq_ignore_ascii_case(sha256.trim()) {
+        return Err(format!("SHA-256 mismatch for {url}. Expected {sha256}, got {actual}."));
+    }
+    let mut path = std::env::temp_dir();
+    path.push("hermes-bots-setup.exe");
+    std::fs::write(&path, &bytes).map_err(|error| format!("Could not write the installer to {}: {error}", path.display()))?;
+    #[cfg(windows)]
+    {
+        use std::os::windows::process::CommandExt;
+        std::process::Command::new(&path)
+            .creation_flags(0x0000_0008 | 0x0000_0200)
+            .spawn()
+            .map_err(|error| format!("Could not start the installer {}: {error}", path.display()))?;
+        QUITTING.store(true, Ordering::SeqCst);
+        app.exit(0);
+        Ok(())
+    }
+    #[cfg(not(windows))]
+    {
+        let _ = (app, path);
+        Err("The installer is a Windows exe.".into())
+    }
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     #[cfg(windows)]
@@ -160,7 +196,7 @@ pub fn run() {
                 let _ = window.hide();
             }
         })
-        .invoke_handler(tauri::generate_handler![vault_load, vault_save, vault_clear_secret])
+        .invoke_handler(tauri::generate_handler![vault_load, vault_save, vault_clear_secret, apply_update])
         .run(tauri::generate_context!())
         .expect("hermes bots failed to start");
 }

@@ -21,6 +21,7 @@ tauri-plugin-notification = "2"
 tauri-plugin-single-instance = "2"
 tauri-plugin-websocket = "2"
 serde_json = "1"
+sha2 = "0.10"
 
 [target.'cfg(windows)'.dependencies]
 keyring = { version = "3", features = ["windows-native"] }
