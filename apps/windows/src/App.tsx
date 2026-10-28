@@ -34,6 +34,7 @@ import { buildNumber, commitSha, versionName } from "./build-info";
 import { Button } from "./components/ui/button";
 import { Input } from "./components/ui/input";
 import { Textarea } from "./components/ui/textarea";
+import { chatLineKey } from "./chat-line-key";
 import { Reply, UserLine } from "./markdown";
 import { tauriHttp, tauriSocket } from "./gateway";
 import {
@@ -1219,7 +1220,7 @@ export function App() {
             </div>
             {lines.map((line, index) => (
               <article
-                key={`${liveId}-${index}-${line.role}`}
+                key={chatLineKey(liveId, index, line.role, line.messageId)}
                 ref={(node) => {
                   lineRefs.current[index] = node;
                 }}

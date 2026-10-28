@@ -317,7 +317,7 @@ private fun ChatBlock(
         Slab(session.title.ifEmpty { session.id }, { onOpen(session.id) })
     }
     state.messages.forEachIndexed { index, line ->
-        key(index, line.messageId, line.role) {
+        key(chatLineKey(state.liveSessionId, index, line.role, line.messageId)) {
             val focus = state.focus
             val landed = focus?.target == "message" && (
                 focus.messageIndex == index ||

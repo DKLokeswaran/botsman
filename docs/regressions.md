@@ -47,6 +47,7 @@ Leave `HERMES_FAKE_TEST_HOOKS` unset for contract tests and the notifier. The fa
 | 2026-10-28 | Approving on one device clears the card or marks it on the other device. | `test_bug_approval_clears_or_marks_on_other_device` |
 | 2026-10-28 | Markdown lists render, and a multi-line fenced block with a language shows its label, colours, and Copy. Copy puts the code on the clipboard. | `test_bug_markdown_list_and_fenced_code` |
 | 2026-10-28 | A long user message collapses after about 6 lines, with Show more and Show less. | `test_bug_long_user_message_collapses` |
+| 2026-10-28 | A user line keeps Show more / Show less when history merge learns a row id. The row key is the session, the index, and the role. It does not include the row id. | `test_bug_user_line_show_more_key_stable` (Windows TS, Android Kotlin) |
 | 2026-10-28 | A notification tap opens the session with the approval card or the reply highlighted. | `test_bug_notification_deep_link_highlights` |
 | 2026-10-28 | Light-mode button contrast is at least 4.5:1 on every button, from computed style. | `test_bug_light_mode_button_contrast` |
 | 2026-10-28 | The version label is visible on the login screen and in About. | `test_bug_version_label_on_login_and_about` |

@@ -1,12 +1,18 @@
 package com.hermesbots.phase0
 
 import android.content.Intent
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.test.assertCountEquals
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.junit4.AndroidComposeTestRule
+import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performScrollTo
 import androidx.test.core.app.ApplicationProvider
 import androidx.test.ext.junit.rules.ActivityScenarioRule
 import com.github.takahirom.roborazzi.ExperimentalRoborazziApi
@@ -82,6 +88,32 @@ class Phase0Screenshots {
         compose.waitForIdle()
         compose.onNodeWithText("Latest user message after send").assertIsDisplayed()
         capture("bug-no-autoscroll-on-send")
+    }
+
+    @Test
+    fun test_bug_user_line_show_more_key_stable() {
+        val text = (1..30).joinToString("\n") { "line $it of a long user message" }
+        var messageId by mutableStateOf("")
+        compose.setContent {
+            ZoetrikTheme(darkTheme = false) {
+                Phase0Screen(
+                    state = connected(
+                        messages = listOf(ChatLine("user", text, messageId = messageId)),
+                        liveSessionId = "live-1",
+                    ),
+                )
+            }
+        }
+        compose.waitForIdle()
+        compose.mainClock.advanceTimeBy(1_000)
+        compose.waitForIdle()
+        compose.onNodeWithText("Show more").performScrollTo().assertIsDisplayed().performClick()
+        compose.waitForIdle()
+        compose.onAllNodesWithText("Show less").assertCountEquals(1)
+        compose.runOnIdle { messageId = "row-9" }
+        compose.waitForIdle()
+        compose.onAllNodesWithText("Show less").assertCountEquals(1)
+        compose.onAllNodesWithText("Show more").assertCountEquals(0)
     }
 
     private fun shot(name: String, dark: Boolean, state: Phase0State) {
