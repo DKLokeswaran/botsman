@@ -14,6 +14,7 @@ import base64
 import hashlib
 import json
 import os
+import random
 import socket
 import ssl
 import struct
@@ -24,6 +25,40 @@ import urllib.error
 import urllib.request
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import quote, urlparse
+
+RESUME_RETRY_SECONDS = 60.0
+RECONNECT_BACKOFF_CAP = 60.0
+LOGIN_RATE_LIMIT_MIN_SECONDS = 60.0
+
+
+class LoginRateLimited(RuntimeError):
+    def __init__(self, retry_after: float | None) -> None:
+        self.retry_after = retry_after
+        detail = f"retry after {retry_after}s" if retry_after is not None else "rate limited"
+        super().__init__(f"login rate limited ({detail})")
+
+
+def parse_retry_after(headers: dict[str, str]) -> float | None:
+    raw = headers.get("retry-after") or headers.get("Retry-After")
+    if not raw:
+        return None
+    try:
+        return float(raw)
+    except ValueError:
+        return None
+
+
+def login_rate_limit_wait(retry_after: float | None) -> float:
+    if retry_after is None:
+        return LOGIN_RATE_LIMIT_MIN_SECONDS
+    return max(retry_after, LOGIN_RATE_LIMIT_MIN_SECONDS)
+
+
+def reconnect_wait_seconds(backoff: float, retry_after: float | None = None) -> float:
+    if retry_after is not None:
+        return login_rate_limit_wait(retry_after)
+    jitter = random.uniform(0, backoff * 0.25)
+    return backoff + jitter
 
 WS_GUID = "258EAFA5-E914-47DA-95CA-C5AB0DC85B11"
 SECRET_KEYS = {"HERMES_PASSWORD", "NOTIFY_TOKEN", "HERMES_REFRESH"}
@@ -71,7 +106,12 @@ def bind_health(host: str, port: int) -> ThreadingHTTPServer:
     return server
 
 
-def request_json(method: str, url: str, body: dict | None = None, headers: dict | None = None) -> tuple[int, dict, list[str]]:
+def request_json(
+    method: str,
+    url: str,
+    body: dict | None = None,
+    headers: dict | None = None,
+) -> tuple[int, dict, list[str], dict[str, str]]:
     data = None if body is None else json.dumps(body).encode("utf-8")
     req = urllib.request.Request(url, data=data, method=method)
     for key, value in (headers or {}).items():
@@ -82,14 +122,16 @@ def request_json(method: str, url: str, body: dict | None = None, headers: dict 
         with urllib.request.urlopen(req, timeout=20) as response:
             cookies = response.headers.get_all("Set-Cookie") or []
             payload = json.loads(response.read().decode("utf-8") or "{}")
-            return response.status, payload, cookies
+            resp_headers = {k.lower(): v for k, v in response.headers.items()}
+            return response.status, payload, cookies, resp_headers
     except urllib.error.HTTPError as exc:
         raw = exc.read().decode("utf-8", errors="replace")
         try:
             payload = json.loads(raw or "{}")
         except json.JSONDecodeError:
             payload = {}
-        return exc.code, payload, []
+        resp_headers = {k.lower(): v for k, v in exc.headers.items()}
+        return exc.code, payload, [], resp_headers
 
 
 def _clip(value: str, limit: int) -> str:
@@ -167,13 +209,17 @@ class Gateway:
         self.notify_token = ""
         self.sent = 0
         self.once = 0
+        self.resume_retry_after: dict[str, float] = {}
+        self.active_list_key: tuple[str, ...] = ()
 
     def login(self, username: str, password: str, provider: str) -> None:
-        status, _payload, cookies = request_json(
+        status, _payload, cookies, resp_headers = request_json(
             "POST",
             f"{self.base}/auth/password-login",
             {"provider": provider, "username": username, "password": password, "next": "/"},
         )
+        if status == 429:
+            raise LoginRateLimited(parse_retry_after(resp_headers))
         if status != 200:
             raise RuntimeError(f"login failed ({status})")
         self.access = cookie_value(cookies, "hermes_session_at")
@@ -185,7 +231,7 @@ class Gateway:
         print(f"logged in as {username}", flush=True)
 
     def refresh_session(self) -> None:
-        status, payload, _cookies = request_json(
+        status, payload, _cookies, _headers = request_json(
             "POST",
             f"{self.base}/auth/native/refresh",
             {"refresh_token": self.refresh, "provider": self.provider},
@@ -198,14 +244,14 @@ class Gateway:
             raise RuntimeError("refresh response had no tokens")
 
     def ticket(self) -> str:
-        status, payload, _cookies = request_json(
+        status, payload, _cookies, _headers = request_json(
             "POST",
             f"{self.base}/api/auth/ws-ticket",
             headers={"Authorization": f"Bearer {self.access}"},
         )
         if status == 401 and self.refresh:
             self.refresh_session()
-            status, payload, _cookies = request_json(
+            status, payload, _cookies, _headers = request_json(
                 "POST",
                 f"{self.base}/api/auth/ws-ticket",
                 headers={"Authorization": f"Bearer {self.access}"},
@@ -274,6 +320,11 @@ class Gateway:
                 continue
             if str(frame.get("id")) == ident and "method" not in frame:
                 if "error" in frame:
+                    err = frame.get("error")
+                    if isinstance(err, dict):
+                        code = err.get("code", "?")
+                        message = err.get("message", "")
+                        raise RuntimeError(f"{method} failed (code={code}: {message})")
                     raise RuntimeError(f"{method} failed")
                 result = frame.get("result")
                 return result if isinstance(result, dict) else {}
@@ -481,6 +532,20 @@ class Gateway:
     def poll(self) -> None:
         result = self.call("session.active_list", {})
         rows = result.get("sessions") if isinstance(result.get("sessions"), list) else []
+        active_ids: list[str] = []
+        for row in rows:
+            if not isinstance(row, dict):
+                continue
+            sid = str(row.get("id") or "")
+            if sid:
+                active_ids.append(sid)
+        active_key = tuple(sorted(active_ids))
+        if active_key != self.active_list_key:
+            self.active_list_key = active_key
+            self.resume_retry_after = {
+                sid: until for sid, until in self.resume_retry_after.items() if sid in active_key
+            }
+        now = time.time()
         for row in rows:
             if not isinstance(row, dict):
                 continue
@@ -492,8 +557,17 @@ class Gateway:
                 self.profiles[sid] = profile
             if sid in self.attached:
                 continue
-            self.call("session.resume", {"session_id": sid, "omit_messages": True})
+            retry_after = self.resume_retry_after.get(sid, 0.0)
+            if retry_after > now:
+                continue
+            try:
+                self.call("session.resume", {"session_id": sid, "omit_messages": True})
+            except RuntimeError as exc:
+                print(f"session.resume skipped for {sid} ({exc})", file=sys.stderr, flush=True)
+                self.resume_retry_after[sid] = now + RESUME_RETRY_SECONDS
+                continue
             self.attached.add(sid)
+            self.resume_retry_after.pop(sid, None)
 
     def close(self) -> None:
         if self.sock is not None:
@@ -560,12 +634,18 @@ def main() -> None:
                     last_ping = now
         except SystemExit:
             raise
+        except LoginRateLimited as exc:
+            print(f"reconnecting ({type(exc).__name__}: {exc})", file=sys.stderr, flush=True)
+            gateway.close()
+            gateway.access = ""
+            time.sleep(reconnect_wait_seconds(backoff, exc.retry_after))
+            backoff = min(backoff * 2, RECONNECT_BACKOFF_CAP)
         except Exception as exc:  # noqa: BLE001
             print(f"reconnecting ({type(exc).__name__}: {exc})", file=sys.stderr, flush=True)
             gateway.close()
             gateway.access = ""
-            time.sleep(backoff)
-            backoff = min(backoff * 2, 30)
+            time.sleep(reconnect_wait_seconds(backoff))
+            backoff = min(backoff * 2, RECONNECT_BACKOFF_CAP)
 
 
 if __name__ == "__main__":

@@ -15,8 +15,11 @@ Shapes follow the pinned contract and the v0.22.5 handlers:
 - ``session.events.since`` returns event ``params`` objects plus ``open_requests``.
 
 ``HERMES_FAKE_TEST_HOOKS=1`` exposes loopback controls for the Windows browser
-suite (reset, a scripted reply, an extra session, and a state readout). It also
-repeats ``Set-Cookie`` in ``X-E2E-Set-Cookie`` and answers CORS preflight.
+suite (reset, a scripted reply, an extra session, and a state readout). With the
+same flag, ``/__test__/resume_reject`` makes ``session.resume`` fail for one id,
+and ``/__test__/login_429`` makes password login return HTTP 429 with
+``Retry-After``. It also repeats ``Set-Cookie`` in ``X-E2E-Set-Cookie`` and
+answers CORS preflight.
 Leave the variable unset and those paths 404; login and JSON-RPC stay as below.
 """
 
@@ -60,6 +63,10 @@ class State:
         self.next_session = 2
         self.scripted_reply: str | None = None
         self.sessions: dict[str, dict] = _hello_sessions()
+        self.resume_reject: dict[str, tuple[int, str]] = {}
+        self.login_429_remaining = 0
+        self.login_429_retry_after = 60
+        self.login_attempts = 0
 
     def reset(self) -> None:
         with self.lock:
@@ -78,6 +85,10 @@ class State:
             self.next_session = 2
             self.scripted_reply = None
             self.sessions = _hello_sessions()
+            self.resume_reject.clear()
+            self.login_429_remaining = 0
+            self.login_429_retry_after = 60
+            self.login_attempts = 0
 
     def lookup(self, session_id: str | None) -> dict:
         if session_id and session_id in self.sessions:
@@ -497,6 +508,7 @@ def _test_state() -> dict:
         "profiles": [dict(item) for item in PROFILES["profiles"]],
         "sessions": sessions,
         "extras": extras,
+        "login_attempts": STATE.login_attempts,
     }
 
 
@@ -543,6 +555,42 @@ def _handle_test_hook(handler: "Handler", path: str, incoming: dict) -> None:
         _install_scripted_session(session_id, title, marker)
         handler._json_response(200, {"ok": True})
         return
+    if path == "/__test__/resume_reject":
+        session_id = str(incoming.get("session_id") or "")
+        if not session_id:
+            handler._json_response(400, {"error": "session_id is required"})
+            return
+        if incoming.get("clear"):
+            with STATE.lock:
+                STATE.resume_reject.pop(session_id, None)
+            handler._json_response(200, {"ok": True})
+            return
+        try:
+            code = int(incoming.get("code", -32000))
+        except (TypeError, ValueError):
+            handler._json_response(400, {"error": "code must be an integer"})
+            return
+        message = str(incoming.get("message") or "resume rejected")
+        with STATE.lock:
+            STATE.resume_reject[session_id] = (code, message)
+        handler._json_response(200, {"ok": True})
+        return
+    if path == "/__test__/login_429":
+        try:
+            count = int(incoming.get("count", 1))
+        except (TypeError, ValueError):
+            handler._json_response(400, {"error": "count must be an integer"})
+            return
+        try:
+            retry_after = int(incoming.get("retry_after", 60))
+        except (TypeError, ValueError):
+            handler._json_response(400, {"error": "retry_after must be an integer"})
+            return
+        with STATE.lock:
+            STATE.login_429_remaining = max(0, count)
+            STATE.login_429_retry_after = max(1, retry_after)
+        handler._json_response(200, {"ok": True})
+        return
     handler._json_response(404, {"error": "not found"})
 
 
@@ -572,25 +620,23 @@ def _dispatch(wfile, req: dict) -> None:
         _send_json(wfile, _ok(rid, _session_list()))
         return
     if method == "session.active_list":
-        _send_json(
-            wfile,
-            _ok(
-                rid,
-                {
-                    "sessions": [
-                        {
-                            "current": False,
-                            "id": SESSION_LIVE,
-                            "last_active": 1,
-                            "message_count": 1,
-                            "model": "fake-model",
-                            "preview": "Say hello",
-                            "profile": "default",
-                        }
-                    ]
-                },
-            ),
-        )
+        with STATE.lock:
+            rows = []
+            for record in STATE.sessions.values():
+                messages = record["messages"]
+                preview = messages[-1]["text"] if messages else ""
+                rows.append(
+                    {
+                        "current": False,
+                        "id": record["live"],
+                        "last_active": 1,
+                        "message_count": len(messages),
+                        "model": "fake-model",
+                        "preview": preview,
+                        "profile": "default",
+                    }
+                )
+        _send_json(wfile, _ok(rid, {"sessions": rows}))
         return
     if method == "session.create":
         with STATE.lock:
@@ -624,8 +670,18 @@ def _dispatch(wfile, req: dict) -> None:
         _send_json(wfile, _ok(rid, {"interrupted": True}))
         return
     if method in ("session.resume", "session.activate"):
+        requested = str(params.get("session_id") or "")
         with STATE.lock:
-            record = STATE.lookup(str(params.get("session_id") or "") or None)
+            reject = STATE.resume_reject.get(requested)
+            if reject is None:
+                record = STATE.lookup(requested or None)
+                reject = STATE.resume_reject.get(record["live"]) or STATE.resume_reject.get(record["stored"])
+        if reject is not None:
+            code, message = reject
+            _send_json(wfile, _err(rid, code, message))
+            return
+        with STATE.lock:
+            record = STATE.lookup(requested or None)
             live = record["live"]
             messages = [dict(item) for item in record["messages"]]
             title = record["title"]
@@ -855,6 +911,23 @@ class Handler(BaseHTTPRequestHandler):
             _handle_test_hook(self, parsed.path, incoming if isinstance(incoming, dict) else {})
             return
         if parsed.path == "/auth/password-login":
+            with STATE.lock:
+                STATE.login_attempts += 1
+                remaining = STATE.login_429_remaining
+                retry_after = STATE.login_429_retry_after
+            if TEST_HOOKS and remaining > 0:
+                with STATE.lock:
+                    STATE.login_429_remaining -= 1
+                raw = _json_bytes({"detail": "rate limited"})
+                self.send_response(429)
+                self.send_header("Content-Type", "application/json")
+                self.send_header("Content-Length", str(len(raw)))
+                self.send_header("Retry-After", str(retry_after))
+                if TEST_HOOKS:
+                    self.send_header("Access-Control-Allow-Origin", "*")
+                self.end_headers()
+                self.wfile.write(raw)
+                return
             username = str(incoming.get("username") or "")
             password = str(incoming.get("password") or "")
             if username != FAKE_USER or password != FAKE_PASSWORD:
