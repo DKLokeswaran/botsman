@@ -45,6 +45,8 @@ import androidx.compose.runtime.snapshotFlow
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.layout.onSizeChanged
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.vector.ImageVector
@@ -102,57 +104,85 @@ fun Phase0Screen(
     onApplyUpdate: () -> Unit = {},
 ) {
     val scheme = MaterialTheme.colorScheme
+    val density = LocalDensity.current
     val scrollState = rememberScrollState()
     var showJumpToLatest by remember { mutableStateOf(false) }
-    var distanceFromBottom by remember { mutableIntStateOf(0) }
+    val stickDp = remember { intArrayOf(0) }
+    var viewportHeight by remember { mutableIntStateOf(0) }
+    var openedSession by remember { mutableStateOf<String?>(null) }
     val scope = rememberCoroutineScope()
     val messages = state.messages
     val focusTarget = state.focus?.target
+    val memory = remember {
+        object {
+            var session: String? = null
+            var count = 0
+            var text = ""
+        }
+    }
 
-    LaunchedEffect(scrollState) {
+    LaunchedEffect(scrollState, density) {
+        var lastValue = scrollState.value
         snapshotFlow { scrollState.value to scrollState.maxValue }.collect { (value, max) ->
-            val dist = (max - value).coerceAtLeast(0)
-            distanceFromBottom = dist
-            if (!shouldShowJumpToLatest(dist)) {
+            val dist = distanceDp((max - value).coerceAtLeast(0), density.density)
+            if (value != lastValue) {
+                lastValue = value
+                stickDp[0] = dist
+                showJumpToLatest = shouldShowJumpToLatest(dist)
+            } else if (!shouldShowJumpToLatest(dist)) {
+                stickDp[0] = dist
                 showJumpToLatest = false
             }
         }
     }
 
-    var prevMessageCount by remember { mutableIntStateOf(0) }
-    var prevLastText by remember { mutableStateOf("") }
-
-    LaunchedEffect(messages.size, messages.lastOrNull()?.text, messages.lastOrNull()?.role) {
+    LaunchedEffect(messages.size, messages.lastOrNull()?.text, messages.lastOrNull()?.role, state.liveSessionId, focusTarget) {
         val last = messages.lastOrNull()
         val lastRole = last?.role.orEmpty()
         val lastText = last?.text.orEmpty()
-        val event = when {
-            messages.size > prevMessageCount && lastRole == "user" -> ChatScrollEvent.USER_SEND
-            lastRole == "assistant" && (messages.size > prevMessageCount || lastText != prevLastText) -> {
-                ChatScrollEvent.REPLY_STREAM
-            }
-            else -> null
+        if (memory.session != state.liveSessionId) {
+            memory.session = state.liveSessionId
+            memory.count = messages.size
+            memory.text = lastText
+            return@LaunchedEffect
         }
-        prevMessageCount = messages.size
-        prevLastText = lastText
+        val deepLinked = focusTarget == "message" || focusTarget == "approval" || focusTarget == "question"
+        if (deepLinked && messages.size > memory.count + 1) {
+            memory.count = messages.size
+            memory.text = lastText
+            stickDp[0] = distanceDp((scrollState.maxValue - scrollState.value).coerceAtLeast(0), density.density)
+            showJumpToLatest = shouldShowJumpToLatest(stickDp[0])
+            return@LaunchedEffect
+        }
+        val event = classifyScrollEvent(memory.count, memory.text, messages.size, lastRole, lastText)
+        memory.count = messages.size
+        memory.text = lastText
         if (event == null) {
             return@LaunchedEffect
         }
-        if (shouldFollow(distanceFromBottom, event)) {
+        if (shouldFollow(stickDp[0], event)) {
             scrollState.scrollToBottomWhenReady()
+            stickDp[0] = 0
             showJumpToLatest = false
         } else if (event == ChatScrollEvent.REPLY_STREAM) {
-            showJumpToLatest = shouldShowJumpToLatest(distanceFromBottom)
+            showJumpToLatest = shouldShowJumpToLatest(stickDp[0])
         }
     }
 
-    var openedSession by remember { mutableStateOf<String?>(null) }
-    LaunchedEffect(state.liveSessionId, messages.size, scrollState.maxValue, focusTarget) {
+    LaunchedEffect(state.liveSessionId, messages.size, scrollState.maxValue, focusTarget, viewportHeight) {
         val session = state.liveSessionId ?: return@LaunchedEffect
         if (openedSession == session) {
             return@LaunchedEffect
         }
-        if (focusTarget == "message" || focusTarget == "approval" || focusTarget == "question") {
+        val deepLinked = focusTarget == "message" || focusTarget == "approval" || focusTarget == "question"
+        if (deepLinked) {
+            if (viewportHeight == 0) {
+                stickDp[0] = NEAR_BOTTOM_DP + 1
+                return@LaunchedEffect
+            }
+            val dist = distanceDp((scrollState.maxValue - scrollState.value).coerceAtLeast(0), density.density)
+            stickDp[0] = dist
+            showJumpToLatest = shouldShowJumpToLatest(dist)
             openedSession = session
             return@LaunchedEffect
         }
@@ -160,7 +190,20 @@ fun Phase0Screen(
             return@LaunchedEffect
         }
         scrollState.scrollTo(scrollState.maxValue)
+        stickDp[0] = 0
+        showJumpToLatest = false
         openedSession = session
+    }
+
+    LaunchedEffect(viewportHeight, openedSession) {
+        if (viewportHeight == 0 || openedSession == null) {
+            return@LaunchedEffect
+        }
+        if (shouldFollow(stickDp[0], ChatScrollEvent.REPLY_STREAM)) {
+            scrollState.scrollTo(scrollState.maxValue)
+            stickDp[0] = 0
+            showJumpToLatest = false
+        }
     }
 
     Column(
@@ -181,7 +224,12 @@ fun Phase0Screen(
                 style = MaterialTheme.typography.labelMedium,
             )
         }
-        Box(Modifier.weight(1f).fillMaxWidth()) {
+        Box(
+            Modifier
+                .weight(1f)
+                .fillMaxWidth()
+                .onSizeChanged { viewportHeight = it.height },
+        ) {
             Column(
                 Modifier
                     .fillMaxSize()
@@ -195,14 +243,12 @@ fun Phase0Screen(
                 }
             }
             if (showJumpToLatest) {
-                TextButton(
-                    onClick = {
+                Box(Modifier.align(Alignment.BottomCenter).padding(bottom = 12.dp)) {
+                    Slab("Jump to latest") {
                         showJumpToLatest = false
+                        stickDp[0] = 0
                         scope.launch { scrollState.scrollToBottomWhenReady() }
-                    },
-                    modifier = Modifier.align(Alignment.BottomCenter).padding(bottom = 8.dp),
-                ) {
-                    Text("Jump to latest", style = MaterialTheme.typography.labelMedium)
+                    }
                 }
             }
         }

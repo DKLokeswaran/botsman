@@ -6,7 +6,8 @@ import { fetch as nativeFetch } from "@tauri-apps/plugin-http";
 import { isPermissionGranted, onAction, requestPermission, sendNotification } from "@tauri-apps/plugin-notification";
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
-  type ChatScrollEvent,
+  NEAR_BOTTOM_PX,
+  classifyScrollEvent,
   distanceFromBottom as scrollDistanceFromBottom,
   shouldFollow,
   shouldShowJumpToLatest,
@@ -235,13 +236,17 @@ export function App() {
   const [showJumpToLatest, setShowJumpToLatest] = useState(false);
   const linesScrollMeta = useRef({ count: 0, lastText: "", lastRole: "" });
   const openedSessionRef = useRef<string | null>(null);
+  const trackedSessionRef = useRef<string | null>(null);
+  const distanceRef = useRef(0);
+  const viewportHeightRef = useRef(0);
 
-  const scrollToBottom = useCallback((behavior: ScrollBehavior = "smooth") => {
+  const scrollToBottom = useCallback((behavior: ScrollBehavior = "auto") => {
     const el = mainRef.current;
     if (!el) {
       return;
     }
     el.scrollTo({ top: el.scrollHeight, behavior });
+    distanceRef.current = 0;
     setShowJumpToLatest(false);
   }, []);
 
@@ -251,14 +256,36 @@ export function App() {
       return;
     }
     const dist = scrollDistanceFromBottom(el.scrollTop, el.scrollHeight, el.clientHeight);
-    if (!shouldShowJumpToLatest(dist)) {
-      setShowJumpToLatest(false);
-    }
+    distanceRef.current = dist;
+    setShowJumpToLatest(shouldShowJumpToLatest(dist));
   }, []);
 
   useEffect(() => {
     liveRef.current = liveId;
   }, [liveId]);
+
+  useEffect(() => {
+    const el = mainRef.current;
+    if (!el) {
+      return;
+    }
+    const observer = new ResizeObserver(() => {
+      const height = el.clientHeight;
+      const previous = viewportHeightRef.current;
+      viewportHeightRef.current = height;
+      if (previous === 0 || previous === height) {
+        return;
+      }
+      if (!openedSessionRef.current) {
+        return;
+      }
+      if (shouldFollow(distanceRef.current, "reply_stream")) {
+        scrollToBottom("auto");
+      }
+    });
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, [scrollToBottom]);
 
   useEffect(() => {
     if (!liveId) {
@@ -271,34 +298,40 @@ export function App() {
     openedSessionRef.current = liveId;
     const target = focus?.target;
     if (target === "message" || target === "approval" || target === "question") {
+      distanceRef.current = NEAR_BOTTOM_PX + 1;
+      requestAnimationFrame(() => refreshScrollMetrics());
       return;
     }
     requestAnimationFrame(() => scrollToBottom("auto"));
-  }, [liveId, focus?.target, scrollToBottom]);
+  }, [liveId, focus?.target, scrollToBottom, refreshScrollMetrics]);
 
   useEffect(() => {
-    const el = mainRef.current;
-    const dist = el ? scrollDistanceFromBottom(el.scrollTop, el.scrollHeight, el.clientHeight) : 0;
-    const prev = linesScrollMeta.current;
     const last = lines[lines.length - 1];
     const lastRole = last?.role ?? "";
     const lastText = last?.text ?? "";
-    let event: ChatScrollEvent | null = null;
-    if (lines.length > prev.count && lastRole === "user") {
-      event = "user_send";
-    } else if (lastRole === "assistant" && (lines.length > prev.count || lastText !== prev.lastText)) {
-      event = "reply_stream";
+    if (trackedSessionRef.current !== liveId) {
+      trackedSessionRef.current = liveId;
+      linesScrollMeta.current = { count: lines.length, lastText, lastRole };
+      return;
     }
+    const previous = linesScrollMeta.current;
+    const deepLinked = focus?.target === "message" || focus?.target === "approval" || focus?.target === "question";
+    if (deepLinked && lines.length > previous.count + 1) {
+      linesScrollMeta.current = { count: lines.length, lastText, lastRole };
+      requestAnimationFrame(() => refreshScrollMetrics());
+      return;
+    }
+    const event = classifyScrollEvent(previous.count, previous.lastText, lines.length, lastRole, lastText);
     linesScrollMeta.current = { count: lines.length, lastText, lastRole };
     if (!event) {
       return;
     }
-    if (shouldFollow(dist, event)) {
-      requestAnimationFrame(() => scrollToBottom(event === "user_send" ? "smooth" : "auto"));
+    if (shouldFollow(distanceRef.current, event)) {
+      requestAnimationFrame(() => scrollToBottom("auto"));
     } else if (event === "reply_stream") {
-      setShowJumpToLatest(shouldShowJumpToLatest(dist));
+      setShowJumpToLatest(shouldShowJumpToLatest(distanceRef.current));
     }
-  }, [lines, scrollToBottom]);
+  }, [lines, liveId, focus?.target, scrollToBottom, refreshScrollMetrics]);
 
   useEffect(() => {
     if (!approval) {
@@ -306,6 +339,13 @@ export function App() {
     }
     approvalRef.current?.scrollIntoView({ block: "end" });
   }, [approval, focus]);
+
+  useEffect(() => {
+    if (!question) {
+      return;
+    }
+    questionRef.current?.scrollIntoView({ block: "end" });
+  }, [question]);
 
   useEffect(() => {
     if (focus?.target === "question") {

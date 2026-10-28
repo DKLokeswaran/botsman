@@ -7,7 +7,6 @@ import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.test.performClick
-import androidx.compose.ui.test.performScrollTo
 import androidx.test.core.app.ApplicationProvider
 import androidx.test.ext.junit.rules.ActivityScenarioRule
 import com.github.takahirom.roborazzi.ExperimentalRoborazziApi
@@ -81,13 +80,7 @@ class Phase0Screenshots {
         compose.waitForIdle()
         compose.mainClock.advanceTimeBy(1_000)
         compose.waitForIdle()
-        val latest = compose.onNodeWithText("Latest user message after send")
-        try {
-            latest.assertIsDisplayed()
-        } catch (_: AssertionError) {
-            latest.performScrollTo()
-            latest.assertIsDisplayed()
-        }
+        compose.onNodeWithText("Latest user message after send").assertIsDisplayed()
         capture("bug-no-autoscroll-on-send")
     }
 
