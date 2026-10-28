@@ -288,6 +288,7 @@ fn join_url(current: &str, location: &str) -> Result<String, String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::fs::File;
     use std::io::Write;
     use std::sync::{Arc, Mutex};
 

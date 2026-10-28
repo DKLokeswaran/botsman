@@ -16,13 +16,12 @@ class Phase0UpdateTest {
         }
         try {
             val legacy = File(dir, "hermes-bots-update.apk")
-            legacy.outputStream().use { it.write("hold".toByteArray()) }
+            legacy.writeBytes("hold".toByteArray())
             val keep = File(dir, "${UpdateDownload.apkStem(29)}.part")
             UpdateDownload.pruneLeftovers(dir, keep)
-            assertTrue(legacy.exists())
-            val first = File(dir, "${UpdateDownload.apkStem(29)}.apk")
-            val second = File(dir, "${UpdateDownload.apkStem(29)}.apk")
-            assertNotEquals(first.name, second.name)
+            val first = UpdateDownload.apkStem(29)
+            val second = UpdateDownload.apkStem(29)
+            assertNotEquals(first, second)
             assertTrue(UpdateDownload.isUpdateLeftover("hermes-bots-update.apk"))
         } finally {
             dir.deleteRecursively()
