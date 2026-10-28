@@ -4,7 +4,14 @@ import { getCurrentWindow } from "@tauri-apps/api/window";
 import { disable, enable, isEnabled } from "@tauri-apps/plugin-autostart";
 import { fetch as nativeFetch } from "@tauri-apps/plugin-http";
 import { isPermissionGranted, onAction, requestPermission, sendNotification } from "@tauri-apps/plugin-notification";
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
+import {
+  NEAR_BOTTOM_PX,
+  classifyScrollEvent,
+  distanceFromBottom as scrollDistanceFromBottom,
+  shouldFollow,
+  shouldShowJumpToLatest,
+} from "./chat-scroll";
 import {
   HermesClient,
   HermesError,
@@ -225,10 +232,106 @@ export function App() {
   const revealRef = useRef<(route: PushRoute | null) => void>(() => undefined);
   const resolvedIds = useRef<Set<string>>(new Set());
   const answeredHere = useRef<Set<string>>(new Set());
+  const mainRef = useRef<HTMLElement>(null);
+  const [showJumpToLatest, setShowJumpToLatest] = useState(false);
+  const linesScrollMeta = useRef({ count: 0, lastText: "", lastRole: "" });
+  const openedSessionRef = useRef<string | null>(null);
+  const trackedSessionRef = useRef<string | null>(null);
+  const distanceRef = useRef(0);
+  const viewportHeightRef = useRef(0);
+
+  const scrollToBottom = useCallback((behavior: ScrollBehavior = "auto") => {
+    const el = mainRef.current;
+    if (!el) {
+      return;
+    }
+    el.scrollTo({ top: el.scrollHeight, behavior });
+    distanceRef.current = 0;
+    setShowJumpToLatest(false);
+  }, []);
+
+  const refreshScrollMetrics = useCallback(() => {
+    const el = mainRef.current;
+    if (!el) {
+      return;
+    }
+    const dist = scrollDistanceFromBottom(el.scrollTop, el.scrollHeight, el.clientHeight);
+    distanceRef.current = dist;
+    setShowJumpToLatest(shouldShowJumpToLatest(dist));
+  }, []);
 
   useEffect(() => {
     liveRef.current = liveId;
   }, [liveId]);
+
+  useEffect(() => {
+    const el = mainRef.current;
+    if (!el) {
+      return;
+    }
+    const observer = new ResizeObserver(() => {
+      const height = el.clientHeight;
+      const previous = viewportHeightRef.current;
+      viewportHeightRef.current = height;
+      if (previous === 0 || previous === height) {
+        return;
+      }
+      if (!openedSessionRef.current) {
+        return;
+      }
+      if (shouldFollow(distanceRef.current, "reply_stream")) {
+        scrollToBottom("auto");
+      }
+    });
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, [scrollToBottom]);
+
+  useEffect(() => {
+    if (!liveId) {
+      openedSessionRef.current = null;
+      return;
+    }
+    if (openedSessionRef.current === liveId) {
+      return;
+    }
+    openedSessionRef.current = liveId;
+    const target = focus?.target;
+    if (target === "message" || target === "approval" || target === "question") {
+      distanceRef.current = NEAR_BOTTOM_PX + 1;
+      requestAnimationFrame(() => refreshScrollMetrics());
+      return;
+    }
+    requestAnimationFrame(() => scrollToBottom("auto"));
+  }, [liveId, focus?.target, scrollToBottom, refreshScrollMetrics]);
+
+  useEffect(() => {
+    const last = lines[lines.length - 1];
+    const lastRole = last?.role ?? "";
+    const lastText = last?.text ?? "";
+    if (trackedSessionRef.current !== liveId) {
+      trackedSessionRef.current = liveId;
+      linesScrollMeta.current = { count: lines.length, lastText, lastRole };
+      return;
+    }
+    const previous = linesScrollMeta.current;
+    const deepLinked = focus?.target === "message" || focus?.target === "approval" || focus?.target === "question";
+    if (deepLinked && lines.length > previous.count + 1) {
+      linesScrollMeta.current = { count: lines.length, lastText, lastRole };
+      requestAnimationFrame(() => refreshScrollMetrics());
+      return;
+    }
+    const event = classifyScrollEvent(previous.count, previous.lastText, lines.length, lastRole, lastText);
+    linesScrollMeta.current = { count: lines.length, lastText, lastRole };
+    if (!event) {
+      return;
+    }
+    if (shouldFollow(distanceRef.current, event)) {
+      requestAnimationFrame(() => scrollToBottom("auto"));
+    } else if (event === "reply_stream") {
+      setShowJumpToLatest(shouldShowJumpToLatest(distanceRef.current));
+    }
+  }, [lines, liveId, focus?.target, scrollToBottom, refreshScrollMetrics]);
 
   useEffect(() => {
     if (!approval) {
@@ -236,6 +339,13 @@ export function App() {
     }
     approvalRef.current?.scrollIntoView({ block: "end" });
   }, [approval, focus]);
+
+  useEffect(() => {
+    if (!question) {
+      return;
+    }
+    questionRef.current?.scrollIntoView({ block: "end" });
+  }, [question]);
 
   useEffect(() => {
     if (focus?.target === "question") {
@@ -921,7 +1031,17 @@ export function App() {
           Reconnecting
         </div>
       ) : null}
-      <main className="flex-1 space-y-3 overflow-y-auto px-4 py-3">
+      <div className="relative min-h-0 flex-1">
+        {showJumpToLatest ? (
+          <Button
+            type="button"
+            className="absolute bottom-3 left-1/2 z-10 -translate-x-1/2 shadow-md"
+            onClick={() => scrollToBottom()}
+          >
+            Jump to latest
+          </Button>
+        ) : null}
+        <main ref={mainRef} className="h-full space-y-3 overflow-y-auto px-4 py-3" onScroll={refreshScrollMetrics}>
         {connected ? (
           <>
             <p className="font-[family-name:var(--font-label)] text-[12px] tracking-[0.08em] text-primary uppercase">Profiles</p>
@@ -1052,7 +1172,8 @@ export function App() {
             </p>
           </form>
         )}
-      </main>
+        </main>
+      </div>
       {connected ? (
         <form
           className="space-y-2 border-t border-[var(--line)] px-4 py-3"

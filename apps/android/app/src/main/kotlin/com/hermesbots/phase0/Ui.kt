@@ -38,10 +38,15 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.snapshotFlow
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.layout.onSizeChanged
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.vector.ImageVector
@@ -61,6 +66,18 @@ import com.mikepenz.markdown.compose.elements.MarkdownListItems
 import com.mikepenz.markdown.compose.elements.listDepth
 import com.mikepenz.markdown.m3.Markdown
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.filter
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.launch
+
+private suspend fun androidx.compose.foundation.ScrollState.scrollToBottomWhenReady() {
+    if (maxValue > 0) {
+        scrollTo(maxValue)
+        return
+    }
+    snapshotFlow { maxValue }.filter { it > 0 }.first()
+    scrollTo(maxValue)
+}
 
 @Composable
 fun Phase0Screen(
@@ -86,6 +103,108 @@ fun Phase0Screen(
     onApplyUpdate: () -> Unit = {},
 ) {
     val scheme = MaterialTheme.colorScheme
+    val density = LocalDensity.current
+    val scrollState = rememberScrollState()
+    var showJumpToLatest by remember { mutableStateOf(false) }
+    val stickDp = remember { intArrayOf(0) }
+    var viewportHeight by remember { mutableIntStateOf(0) }
+    var openedSession by remember { mutableStateOf<String?>(null) }
+    val scope = rememberCoroutineScope()
+    val messages = state.messages
+    val focusTarget = state.focus?.target
+    val memory = remember {
+        object {
+            var session: String? = null
+            var count = 0
+            var text = ""
+        }
+    }
+
+    LaunchedEffect(scrollState, density) {
+        var lastValue = scrollState.value
+        snapshotFlow { scrollState.value to scrollState.maxValue }.collect { (value, max) ->
+            val dist = distanceDp((max - value).coerceAtLeast(0), density.density)
+            if (value != lastValue) {
+                lastValue = value
+                stickDp[0] = dist
+                showJumpToLatest = shouldShowJumpToLatest(dist)
+            } else if (!shouldShowJumpToLatest(dist)) {
+                stickDp[0] = dist
+                showJumpToLatest = false
+            }
+        }
+    }
+
+    LaunchedEffect(messages.size, messages.lastOrNull()?.text, messages.lastOrNull()?.role, state.liveSessionId, focusTarget) {
+        val last = messages.lastOrNull()
+        val lastRole = last?.role.orEmpty()
+        val lastText = last?.text.orEmpty()
+        if (memory.session != state.liveSessionId) {
+            memory.session = state.liveSessionId
+            memory.count = messages.size
+            memory.text = lastText
+            return@LaunchedEffect
+        }
+        val deepLinked = focusTarget == "message" || focusTarget == "approval" || focusTarget == "question"
+        if (deepLinked && messages.size > memory.count + 1) {
+            memory.count = messages.size
+            memory.text = lastText
+            stickDp[0] = distanceDp((scrollState.maxValue - scrollState.value).coerceAtLeast(0), density.density)
+            showJumpToLatest = shouldShowJumpToLatest(stickDp[0])
+            return@LaunchedEffect
+        }
+        val event = classifyScrollEvent(memory.count, memory.text, messages.size, lastRole, lastText)
+        memory.count = messages.size
+        memory.text = lastText
+        if (event == null) {
+            return@LaunchedEffect
+        }
+        if (shouldFollow(stickDp[0], event)) {
+            scrollState.scrollToBottomWhenReady()
+            stickDp[0] = 0
+            showJumpToLatest = false
+        } else if (event == ChatScrollEvent.REPLY_STREAM) {
+            showJumpToLatest = shouldShowJumpToLatest(stickDp[0])
+        }
+    }
+
+    LaunchedEffect(state.liveSessionId, messages.size, scrollState.maxValue, focusTarget, viewportHeight) {
+        val session = state.liveSessionId ?: return@LaunchedEffect
+        if (openedSession == session) {
+            return@LaunchedEffect
+        }
+        val deepLinked = focusTarget == "message" || focusTarget == "approval" || focusTarget == "question"
+        if (deepLinked) {
+            if (viewportHeight == 0) {
+                stickDp[0] = NEAR_BOTTOM_DP + 1
+                return@LaunchedEffect
+            }
+            val dist = distanceDp((scrollState.maxValue - scrollState.value).coerceAtLeast(0), density.density)
+            stickDp[0] = dist
+            showJumpToLatest = shouldShowJumpToLatest(dist)
+            openedSession = session
+            return@LaunchedEffect
+        }
+        if (scrollState.maxValue <= 0) {
+            return@LaunchedEffect
+        }
+        scrollState.scrollTo(scrollState.maxValue)
+        stickDp[0] = 0
+        showJumpToLatest = false
+        openedSession = session
+    }
+
+    LaunchedEffect(viewportHeight, openedSession) {
+        if (viewportHeight == 0 || openedSession == null) {
+            return@LaunchedEffect
+        }
+        if (shouldFollow(stickDp[0], ChatScrollEvent.REPLY_STREAM)) {
+            scrollState.scrollTo(scrollState.maxValue)
+            stickDp[0] = 0
+            showJumpToLatest = false
+        }
+    }
+
     Column(
         modifier = Modifier
             .fillMaxSize()
@@ -104,11 +223,32 @@ fun Phase0Screen(
                 style = MaterialTheme.typography.labelMedium,
             )
         }
-        Column(Modifier.weight(1f).verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            if (!state.connected) {
-                LoginBlock(state, onServer, onUpdateBase, onUsername, onPassword, onLogin, onRegisterPush)
-            } else {
-                ChatBlock(state, onOpen, onNew, onAllow, onDeny, onToggleCommand)
+        Box(
+            Modifier
+                .weight(1f)
+                .fillMaxWidth()
+                .onSizeChanged { viewportHeight = it.height },
+        ) {
+            Column(
+                Modifier
+                    .fillMaxSize()
+                    .verticalScroll(scrollState),
+                verticalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                if (!state.connected) {
+                    LoginBlock(state, onServer, onUpdateBase, onUsername, onPassword, onLogin, onRegisterPush)
+                } else {
+                    ChatBlock(state, onOpen, onNew, onAllow, onDeny, onToggleCommand)
+                }
+            }
+            if (showJumpToLatest) {
+                Box(Modifier.align(Alignment.BottomCenter).padding(bottom = 12.dp)) {
+                    Slab("Jump to latest") {
+                        showJumpToLatest = false
+                        stickDp[0] = 0
+                        scope.launch { scrollState.scrollToBottomWhenReady() }
+                    }
+                }
             }
         }
         if (state.connected) {
