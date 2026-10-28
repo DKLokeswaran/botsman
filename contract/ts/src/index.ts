@@ -89,6 +89,15 @@ export interface TranscriptMessage {
   rowId: string;
 }
 
+/** session.resume / session.activate. sessionId is the runtime id. */
+export interface AttachedSession {
+  sessionId: string;
+  storedSessionId: string;
+  sessionKey: string;
+  messages: TranscriptMessage[];
+  openRequests: ServerRequest[];
+}
+
 export {
   formatPush,
   openRequestIds,
@@ -106,6 +115,7 @@ export {
   reconnectDelayMs,
   RECONNECT_BACKOFF_CAP_MS,
   RESUME_RETRY_MS,
+  SESSION_ACTIVATE_REJECTED_CODE,
   SESSION_UNAVAILABLE_CODE,
   SESSION_UNAVAILABLE_NOTICE,
 } from "./attach.ts";
@@ -479,32 +489,19 @@ export class HermesClient {
     return String(result.session_id ?? "");
   }
 
-  async resumeSession(
-    sessionId: string,
-    profile?: string,
-  ): Promise<{ sessionId: string; messages: TranscriptMessage[]; openRequests: ServerRequest[] }> {
-    const result = asRecord(
-      await this.rpc("session.resume", {
-        session_id: sessionId,
-        omit_messages: false,
-        inline_images: false,
-        ...(profile ? { profile } : {}),
-      }),
-    );
-    const openRequests = this.deliverOpenRequests(result.open_requests);
-    return {
-      sessionId: String(result.session_id || sessionId),
-      messages: messagesFrom(result.messages),
-      openRequests,
-    };
+  /** Stored id or session_key. A runtime id is rejected by Hermes with 4007. */
+  async resumeSession(sessionId: string, profile?: string): Promise<AttachedSession> {
+    return this.attachSession("session.resume", sessionId, profile);
   }
 
-  async activateSession(
-    sessionId: string,
-    profile?: string,
-  ): Promise<{ sessionId: string; messages: TranscriptMessage[]; openRequests: ServerRequest[] }> {
+  /** Runtime id of a live session. An unknown or dead runtime id, or a stored id, is 4001. */
+  async activateSession(sessionId: string, profile?: string): Promise<AttachedSession> {
+    return this.attachSession("session.activate", sessionId, profile);
+  }
+
+  private async attachSession(method: string, sessionId: string, profile?: string): Promise<AttachedSession> {
     const result = asRecord(
-      await this.rpc("session.activate", {
+      await this.rpc(method, {
         session_id: sessionId,
         omit_messages: false,
         inline_images: false,
@@ -514,6 +511,8 @@ export class HermesClient {
     const openRequests = this.deliverOpenRequests(result.open_requests);
     return {
       sessionId: String(result.session_id || sessionId),
+      storedSessionId: String(result.stored_session_id || ""),
+      sessionKey: String(result.session_key || ""),
       messages: messagesFrom(result.messages),
       openRequests,
     };

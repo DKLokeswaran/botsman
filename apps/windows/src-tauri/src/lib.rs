@@ -7,6 +7,7 @@ use std::sync::Mutex;
 use tauri::menu::{Menu, MenuItem};
 use tauri::tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent};
 use tauri::{AppHandle, Emitter, Manager, WindowEvent};
+use tauri_plugin_notification::NotificationExt;
 
 static QUITTING: AtomicBool = AtomicBool::new(false);
 static UPDATE_DOWNLOAD: Mutex<bool> = Mutex::new(false);
@@ -36,6 +37,21 @@ fn show_main(app: &AppHandle) {
 fn reveal(app: &AppHandle) {
     let _ = app.emit("tray-open", ());
     show_main(app);
+}
+
+fn setup_notification_clicks(app: &tauri::App) {
+    let handle = app.handle().clone();
+    // Desktop on_action does not fail. The plugin error type is not a tauri::Error.
+    let _ = app.notification().on_action(move |action| {
+        let route = action.notification().and_then(|note| {
+            note.extra()
+                .get("route")
+                .and_then(|value| value.as_str())
+                .map(str::to_owned)
+        });
+        let _ = handle.emit("notification-activate", &route);
+        show_main(&handle);
+    });
 }
 
 fn setup_tray(app: &tauri::App) -> tauri::Result<()> {
@@ -207,7 +223,7 @@ pub fn run() {
 
     tauri::Builder::default()
         .plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| {
-            show_main(app);
+            reveal(app);
         }))
         .plugin(tauri_plugin_http::init())
         .plugin(tauri_plugin_websocket::init())
@@ -218,6 +234,7 @@ pub fn run() {
         ))
         .setup(|app| {
             setup_tray(app)?;
+            setup_notification_clicks(app);
             Ok(())
         })
         .on_window_event(|window, event| {

@@ -13,6 +13,7 @@ export type FakeState = {
   profiles: Array<{ name?: string; display_name?: string }>;
   sessions: Array<{ id?: string; live_id?: string; title?: string }>;
   extras: Array<{ id: string; title: string; marker: string }>;
+  held?: Record<string, number>;
 };
 
 export type UiState = {
@@ -61,6 +62,29 @@ export async function scriptReply(text: string): Promise<void> {
 /** Extra session the stock list does not have. Resume and history return its marker. */
 export async function scriptSession(id: string, title: string, marker: string): Promise<void> {
   await postHook("/__test__/session", { id, title, marker });
+}
+
+/** Pause the next JSON-RPC calls of one method until releaseRpc. */
+export async function holdRpc(method: string, count = 1): Promise<void> {
+  await postHook("/__test__/hold", { method, count });
+}
+
+export async function releaseRpc(method: string): Promise<void> {
+  await postHook("/__test__/release", { method });
+}
+
+/** Broadcast sessions.changed now, without the fake's 2s debounce. */
+export async function flushSessionsChanged(): Promise<void> {
+  await postHook("/__test__/sessions_changed", {});
+}
+
+export async function dropSockets(): Promise<void> {
+  await postHook("/__test__/drop_sockets", {});
+}
+
+export async function heldCount(method: string): Promise<number> {
+  const state = await readFake();
+  return state.held?.[method] ?? 0;
 }
 
 export async function openApp(page: Page): Promise<void> {
@@ -203,6 +227,13 @@ export async function newDevice(browser: Browser): Promise<{ context: BrowserCon
 
 declare global {
   interface Window {
-    __hermesE2e?: { marker: string; tapNotification: (route: string) => void };
+    __hermesE2e?: {
+      marker: string;
+      tapNotification: (route: string) => void;
+      setHidden: (hidden: boolean) => void;
+      foregrounds: () => number;
+      lastNotificationRoute: () => string;
+      clickNotification: () => void;
+    };
   }
 }

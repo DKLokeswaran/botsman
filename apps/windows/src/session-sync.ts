@@ -295,6 +295,162 @@ export function expireResolved(book: ApprovalBook, sessionId: string): ApprovalR
   return { book: without(book, sessionId), effects: [{ type: "disarm", sessionId }] };
 }
 
+export type OpenChat = { runtimeId: string; resumeId: string };
+
+export type AttachCall = { method: "resume" | "activate"; sessionId: string };
+
+export type RouteCall = { method: "focus" } | AttachCall;
+
+/** Runtime id for events, plus the stored id that session.resume accepts. */
+export function chatAfterAttach(
+  requestedId: string,
+  result: { sessionId: string; storedSessionId?: string; sessionKey?: string },
+): OpenChat {
+  const runtimeId = result.sessionId || requestedId;
+  const stored = (result.storedSessionId || result.sessionKey || "").trim();
+  let resumeId = stored;
+  if (!resumeId && requestedId && requestedId !== runtimeId) resumeId = requestedId;
+  if (!resumeId) resumeId = requestedId || runtimeId;
+  return { runtimeId, resumeId };
+}
+
+/** Re-attach an open chat. A distinct runtime id uses session.activate, never session.resume. */
+export function reattachCall(chat: OpenChat): AttachCall {
+  if (chat.runtimeId && chat.resumeId && chat.runtimeId !== chat.resumeId) {
+    return { method: "activate", sessionId: chat.runtimeId };
+  }
+  return { method: "resume", sessionId: chat.resumeId || chat.runtimeId };
+}
+
+/**
+ * 4007 or 4001 for the runtime id keeps the chat while a stored resume id remains.
+ * 4007 from session.resume of that stored id drops the chat.
+ */
+export function shouldDropOpenChat(
+  chat: OpenChat | null,
+  failedId: string,
+  failedMethod: "resume" | "activate",
+): boolean {
+  if (!chat) return false;
+  if (failedId === chat.runtimeId && chat.resumeId && chat.resumeId !== chat.runtimeId) return false;
+  if (failedMethod === "resume" && failedId === chat.resumeId) return true;
+  if (failedMethod === "activate" && failedId === chat.runtimeId && (!chat.resumeId || chat.resumeId === chat.runtimeId)) {
+    return true;
+  }
+  return failedId === chat.resumeId;
+}
+
+/** Notification and push ids are often runtime ids. Those attach with session.activate. */
+export function openCallForRoute(
+  routeSessionId: string,
+  knownStoredIds: readonly string[],
+  current: OpenChat | null,
+): RouteCall {
+  if (!routeSessionId) return { method: "focus" };
+  if (current && (routeSessionId === current.runtimeId || routeSessionId === current.resumeId)) {
+    return { method: "focus" };
+  }
+  if (knownStoredIds.includes(routeSessionId)) return { method: "resume", sessionId: routeSessionId };
+  return { method: "activate", sessionId: routeSessionId };
+}
+
+/** A sessions list refresh does not retarget or clear the open chat. */
+export function openChatAfterListUpdate(chat: OpenChat, sessionIds: readonly string[]): OpenChat {
+  void sessionIds;
+  return chat;
+}
+
+/** The session list and transcript stay mounted while the socket is down for reconnect. */
+export function showOpenChat(connected: boolean, reconnecting: boolean): boolean {
+  return connected || reconnecting;
+}
+
+/**
+ * Generation for the open chat. A refresh captures current at start and aborts
+ * when it no longer matches. begin() runs before a user-driven attach.
+ * commit() runs when that attach wins, so a refresh that sampled begin()'s
+ * value still aborts.
+ */
+export class OpenEpoch {
+  current = 0;
+
+  begin(): number {
+    this.current += 1;
+    return this.current;
+  }
+
+  commit(expected: number): boolean {
+    if (this.current !== expected) return false;
+    this.current = expected + 1;
+    return true;
+  }
+
+  same(expected: number): boolean {
+    return this.current === expected;
+  }
+
+  invalidate(): void {
+    this.current += 1;
+  }
+}
+
+export type AttachedIds = {
+  sessionId: string;
+  storedSessionId?: string;
+  sessionKey?: string;
+};
+
+export type ReattachOutcome =
+  | { status: "aborted" }
+  | { status: "attached"; requestedId: string; opened: AttachedIds }
+  | { status: "dropped"; failedId: string; method: "resume" | "activate" }
+  | { status: "kept" };
+
+/**
+ * Re-attach the chat a refresh started with. After every await, abort when
+ * stillOpen is false so a newer chat is not replaced. Activate 4001 and 4007
+ * both fall back to session.resume of a distinct stored id.
+ */
+export async function reattachOpenChat(input: {
+  chat: OpenChat;
+  stillOpen: () => boolean;
+  activate: (sessionId: string) => Promise<AttachedIds>;
+  resume: (sessionId: string) => Promise<AttachedIds>;
+  isAttachFailure: (error: unknown) => boolean;
+}): Promise<ReattachOutcome> {
+  if (!input.stillOpen()) return { status: "aborted" };
+  const call = reattachCall(input.chat);
+  try {
+    const opened =
+      call.method === "activate"
+        ? await input.activate(call.sessionId)
+        : await input.resume(call.sessionId);
+    if (!input.stillOpen()) return { status: "aborted" };
+    return { status: "attached", requestedId: call.sessionId, opened };
+  } catch (error) {
+    if (!input.isAttachFailure(error)) {
+      if (!input.stillOpen()) return { status: "aborted" };
+      return { status: "kept" };
+    }
+    const stored = input.chat.resumeId;
+    if (call.method === "activate" && stored && stored !== input.chat.runtimeId) {
+      try {
+        const opened = await input.resume(stored);
+        if (!input.stillOpen()) return { status: "aborted" };
+        return { status: "attached", requestedId: stored, opened };
+      } catch (fallback) {
+        if (!input.stillOpen()) return { status: "aborted" };
+        if (input.isAttachFailure(fallback)) {
+          return { status: "dropped", failedId: stored, method: "resume" };
+        }
+        return { status: "kept" };
+      }
+    }
+    if (!input.stillOpen()) return { status: "aborted" };
+    return { status: "dropped", failedId: call.sessionId, method: call.method };
+  }
+}
+
 export function syncOpen(book: ApprovalBook, sessionId: string, openIds: ReadonlySet<string>): ApprovalResult {
   const card = book[sessionId];
   if (!card || card.resolvedLabel) return unchanged(book);

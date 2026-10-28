@@ -4,7 +4,7 @@ import { getCurrentWindow } from "@tauri-apps/api/window";
 import { disable, enable, isEnabled } from "@tauri-apps/plugin-autostart";
 import { fetch as nativeFetch } from "@tauri-apps/plugin-http";
 import { isPermissionGranted, onAction, requestPermission, sendNotification } from "@tauri-apps/plugin-notification";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
 import {
   NEAR_BOTTOM_PX,
   classifyScrollEvent,
@@ -40,6 +40,7 @@ import { Button } from "./components/ui/button";
 import { Input } from "./components/ui/input";
 import { Textarea } from "./components/ui/textarea";
 import { chatLineKey } from "./chat-line-key";
+import { routeFromNotificationAction } from "./notification-route";
 import { credentialsForLogin, loginFailureStatus, passwordInputProps, usernameInputProps } from "./login-form";
 import { Reply, UserLine } from "./markdown";
 import { tauriHttp, tauriSocket } from "./gateway";
@@ -47,17 +48,24 @@ import {
   RESOLVED_CARD_MS,
   SESSION_UNAVAILABLE_NOTICE as STALE_SESSION_NOTICE,
   afterStaleSessionDropped,
+  chatAfterAttach,
   choiceLabel,
   expireResolved,
   mergeHistory,
   noteLocalChoice,
   onApprovalCancelled,
+  OpenEpoch,
   onNewerMessage,
   onRequestCancel,
   onToolComplete,
+  openCallForRoute,
+  openChatAfterListUpdate,
+  reattachOpenChat,
   rememberOpen,
+  showOpenChat,
   restoreOpen,
   sameTranscript,
+  shouldDropOpenChat,
   syncOpen,
   toolResultText,
   transcriptGrew,
@@ -66,6 +74,7 @@ import {
   type ApprovalCard,
   type ApprovalResult,
   type HistoryEntry,
+  type OpenChat,
 } from "./session-sync";
 
 const DEFAULT_SERVER = "http://100.113.35.96:9119";
@@ -148,6 +157,15 @@ type Focus = {
 };
 type Staged = { name: string; url: string | null };
 type Vault = { username: string; refreshToken: string; provider: string };
+
+function StableChat({ sessionId, children }: { sessionId: string; children: ReactNode }) {
+  const [mountId] = useState(() => Math.random().toString(36).slice(2));
+  return (
+    <div data-chat-session={sessionId} data-chat-mount={mountId}>
+      {children}
+    </div>
+  );
+}
 
 function blankLine(role: string, text: string, messageId = "", seq: number | null = null): Line {
   return { role, text, messageId, seq };
@@ -244,6 +262,9 @@ export function App() {
   const materialRef = useRef<LoginMaterial | null>(null);
   const seqs = useRef<Record<string, number>>({});
   const liveRef = useRef<string | null>(null);
+  const openChatRef = useRef<OpenChat | null>(null);
+  const openEpoch = useRef(new OpenEpoch());
+  const sessionsRef = useRef<SessionRow[]>([]);
   const closing = useRef(false);
   const fileRef = useRef<HTMLInputElement>(null);
   const approvalRef = useRef<HTMLElement>(null);
@@ -440,11 +461,14 @@ export function App() {
     let alive = true;
     let stopAction: (() => void) | undefined;
     let stopTray: (() => void) | undefined;
-    void onAction((event) => {
-      const raw = event.notification?.extra?.route;
-      const route = typeof raw === "string" ? parsePush(raw) : null;
+    let stopActivate: (() => void) | undefined;
+    const takeRoute = (route: PushRoute | null) => {
+      const chosen = route ?? lastRoute.current;
       lastRoute.current = null;
-      revealRef.current(route);
+      revealRef.current(chosen);
+    };
+    void onAction((event) => {
+      takeRoute(routeFromNotificationAction(event));
     }).then((listener) => {
       if (!alive) {
         void listener.unregister();
@@ -453,6 +477,16 @@ export function App() {
       stopAction = () => {
         void listener.unregister();
       };
+    });
+    void listen<string | null>("notification-activate", (event) => {
+      const raw = event.payload;
+      takeRoute(typeof raw === "string" ? parsePush(raw) : null);
+    }).then((unlisten) => {
+      if (!alive) {
+        unlisten();
+        return;
+      }
+      stopActivate = unlisten;
     });
     void listen("tray-open", () => {
       const route = lastRoute.current;
@@ -470,6 +504,7 @@ export function App() {
     return () => {
       alive = false;
       stopAction?.();
+      stopActivate?.();
       stopTray?.();
     };
   }, []);
@@ -635,10 +670,10 @@ export function App() {
     applyApproval(syncOpen(approvalsRef.current, sessionId, ids));
   }
 
-  async function mergeOpenHistory(client: HermesClient, live: string) {
+  async function mergeOpenHistory(client: HermesClient, live: string, epoch: number) {
     const history = await client.history(live);
     const rows: HistoryEntry[] = history.map((row) => ({ role: row.role, text: row.text, rowId: row.rowId }));
-    if (liveRef.current !== live) return;
+    if (!openEpoch.current.same(epoch) || liveRef.current !== live) return;
     const merged = mergeHistory(linesRef.current, rows);
     const grew = transcriptGrew(linesRef.current, merged);
     if (!sameTranscript(linesRef.current, merged)) {
@@ -664,15 +699,50 @@ export function App() {
     resumeRetryAfter.current[sessionId] = Date.now() + RESUME_RETRY_MS;
   }
 
+  function rememberSessions(next: SessionRow[]) {
+    sessionsRef.current = next;
+    setSessions(next);
+  }
+
+  function rememberOpenChat(
+    requestedId: string,
+    opened: { sessionId: string; storedSessionId?: string; sessionKey?: string },
+  ): OpenChat {
+    const previous = openChatRef.current;
+    let chat = chatAfterAttach(requestedId, opened);
+    if (previous && requestedId === previous.runtimeId) {
+      const named = (opened.storedSessionId || opened.sessionKey || "").trim();
+      if ((!named || named === chat.runtimeId) && previous.resumeId && previous.resumeId !== chat.runtimeId) {
+        chat = { runtimeId: chat.runtimeId, resumeId: previous.resumeId };
+      }
+    }
+    openChatRef.current = chat;
+    liveRef.current = chat.runtimeId;
+    setLiveId((current) => (current === chat.runtimeId ? current : chat.runtimeId));
+    return chat;
+  }
+
   function dropStaleSession(sessionId: string): void {
+    const chat = openChatRef.current;
+    const targetsOpen =
+      chat === null
+        ? liveRef.current === null || liveRef.current === sessionId
+        : sessionId === chat.runtimeId || sessionId === chat.resumeId || liveRef.current === sessionId;
     delete resumeRetryAfter.current[sessionId];
     delete seqs.current[sessionId];
     const nextBook = { ...approvalsRef.current };
     delete nextBook[sessionId];
-    applyApproval({ book: nextBook, effects: [] });
-    if (liveRef.current !== null && liveRef.current !== sessionId) {
-      return;
+    if (targetsOpen && chat) {
+      delete nextBook[chat.runtimeId];
+      delete nextBook[chat.resumeId];
+      delete seqs.current[chat.runtimeId];
+      delete seqs.current[chat.resumeId];
+      openChatRef.current = null;
     }
+    applyApproval({ book: nextBook, effects: [] });
+    if (!targetsOpen) return;
+    openEpoch.current.invalidate();
+    openChatRef.current = null;
     const cleared = afterStaleSessionDropped({
       liveId: liveRef.current,
       lines: linesRef.current,
@@ -688,23 +758,29 @@ export function App() {
     setStatus(cleared.status);
   }
 
+  function noteAttachFailure(failedId: string, method: "resume" | "activate"): void {
+    const chat = openChatRef.current;
+    if (chat && !shouldDropOpenChat(chat, failedId, method)) return;
+    markResumeBlocked(failedId);
+    dropStaleSession(failedId);
+  }
+
   async function resumeOrDrop(
     client: HermesClient,
     sessionId: string,
     profile?: string,
-  ): Promise<{ sessionId: string; messages: { role: string; text: string; rowId: string }[]; openRequests: ServerRequest[] } | null> {
+  ): Promise<{ sessionId: string; storedSessionId: string; sessionKey: string; openRequests: ServerRequest[] } | null> {
     if (resumeBlocked(sessionId)) {
-      dropStaleSession(sessionId);
+      noteAttachFailure(sessionId, "resume");
       return null;
     }
     try {
-      return await client.activateSession(sessionId, profile);
+      return await client.resumeSession(sessionId, profile);
     } catch (error) {
       if (!isSessionAttachFailure(error)) {
         throw error;
       }
-      markResumeBlocked(sessionId);
-      dropStaleSession(sessionId);
+      noteAttachFailure(sessionId, "resume");
       return null;
     }
   }
@@ -712,25 +788,43 @@ export function App() {
   async function refreshLive(attach: boolean) {
     const client = clientRef.current;
     if (!client) return;
+    const epoch = openEpoch.current.current;
     try {
       const nextSessions = await client.listSessions();
-      setSessions(nextSessions);
-      const live = liveRef.current;
-      if (!live) return;
+      if (!openEpoch.current.same(epoch)) return;
+      rememberSessions(nextSessions);
+      const chat = openChatRef.current;
+      if (!chat) return;
+      const kept = openChatAfterListUpdate(
+        chat,
+        nextSessions.map((session) => session.id),
+      );
+      openChatRef.current = kept;
+      liveRef.current = kept.runtimeId;
+      setLiveId((current) => (current === kept.runtimeId ? current : kept.runtimeId));
+      if (!openEpoch.current.same(epoch)) return;
       if (attach) {
-        try {
-          await client.activateSession(live);
-        } catch (error) {
-          if (isSessionAttachFailure(error)) {
-            markResumeBlocked(live);
-            dropStaleSession(live);
-            return;
-          }
-          // History can still move if this socket was already attached.
+        const outcome = await reattachOpenChat({
+          chat: kept,
+          stillOpen: () => openEpoch.current.same(epoch),
+          activate: (sessionId) => client.activateSession(sessionId),
+          resume: (sessionId) => client.resumeSession(sessionId),
+          isAttachFailure: isSessionAttachFailure,
+        });
+        if (!openEpoch.current.same(epoch) || outcome.status === "aborted") return;
+        if (outcome.status === "dropped") {
+          noteAttachFailure(outcome.failedId, outcome.method);
+          return;
+        }
+        if (outcome.status === "attached") {
+          if (!openEpoch.current.same(epoch)) return;
+          rememberOpenChat(outcome.requestedId, outcome.opened);
         }
       }
-      if (liveRef.current !== live) return;
-      await mergeOpenHistory(client, live);
+      if (!openEpoch.current.same(epoch)) return;
+      const live = openChatRef.current?.runtimeId;
+      if (!live) return;
+      await mergeOpenHistory(client, live, epoch);
     } catch {
       // A missed refresh is retried on the next sessions.changed or foreground.
     }
@@ -974,6 +1068,7 @@ export function App() {
     client.onServerRequest = applyRequest;
     client.onSocketClose = () => {
       if (!closing.current) {
+        openEpoch.current.invalidate();
         setReconnecting(true);
         setConnected(false);
         setStatus("Reconnecting");
@@ -1005,34 +1100,53 @@ export function App() {
     setStatus(ready.sessionAuthority ? "Connected (session authority)" : "Connected");
     const [nextProfiles, nextSessions] = await Promise.all([client.listProfiles(), client.listSessions()]);
     setProfiles(nextProfiles);
-    setSessions(nextSessions);
+    rememberSessions(nextSessions);
     const route = pendingRoute.current;
-    const live = liveRef.current;
-    if (route?.sessionId && route.sessionId !== live) {
-      await openSession(route.sessionId, route.profile);
-    } else if (live) {
-      const resumed = await resumeOrDrop(client, live);
-      if (!resumed) {
+    const chat = openChatRef.current;
+    if (route?.sessionId) {
+      const call = openCallForRoute(
+        route.sessionId,
+        nextSessions.map((session) => session.id),
+        chat,
+      );
+      if (call.method !== "focus") {
+        await openBy(call.method, call.sessionId, route.profile);
         return;
       }
-      await mergeOpenHistory(client, resumed.sessionId);
+    }
+    if (chat) {
+      const epoch = openEpoch.current.current;
+      const resumed = await resumeOrDrop(client, chat.resumeId);
+      if (!resumed || !openEpoch.current.same(epoch)) {
+        return;
+      }
+      const adopted = rememberOpenChat(chat.resumeId, resumed);
+      await mergeOpenHistory(client, adopted.runtimeId, epoch);
+      if (!openEpoch.current.same(epoch)) return;
       replaying.current = true;
       let replay;
       try {
-        replay = await client.replay(resumed.sessionId, seqs.current[resumed.sessionId] ?? 0);
+        replay = await client.replay(adopted.runtimeId, seqs.current[adopted.runtimeId] ?? 0);
       } finally {
         replaying.current = false;
       }
-      syncOpenApprovals(resumed.sessionId, replay.openRequests);
-      await mergeOpenHistory(client, resumed.sessionId);
+      if (!openEpoch.current.same(epoch)) return;
+      syncOpenApprovals(adopted.runtimeId, replay.openRequests);
+      await mergeOpenHistory(client, adopted.runtimeId, epoch);
+      if (!openEpoch.current.same(epoch)) return;
       if (replay.truncated) {
-        await openSession(resumed.sessionId, "", { liveAttach: true });
-      } else if (route && (!route.sessionId || route.sessionId === live)) {
+        await openSession(adopted.runtimeId, "", { liveAttach: true });
+      } else if (route && (!route.sessionId || route.sessionId === adopted.runtimeId || route.sessionId === adopted.resumeId)) {
         pendingRoute.current = null;
         placeFocus(route, replay.openRequests, linesRef.current);
       }
     } else if (route?.sessionId) {
-      await openSession(route.sessionId, route.profile);
+      const call = openCallForRoute(
+        route.sessionId,
+        nextSessions.map((session) => session.id),
+        null,
+      );
+      if (call.method !== "focus") await openBy(call.method, call.sessionId, route.profile);
     }
   }
 
@@ -1117,47 +1231,81 @@ export function App() {
     }
   }
 
-  async function openSession(sessionId: string, profile = "", options?: { liveAttach?: boolean }) {
+  async function showOpened(
+    requestedId: string,
+    opened: { sessionId: string; storedSessionId?: string; sessionKey?: string; openRequests: ServerRequest[] },
+    mine: number,
+  ) {
     const client = clientRef.current;
-    if (!client) {
-      return;
-    }
-    if (resumeBlocked(sessionId)) {
-      return;
-    }
-    rememberQuestion(null);
-    try {
-      const useActivate =
-        options?.liveAttach ?? !sessions.some((row) => row.id === sessionId);
-      const opened = useActivate
-        ? await client.activateSession(sessionId, profile || undefined)
-        : await client.resumeSession(sessionId, profile || undefined);
-      const history = await client.history(opened.sessionId);
-      const rows: HistoryEntry[] = history.map((row) => ({ role: row.role, text: row.text, rowId: row.rowId }));
-      const switching = liveRef.current !== opened.sessionId;
-      const next = switching
+    if (!client) return;
+    const history = await client.history(opened.sessionId);
+    if (!openEpoch.current.commit(mine)) return;
+    const rows: HistoryEntry[] = history.map((row) => ({ role: row.role, text: row.text, rowId: row.rowId }));
+    const previousRuntime = liveRef.current;
+    const chat = rememberOpenChat(requestedId, opened);
+    const next =
+      previousRuntime !== chat.runtimeId
         ? rows.map((row) => blankLine(row.role || "assistant", row.text, row.rowId))
         : mergeHistory(linesRef.current, rows);
-      liveRef.current = opened.sessionId;
-      linesRef.current = next;
-      setLiveId(opened.sessionId);
-      setLines(next);
-      publishApprovals(approvalsRef.current);
-      syncOpenApprovals(opened.sessionId, opened.openRequests);
-      setStatus("Connected");
-      const route = pendingRoute.current;
-      if (route && (!route.sessionId || route.sessionId === opened.sessionId)) {
-        pendingRoute.current = null;
-        placeFocus(route, opened.openRequests, next);
-      }
+    linesRef.current = next;
+    setLines(next);
+    publishApprovals(approvalsRef.current);
+    syncOpenApprovals(chat.runtimeId, opened.openRequests);
+    setStatus("Connected");
+    const route = pendingRoute.current;
+    if (route && (!route.sessionId || route.sessionId === chat.runtimeId || route.sessionId === chat.resumeId)) {
+      pendingRoute.current = null;
+      placeFocus(route, opened.openRequests, next);
+    }
+  }
+
+  async function openBy(method: "resume" | "activate", sessionId: string, profile = "") {
+    const client = clientRef.current;
+    if (!client || !sessionId) return;
+    if (resumeBlocked(sessionId)) return;
+    const mine = openEpoch.current.begin();
+    rememberQuestion(null);
+    try {
+      const opened =
+        method === "activate"
+          ? await client.activateSession(sessionId, profile || undefined)
+          : await client.resumeSession(sessionId, profile || undefined);
+      if (!openEpoch.current.same(mine)) return;
+      await showOpened(sessionId, opened, mine);
     } catch (error) {
-      if (isSessionAttachFailure(error)) {
-        markResumeBlocked(sessionId);
-        dropStaleSession(sessionId);
+      if (!openEpoch.current.same(mine)) return;
+      if (!isSessionAttachFailure(error)) {
+        setStatus(error instanceof Error ? error.message : "Could not open the session");
         return;
       }
-      setStatus(error instanceof Error ? error.message : "Could not open the session");
+      if (method === "activate") {
+        const chat = openChatRef.current;
+        const stored = chat && sessionId === chat.runtimeId && chat.resumeId !== chat.runtimeId ? chat.resumeId : "";
+        if (stored) {
+          try {
+            const opened = await client.resumeSession(stored, profile || undefined);
+            if (!openEpoch.current.same(mine)) return;
+            await showOpened(stored, opened, mine);
+            return;
+          } catch (fallback) {
+            if (!openEpoch.current.same(mine)) return;
+            if (!isSessionAttachFailure(fallback)) {
+              setStatus(fallback instanceof Error ? fallback.message : "Could not open the session");
+              return;
+            }
+            noteAttachFailure(stored, "resume");
+            return;
+          }
+        }
+      }
+      noteAttachFailure(sessionId, method);
     }
+  }
+
+  async function openSession(sessionId: string, profile = "", options?: { liveAttach?: boolean }) {
+    const stored = sessionsRef.current.some((row) => row.id === sessionId);
+    const useActivate = options?.liveAttach ?? !stored;
+    await openBy(useActivate ? "activate" : "resume", sessionId, profile);
   }
 
   async function newSession() {
@@ -1165,19 +1313,27 @@ export function App() {
     if (!client) {
       return;
     }
+    const mine = openEpoch.current.begin();
+    let owned = 0;
     try {
       const id = await client.createSession();
-      await client.activateSession(id);
-      liveRef.current = id;
-      setLiveId(id);
+      if (!openEpoch.current.same(mine)) return;
+      const opened = await client.activateSession(id);
+      if (!openEpoch.current.commit(mine)) return;
+      owned = openEpoch.current.current;
+      rememberOpenChat(id, opened);
       linesRef.current = [];
       setLines([]);
       publishApprovals(approvalsRef.current);
       rememberQuestion(null);
       setFocus(null);
-      setSessions(await client.listSessions());
+      const listed = await client.listSessions();
+      if (!openEpoch.current.same(owned)) return;
+      rememberSessions(listed);
       setStatus("New session");
     } catch (error) {
+      const still = owned === 0 ? openEpoch.current.same(mine) : openEpoch.current.same(owned);
+      if (!still) return;
       setStatus(error instanceof Error ? error.message : "Could not create a session");
     }
   }
@@ -1265,13 +1421,17 @@ export function App() {
     if (!clientRef.current) {
       return;
     }
-    if (route.sessionId && liveRef.current !== route.sessionId) {
-      void openSession(route.sessionId, route.profile);
+    const call = openCallForRoute(
+      route.sessionId,
+      sessionsRef.current.map((session) => session.id),
+      openChatRef.current,
+    );
+    if (call.method === "focus") {
+      pendingRoute.current = null;
+      placeFocus(route, liveOpenRequests(), linesRef.current);
       return;
     }
-    const transcript = linesRef.current;
-    pendingRoute.current = null;
-    placeFocus(route, liveOpenRequests(), transcript);
+    void openBy(call.method, call.sessionId, route.profile);
   };
 
   function lineLanded(index: number, line: Line): boolean {
@@ -1320,7 +1480,7 @@ export function App() {
           </Button>
         ) : null}
         <main ref={mainRef} className="h-full space-y-3 overflow-y-auto px-4 py-3" onScroll={refreshScrollMetrics}>
-        {connected ? (
+        {showOpenChat(connected, reconnecting) ? (
           <>
             <p className="font-[family-name:var(--font-label)] text-[12px] tracking-[0.08em] text-primary uppercase">Profiles</p>
             {profiles.map((profile) => (
@@ -1340,6 +1500,8 @@ export function App() {
                 </Button>
               ))}
             </div>
+            {liveId ? (
+            <StableChat key={liveId} sessionId={liveId}>
             {lines.map((line, index) => (
               <article
                 key={chatLineKey(liveId, index, line.role, line.messageId)}
@@ -1413,6 +1575,8 @@ export function App() {
                 ) : null}
               </section>
             ) : null}
+            </StableChat>
+            ) : null}
           </>
         ) : (
           <form
@@ -1452,7 +1616,7 @@ export function App() {
         )}
         </main>
       </div>
-      {connected ? (
+      {showOpenChat(connected, reconnecting) ? (
         <form
           className="space-y-2 border-t border-[var(--line)] px-4 py-3"
           onSubmit={(event) => {
@@ -1504,7 +1668,7 @@ export function App() {
       <div className="space-y-2 border-t border-[var(--line)] px-4 py-3">
         <p className="font-[family-name:var(--font-label)] text-[12px] tracking-[0.08em] text-primary uppercase">About</p>
         <p className="text-sm">{APP_VERSION}</p>
-        {connected ? (
+        {showOpenChat(connected, reconnecting) ? (
           <label className="block space-y-1">
             <span className="font-[family-name:var(--font-label)] text-[12px] tracking-[0.08em] uppercase">Update server</span>
             <Input

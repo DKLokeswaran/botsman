@@ -1,6 +1,9 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
+import { formatPush } from "@hermes-bots/gateway-client";
+import { chatLineKey } from "../src/chat-line-key.ts";
+import { routeFromNotificationAction } from "../src/notification-route.ts";
 import {
   LABEL_ANSWERED_ELSEWHERE,
   LABEL_APPROVED_ELSEWHERE,
@@ -10,6 +13,7 @@ import {
   RESOLVED_CARD_MS,
   SESSION_UNAVAILABLE_NOTICE,
   afterStaleSessionDropped,
+  chatAfterAttach,
   choiceLabel,
   expireResolved,
   mergeHistory,
@@ -18,7 +22,14 @@ import {
   onNewerMessage,
   onRequestCancel,
   onToolComplete,
+  OpenEpoch,
+  openCallForRoute,
+  openChatAfterListUpdate,
+  reattachCall,
+  reattachOpenChat,
   rememberOpen,
+  shouldDropOpenChat,
+  showOpenChat,
   syncOpen,
   visibleApproval,
   type ApprovalCard,
@@ -194,4 +205,152 @@ test("test_bug_stale_session_resume_shows_list", () => {
   assert.equal(dropped.question, null);
   assert.equal(dropped.focus, null);
   assert.equal(dropped.showCommand, false);
+});
+
+test("test_bug_open_chat_survives_session_update", () => {
+  const chat = chatAfterAttach("sess-1", {
+    sessionId: "a1b2c3d4",
+    storedSessionId: "sess-1",
+    sessionKey: "sess-1",
+  });
+  assert.deepEqual(chat, { runtimeId: "a1b2c3d4", resumeId: "sess-1" });
+  assert.deepEqual(reattachCall(chat), { method: "activate", sessionId: "a1b2c3d4" });
+  assert.equal(reattachCall(chat).method === "resume" && reattachCall(chat).sessionId === "a1b2c3d4", false);
+  assert.equal(shouldDropOpenChat(chat, "a1b2c3d4", "resume"), false);
+  assert.equal(shouldDropOpenChat(chat, "a1b2c3d4", "activate"), false);
+  assert.equal(shouldDropOpenChat(chat, "sess-1", "resume"), true);
+  const kept = openChatAfterListUpdate(chat, ["sess-1", "sess-2"]);
+  assert.equal(kept, chat);
+  assert.equal(chatLineKey(kept.runtimeId, 0, "user", "row-9"), "a1b2c3d4-0-user");
+  assert.equal(chatLineKey(kept.runtimeId, 0, "user", "row-9"), chatLineKey("a1b2c3d4", 0, "user", "other-row"));
+});
+
+test("test_bug_notification_click_opens_approval_chat", () => {
+  const encoded = formatPush({
+    kind: "approval",
+    title: "Approval waiting",
+    body: "Say hello",
+    sessionId: "a1b2c3d4",
+    profile: "",
+    requestId: "req-1",
+    messageId: "",
+    seq: null,
+    action: null,
+  });
+  const parsed = routeFromNotificationAction({
+    actionId: "tap",
+    inputValue: null,
+    notification: { title: "Approval waiting", extra: { route: encoded } },
+  });
+  assert.equal(parsed?.kind, "approval");
+  assert.equal(parsed?.sessionId, "a1b2c3d4");
+  const topLevel = routeFromNotificationAction({ extra: { route: encoded } });
+  assert.equal(topLevel?.sessionId, "a1b2c3d4");
+  const opened = openCallForRoute("a1b2c3d4", ["sess-1"], null);
+  assert.deepEqual(opened, { method: "activate", sessionId: "a1b2c3d4" });
+  assert.deepEqual(openCallForRoute("sess-1", ["sess-1"], null), { method: "resume", sessionId: "sess-1" });
+  assert.deepEqual(openCallForRoute("a1b2c3d4", ["sess-1"], { runtimeId: "a1b2c3d4", resumeId: "sess-1" }), {
+    method: "focus",
+  });
+});
+
+function deferred() {
+  let resolve: (value: { sessionId: string; storedSessionId: string; sessionKey: string }) => void = () => undefined;
+  let entered: () => void = () => undefined;
+  const enteredPromise = new Promise<void>((done) => {
+    entered = done;
+  });
+  const gate = new Promise<{ sessionId: string; storedSessionId: string; sessionKey: string }>((done) => {
+    resolve = done;
+  });
+  return { enteredPromise, markEntered: entered, resolve, gate };
+}
+
+test("test_bug_new_session_while_refresh_in_flight_stays_on_the_new_chat", async () => {
+  const epoch = new OpenEpoch();
+  const captured = epoch.current;
+  const hold = deferred();
+  const pending = reattachOpenChat({
+    chat: { runtimeId: "live-1", resumeId: "sess-1" },
+    stillOpen: () => epoch.same(captured),
+    activate: async () => {
+      hold.markEntered();
+      return hold.gate;
+    },
+    resume: async () => {
+      throw new Error("resume not used");
+    },
+    isAttachFailure: () => false,
+  });
+  await hold.enteredPromise;
+  const mine = epoch.begin();
+  assert.equal(epoch.commit(mine), true);
+  hold.resolve({ sessionId: "live-1", storedSessionId: "sess-1", sessionKey: "sess-1" });
+  assert.equal((await pending).status, "aborted");
+});
+
+test("test_bug_open_another_chat_while_refresh_in_flight_stays_on_it", async () => {
+  const current = { runtimeId: "live-1", resumeId: "sess-1" };
+  const opened = openCallForRoute("sess-2", ["sess-1", "sess-2"], current);
+  assert.deepEqual(opened, { method: "resume", sessionId: "sess-2" });
+  const epoch = new OpenEpoch();
+  const captured = epoch.current;
+  const hold = deferred();
+  const pending = reattachOpenChat({
+    chat: current,
+    stillOpen: () => epoch.same(captured),
+    activate: async () => {
+      hold.markEntered();
+      return hold.gate;
+    },
+    resume: async () => {
+      throw new Error("resume not used");
+    },
+    isAttachFailure: () => false,
+  });
+  await hold.enteredPromise;
+  const mine = epoch.begin();
+  assert.equal(epoch.commit(mine), true);
+  hold.resolve({ sessionId: "live-1", storedSessionId: "sess-1", sessionKey: "sess-1" });
+  assert.equal((await pending).status, "aborted");
+});
+
+test("test_bug_notification_tap_while_refresh_in_flight", async () => {
+  const route = openCallForRoute("live-9", ["sess-1"], { runtimeId: "live-1", resumeId: "sess-1" });
+  assert.deepEqual(route, { method: "activate", sessionId: "live-9" });
+  const epoch = new OpenEpoch();
+  const captured = epoch.current;
+  const hold = deferred();
+  const pending = reattachOpenChat({
+    chat: { runtimeId: "live-1", resumeId: "sess-1" },
+    stillOpen: () => epoch.same(captured),
+    activate: async () => {
+      const error = new Error("session not active");
+      (error as { code?: number }).code = 4001;
+      throw error;
+    },
+    resume: async () => {
+      hold.markEntered();
+      return hold.gate;
+    },
+    isAttachFailure: (error: unknown) => {
+      const code = (error as { code?: number }).code;
+      return code === 4001 || code === 4007;
+    },
+  });
+  await hold.enteredPromise;
+  const mine = epoch.begin();
+  assert.equal(epoch.commit(mine), true);
+  hold.resolve({ sessionId: "live-2", storedSessionId: "sess-1", sessionKey: "sess-1" });
+  assert.equal((await pending).status, "aborted");
+});
+
+test("test_bug_reconnect_keeps_mount_and_scroll", () => {
+  assert.equal(showOpenChat(false, true), true);
+  assert.equal(showOpenChat(true, false), true);
+  assert.equal(showOpenChat(false, false), false);
+  const epoch = new OpenEpoch();
+  const open = epoch.current;
+  epoch.invalidate();
+  assert.equal(epoch.same(open), false);
 });

@@ -1,16 +1,23 @@
 import { HermesError } from "./index.ts";
 
 export const SESSION_UNAVAILABLE_NOTICE = "That chat is no longer available";
+/** session.resume of an unknown id, or of a runtime id. */
 export const SESSION_UNAVAILABLE_CODE = 4007;
+/** session.activate of an unknown id, a dead runtime id, or a stored id. */
+export const SESSION_ACTIVATE_REJECTED_CODE = 4001;
 export const RESUME_RETRY_MS = 30_000;
 export const RECONNECT_BACKOFF_CAP_MS = 15_000;
 
-/** JSON-RPC failure on session.resume / session.activate that means the id is gone server-side. */
+/**
+ * JSON-RPC failure on session.resume / session.activate that means this id
+ * cannot be attached. Resume uses 4007. Activate of an unknown or dead
+ * runtime id uses 4001. Both leave the socket up.
+ */
 export function isSessionAttachFailure(error: unknown): boolean {
   if (!(error instanceof HermesError)) {
     return false;
   }
-  if (error.code === SESSION_UNAVAILABLE_CODE) {
+  if (error.code === SESSION_UNAVAILABLE_CODE || error.code === SESSION_ACTIVATE_REJECTED_CODE) {
     return true;
   }
   return error.message.toLowerCase().includes("session not found");

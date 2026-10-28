@@ -236,7 +236,7 @@ fun Phase0Screen(
                     .verticalScroll(scrollState),
                 verticalArrangement = Arrangement.spacedBy(8.dp),
             ) {
-                if (!state.connected) {
+                if (!showOpenChat(state.connected, state.reconnecting)) {
                     LoginBlock(state, onServer, onUpdateBase, onUsername, onPassword, onLogin, onRegisterPush)
                 } else {
                     ChatBlock(state, onOpen, onNew, onAllow, onDeny, onToggleCommand)
@@ -252,7 +252,7 @@ fun Phase0Screen(
                 }
             }
         }
-        if (state.connected) {
+        if (showOpenChat(state.connected, state.reconnecting)) {
             Composer(state, onDraft, onSend, onPaste, onPickImage, onPickFile)
         }
         AboutBlock(state, onUpdateBase, onCheckUpdate, onApplyUpdate)

@@ -1,12 +1,17 @@
 import { expect, test } from "@playwright/test";
 import { readButtonContrasts } from "../contrast";
 import {
+  dropSockets,
+  flushSessionsChanged,
+  heldCount,
+  holdRpc,
   login,
   newDevice,
   openApp,
   openSession,
   readFake,
   readState,
+  releaseRpc,
   resetFake,
   scriptReply,
   scriptSession,
@@ -345,5 +350,120 @@ test.describe("windows ui regressions", () => {
       await first.context.close();
       await second.context.close();
     }
+  });
+
+  test("test_bug_open_chat_survives_session_update", async ({ page }) => {
+    await login(page);
+    await openSession(page);
+    const mount = page.locator("[data-chat-mount]");
+    await expect(mount).toHaveCount(1);
+    const session = await mount.getAttribute("data-chat-session");
+    const token = await mount.getAttribute("data-chat-mount");
+    expect(session).toBeTruthy();
+    expect(token).toBeTruthy();
+    await sendMessage(page, "stay on this chat");
+    await expect(page.getByText("Hello from Hermes", { exact: true })).toBeVisible();
+    await expect(page.getByText("stay on this chat", { exact: true })).toBeVisible();
+    await expect.poll(async () => {
+      const node = page.locator("[data-chat-mount]");
+      const count = await node.count();
+      const current = count === 1 ? await node.getAttribute("data-chat-mount") : "";
+      const sessionNow = count === 1 ? await node.getAttribute("data-chat-session") : "";
+      const status = await page.locator("header p").first().innerText();
+      return { count, current, sessionNow, gone: /no longer available/i.test(status) };
+    }).toEqual({ count: 1, current: token, sessionNow: session, gone: false });
+  });
+
+  test("test_bug_notification_click_opens_approval_chat", async ({ page }) => {
+    await openApp(page);
+    await page.evaluate(() => window.__hermesE2e?.setHidden(true));
+    await login(page);
+    await expect.poll(async () => page.evaluate(() => window.__hermesE2e?.lastNotificationRoute() ?? "")).toContain("live-1");
+    const before = await page.evaluate(() => window.__hermesE2e?.foregrounds() ?? 0);
+    await page.evaluate(() => window.__hermesE2e?.clickNotification());
+    await expect(page.getByText("Read the repo status", { exact: true })).toBeVisible();
+    await expect(page.getByText("Needs you", { exact: true })).toBeVisible();
+    await expect(page.locator("header p").first()).not.toHaveText(/no longer available/);
+    await expect.poll(async () => page.evaluate(() => window.__hermesE2e?.foregrounds() ?? 0)).toBeGreaterThan(before);
+  });
+
+  test("test_bug_new_session_while_refresh_in_flight_stays_on_the_new_chat", async ({ page }) => {
+    await login(page);
+    await openSession(page);
+    await holdRpc("session.list");
+    await flushSessionsChanged();
+    await expect.poll(() => heldCount("session.list")).toBeGreaterThan(0);
+    await page.getByRole("button", { name: "New session", exact: true }).click();
+    await page.waitForTimeout(150);
+    await releaseRpc("session.list");
+    await expect(page.locator("header p").first()).toHaveText("New session");
+    await page.waitForTimeout(800);
+    await expect(page.locator("header p").first()).toHaveText("New session");
+    await expect(page.getByText("Say hello", { exact: true })).toHaveCount(0);
+  });
+
+  test("test_bug_open_another_chat_while_refresh_in_flight_stays_on_it", async ({ page }) => {
+    await scriptSession("sess-other", "Other", "Other session transcript");
+    await login(page);
+    await openSession(page, "Hello");
+    await holdRpc("session.list");
+    await flushSessionsChanged();
+    await expect.poll(() => heldCount("session.list")).toBeGreaterThan(0);
+    await page.getByRole("button", { name: "Other", exact: true }).click();
+    await page.waitForTimeout(150);
+    await releaseRpc("session.list");
+    await expect(page.getByText("Other session transcript", { exact: true })).toBeVisible();
+    await page.waitForTimeout(800);
+    await expect(page.getByText("Other session transcript", { exact: true })).toBeVisible();
+    await expect(page.getByText("Say hello", { exact: true })).toHaveCount(0);
+  });
+
+  test("test_bug_notification_tap_while_refresh_in_flight", async ({ page }) => {
+    await scriptSession("sess-other", "Other", "Other session transcript");
+    await openApp(page);
+    await page.evaluate(() => window.__hermesE2e?.setHidden(true));
+    await login(page);
+    await expect.poll(async () => page.evaluate(() => window.__hermesE2e?.lastNotificationRoute() ?? "")).toContain("live-1");
+    await openSession(page, "Other");
+    await holdRpc("session.list");
+    await flushSessionsChanged();
+    await expect.poll(() => heldCount("session.list")).toBeGreaterThan(0);
+    await page.evaluate(() => window.__hermesE2e?.clickNotification());
+    await page.waitForTimeout(150);
+    await releaseRpc("session.list");
+    await expect(page.getByText("Read the repo status", { exact: true })).toBeVisible();
+    await page.waitForTimeout(800);
+    await expect(page.getByText("Read the repo status", { exact: true })).toBeVisible();
+    await expect(page.getByText("Other session transcript", { exact: true })).toHaveCount(0);
+  });
+
+  test("test_bug_reconnect_keeps_mount_and_scroll", async ({ page }) => {
+    await login(page);
+    await openSession(page);
+    const filler = Array.from(
+      { length: 40 },
+      (_, index) => `Reconnect filler paragraph ${index} keeps the transcript tall.`,
+    ).join("\n\n");
+    await scriptReply(filler);
+    await sendMessage(page, "seed reconnect scroll");
+    await expect(page.getByText("Reconnect filler paragraph 39")).toBeVisible();
+    const mount = page.locator("[data-chat-mount]");
+    const token = await mount.getAttribute("data-chat-mount");
+    const session = await mount.getAttribute("data-chat-session");
+    expect(token).toBeTruthy();
+    expect(session).toBeTruthy();
+    const scrolled = await page.locator("main").evaluate((element) => {
+      element.scrollTop = 160;
+      return element.scrollTop;
+    });
+    expect(scrolled).toBeGreaterThan(100);
+    await dropSockets();
+    await expect(page.getByLabel("Hermes server")).toHaveCount(0);
+    await expect(page.locator("header p").first()).toHaveText(/^Connected/);
+    await expect(mount).toHaveAttribute("data-chat-mount", token ?? "");
+    await expect(mount).toHaveAttribute("data-chat-session", session ?? "");
+    await expect(page.getByText("Say hello", { exact: true })).toBeVisible();
+    const top = await page.locator("main").evaluate((element) => element.scrollTop);
+    expect(top).toBeGreaterThan(100);
   });
 });

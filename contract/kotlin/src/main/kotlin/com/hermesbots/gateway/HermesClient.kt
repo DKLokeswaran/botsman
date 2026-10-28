@@ -134,6 +134,8 @@ data class ResumedSession(
     val sessionId: String,
     val messages: List<TranscriptMessage>,
     val openRequests: List<ServerRequest>,
+    val storedSessionId: String = "",
+    val sessionKey: String = "",
 )
 
 data class ReplayResult(
@@ -312,28 +314,32 @@ class HermesClient(
         return result.optString("session_id")
     }
 
+    /** Stored id or session_key. A runtime id is rejected by Hermes with 4007. */
     suspend fun resumeSession(sessionId: String, profile: String? = null): ResumedSession {
-        val params = JSONObject()
-            .put("session_id", sessionId)
-            .put("omit_messages", false)
-            .put("inline_images", false)
-        if (!profile.isNullOrEmpty()) params.put("profile", profile)
-        val result = rpc("session.resume", params)
-        val openRequests = deliverOpenRequests(result.optJSONArray("open_requests"))
-        val live = result.optString("session_id").ifEmpty { sessionId }
-        return ResumedSession(live, messagesFrom(result.optJSONArray("messages")), openRequests)
+        return attachSession("session.resume", sessionId, profile)
     }
 
+    /** Runtime id of a live session. An unknown or dead runtime id, or a stored id, is 4001. */
     suspend fun activateSession(sessionId: String, profile: String? = null): ResumedSession {
+        return attachSession("session.activate", sessionId, profile)
+    }
+
+    private suspend fun attachSession(method: String, sessionId: String, profile: String?): ResumedSession {
         val params = JSONObject()
             .put("session_id", sessionId)
             .put("omit_messages", false)
             .put("inline_images", false)
         if (!profile.isNullOrEmpty()) params.put("profile", profile)
-        val result = rpc("session.activate", params)
+        val result = rpc(method, params)
         val openRequests = deliverOpenRequests(result.optJSONArray("open_requests"))
         val live = result.optString("session_id").ifEmpty { sessionId }
-        return ResumedSession(live, messagesFrom(result.optJSONArray("messages")), openRequests)
+        return ResumedSession(
+            sessionId = live,
+            messages = messagesFrom(result.optJSONArray("messages")),
+            openRequests = openRequests,
+            storedSessionId = result.optString("stored_session_id"),
+            sessionKey = result.optString("session_key"),
+        )
     }
 
     suspend fun history(sessionId: String): List<TranscriptMessage> {

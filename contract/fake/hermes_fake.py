@@ -16,11 +16,16 @@ Shapes follow the pinned contract and the v0.22.5 handlers:
 
 ``HERMES_FAKE_TEST_HOOKS=1`` exposes loopback controls for the Windows browser
 suite (reset, a scripted reply, an extra session, and a state readout). With the
-same flag, ``/__test__/resume_reject`` makes ``session.resume`` or ``session.activate`` fail for one id,
-and ``/__test__/login_429`` makes password login return HTTP 429 with
-``Retry-After``. ``/__test__/ensure_approval`` seeds an open approval without
-pushing it. ``/__test__/approval_request`` adds another approval and fans it out
-to attached clients that declared ``server_requests``. It also repeats
+same flag, ``/__test__/resume_reject`` makes ``session.resume`` or ``session.activate`` fail for one id.
+``runtime_dead: true`` marks that runtime id dead: activate returns 4001, and
+resume of the stored id succeeds with a new runtime id. ``/__test__/login_429``
+makes password login return HTTP 429 with ``Retry-After``.
+``/__test__/ensure_approval`` seeds an open approval without pushing it.
+``/__test__/approval_request`` adds another approval and fans it out to attached
+clients that declared ``server_requests``. ``/__test__/hold`` and
+``/__test__/release`` pause the next JSON-RPC calls of one method.
+``/__test__/sessions_changed`` broadcasts ``sessions.changed`` immediately.
+``/__test__/drop_sockets`` closes open websockets. It also repeats
 ``Set-Cookie`` in ``X-E2E-Set-Cookie`` and answers CORS preflight.
 Leave the variable unset and those paths 404; login and JSON-RPC stay as below.
 """
@@ -33,6 +38,7 @@ import hashlib
 import json
 import os
 import secrets
+import socket
 import struct
 import threading
 import time
@@ -46,6 +52,11 @@ EPOCH = "epoch-phase0"
 SESSION_STORED = "sess-1"
 SESSION_LIVE = "live-1"
 SESSION_NOT_FOUND = 4007
+SESSION_ACTIVATE_REJECTED = 4001
+# Real Hermes watches state.db about every 0.5s and emits sessions.changed
+# at most once per 2s. The test hook can flush immediately.
+CHANGED_CHECK_SECONDS = 0.5
+CHANGED_MIN_INTERVAL = 2.0
 
 
 class State:
@@ -68,6 +79,13 @@ class State:
         self.scripted_reply: str | None = None
         self.sessions: dict[str, dict] = _hello_sessions()
         self.resume_reject: dict[str, tuple[int, str]] = {}
+        self.dead_runtimes: set[str] = set()
+        self.hold_next: dict[str, int] = {}
+        self.hold_gates: dict[str, threading.Event] = {}
+        self.held: dict[str, int] = {}
+        self.connections: list = []
+        self.changed_pending = False
+        self.last_changed_at = 0.0
         self.login_429_remaining = 0
         self.login_429_retry_after = 60
         self.login_attempts = 0
@@ -91,18 +109,28 @@ class State:
             self.scripted_reply = None
             self.sessions = _hello_sessions()
             self.resume_reject.clear()
+            self.dead_runtimes.clear()
+            gates = list(self.hold_gates.values())
+            self.hold_next.clear()
+            self.hold_gates.clear()
+            self.held.clear()
+            self.changed_pending = False
             self.login_429_remaining = 0
             self.login_429_retry_after = 60
             self.login_attempts = 0
+        for gate in gates:
+            gate.set()
 
-    def lookup(self, session_id: str | None) -> dict:
+    def lookup(self, session_id: str | None) -> dict | None:
+        """Runtime id or stored id. An unknown non-empty id does not fall back to live-1."""
         if session_id and session_id in self.sessions:
             return self.sessions[session_id]
         if session_id:
             for record in self.sessions.values():
                 if record["stored"] == session_id:
                     return record
-        return self.sessions[SESSION_LIVE]
+            return None
+        return self.sessions.get(SESSION_LIVE)
 
     def mint_session(self, username: str) -> tuple[str, str]:
         access = "at." + secrets.token_urlsafe(18)
@@ -308,7 +336,7 @@ def _session_list() -> dict:
 def _history(session_id: str | None) -> dict:
     with STATE.lock:
         record = STATE.lookup(session_id)
-        messages = [dict(item) for item in record["messages"]]
+        messages = [dict(item) for item in record["messages"]] if record else []
     return {"count": len(messages), "messages": messages}
 
 
@@ -331,12 +359,71 @@ def _broadcast(params: dict, session_id: str | None) -> None:
 
 
 def _emit_changed() -> None:
+    with STATE.lock:
+        STATE.changed_pending = True
+
+
+def _flush_changed(force: bool) -> None:
+    with STATE.lock:
+        if not force and not STATE.changed_pending:
+            return
+        now = time.monotonic()
+        if (
+            not force
+            and STATE.last_changed_at > 0
+            and now - STATE.last_changed_at < CHANGED_MIN_INTERVAL
+        ):
+            return
+        STATE.changed_pending = False
+        STATE.last_changed_at = now
     _broadcast(STATE.stamp("sessions.changed", {}, ""), None)
+
+
+def _changed_watcher() -> None:
+    while True:
+        time.sleep(CHANGED_CHECK_SECONDS)
+        try:
+            _flush_changed(False)
+        except Exception:
+            continue
+
+
+def _maybe_hold(method: str) -> None:
+    gate = None
+    with STATE.lock:
+        left = STATE.hold_next.get(method, 0)
+        if left <= 0:
+            return
+        STATE.hold_next[method] = left - 1
+        gate = STATE.hold_gates.get(method)
+        if gate is None:
+            return
+        STATE.held[method] = STATE.held.get(method, 0) + 1
+    try:
+        gate.wait(timeout=25)
+    finally:
+        with STATE.lock:
+            STATE.held[method] = max(0, STATE.held.get(method, 1) - 1)
+
+
+def _drop_sockets() -> None:
+    with STATE.lock:
+        conns = list(STATE.connections)
+    for conn in conns:
+        try:
+            conn.shutdown(socket.SHUT_RDWR)
+        except OSError:
+            try:
+                conn.close()
+            except OSError:
+                pass
 
 
 def _append_message(session_id: str, role: str, text: str) -> None:
     with STATE.lock:
         record = STATE.lookup(session_id)
+        if record is None:
+            return
         record["messages"].append({"role": role, "text": text, "row_id": STATE.next_row})
         STATE.next_row += 1
 
@@ -447,8 +534,30 @@ def _attach_reject(requested: str) -> tuple[int, str] | None:
         reject = STATE.resume_reject.get(requested)
         if reject is None:
             record = STATE.lookup(requested or None)
+            if record is None:
+                return None
             reject = STATE.resume_reject.get(record["live"]) or STATE.resume_reject.get(record["stored"])
     return reject
+
+
+def _reissue_runtime(record: dict) -> dict:
+    """Stored chat is still resumable after its runtime id died. Hand out a new runtime id."""
+    with STATE.lock:
+        old = record["live"]
+        if old not in STATE.dead_runtimes:
+            return record
+        number = STATE.next_session
+        STATE.next_session += 1
+        live = f"live-{number}"
+        STATE.sessions.pop(old, None)
+        record["live"] = live
+        STATE.sessions[live] = record
+        STATE.dead_runtimes.discard(old)
+        for sessions in STATE.attached.values():
+            if old in sessions:
+                sessions.discard(old)
+                sessions.add(live)
+    return record
 
 
 def _push_open_requests(wfile) -> None:
@@ -514,6 +623,8 @@ def _cancel_session_approvals(session_id: str) -> None:
     """Interrupt/teardown: approval.cancelled is broadcast, and each card is withdrawn."""
     with STATE.lock:
         record = STATE.lookup(session_id)
+        if record is None:
+            return
         live = record["live"]
         stored = record["stored"]
         dropped = [
@@ -558,6 +669,7 @@ def _cancel_session_approvals(session_id: str) -> None:
 def _test_state() -> dict:
     with STATE.lock:
         open_requests = [dict(item) for item in STATE.open_requests.values()]
+        held = dict(STATE.held)
         sessions = []
         extras = []
         history: list[dict] = []
@@ -591,6 +703,7 @@ def _test_state() -> dict:
         "sessions": sessions,
         "extras": extras,
         "login_attempts": STATE.login_attempts,
+        "held": held,
     }
 
 
@@ -645,6 +758,12 @@ def _handle_test_hook(handler: "Handler", path: str, incoming: dict) -> None:
         if incoming.get("clear"):
             with STATE.lock:
                 STATE.resume_reject.pop(session_id, None)
+                STATE.dead_runtimes.discard(session_id)
+            handler._json_response(200, {"ok": True})
+            return
+        if incoming.get("runtime_dead"):
+            with STATE.lock:
+                STATE.dead_runtimes.add(session_id)
             handler._json_response(200, {"ok": True})
             return
         try:
@@ -683,6 +802,44 @@ def _handle_test_hook(handler: "Handler", path: str, incoming: dict) -> None:
             STATE.login_429_retry_after = max(1, retry_after)
         handler._json_response(200, {"ok": True})
         return
+    if path == "/__test__/hold":
+        method = str(incoming.get("method") or "")
+        if not method:
+            handler._json_response(400, {"error": "method is required"})
+            return
+        try:
+            count = int(incoming.get("count", 1))
+        except (TypeError, ValueError):
+            handler._json_response(400, {"error": "count must be an integer"})
+            return
+        with STATE.lock:
+            STATE.hold_gates[method] = threading.Event()
+            STATE.hold_next[method] = max(0, count)
+        handler._json_response(200, {"ok": True})
+        return
+    if path == "/__test__/release":
+        method = str(incoming.get("method") or "")
+        with STATE.lock:
+            gate = STATE.hold_gates.get(method) if method else None
+            if not method:
+                gates = list(STATE.hold_gates.values())
+                STATE.hold_next.clear()
+            else:
+                gates = [gate] if gate is not None else []
+                STATE.hold_next[method] = 0
+        for item in gates:
+            if item is not None:
+                item.set()
+        handler._json_response(200, {"ok": True})
+        return
+    if path == "/__test__/sessions_changed":
+        _flush_changed(True)
+        handler._json_response(200, {"ok": True})
+        return
+    if path == "/__test__/drop_sockets":
+        _drop_sockets()
+        handler._json_response(200, {"ok": True})
+        return
     handler._json_response(404, {"error": "not found"})
 
 
@@ -690,6 +847,8 @@ def _dispatch(wfile, req: dict) -> None:
     rid = req.get("id")
     method = req.get("method")
     params = req.get("params") or {}
+    if isinstance(method, str):
+        _maybe_hold(method)
     if method == "gateway.ping":
         _send_json(wfile, _ok(rid, {"ok": True}))
         return
@@ -723,6 +882,8 @@ def _dispatch(wfile, req: dict) -> None:
                     {
                         "current": False,
                         "id": record["live"],
+                        # Real active_list rows: short runtime id, plus the stored session_key.
+                        "session_key": record["stored"],
                         "last_active": 1,
                         "message_count": len(messages),
                         "model": "fake-model",
@@ -765,7 +926,11 @@ def _dispatch(wfile, req: dict) -> None:
         return
     if method == "session.resume":
         requested = str(params.get("session_id") or "")
-        if requested in STATE.sessions:
+        if not requested or requested in STATE.sessions or requested in STATE.dead_runtimes:
+            _send_json(wfile, _err(rid, SESSION_NOT_FOUND, "session not found"))
+            return
+        record = STATE.lookup(requested)
+        if record is None:
             _send_json(wfile, _err(rid, SESSION_NOT_FOUND, "session not found"))
             return
         reject = _attach_reject(requested)
@@ -773,8 +938,9 @@ def _dispatch(wfile, req: dict) -> None:
             code, message = reject
             _send_json(wfile, _err(rid, code, message))
             return
+        if record["live"] in STATE.dead_runtimes:
+            record = _reissue_runtime(record)
         with STATE.lock:
-            record = STATE.lookup(requested or None)
             live = record["live"]
             messages = [dict(item) for item in record["messages"]]
             title = record["title"]
@@ -792,6 +958,8 @@ def _dispatch(wfile, req: dict) -> None:
                 rid,
                 {
                     "session_id": live,
+                    "stored_session_id": record["stored"],
+                    "session_key": record["stored"],
                     "messages": messages,
                     "info": {"title": title, "model": "fake-model", "running": False},
                     "open_requests": open_requests,
@@ -809,13 +977,22 @@ def _dispatch(wfile, req: dict) -> None:
         return
     if method == "session.activate":
         requested = str(params.get("session_id") or "")
+        record = STATE.lookup(requested) if requested else None
+        # Activate accepts a live runtime id. A stored id, an unknown id, or a
+        # dead runtime id is 4001. A configured resume_reject still wins so a
+        # test can force a specific code.
+        if record is None or requested not in STATE.sessions:
+            _send_json(wfile, _err(rid, SESSION_ACTIVATE_REJECTED, "session not active"))
+            return
         reject = _attach_reject(requested)
         if reject is not None:
             code, message = reject
             _send_json(wfile, _err(rid, code, message))
             return
+        if requested in STATE.dead_runtimes or record["live"] in STATE.dead_runtimes:
+            _send_json(wfile, _err(rid, SESSION_ACTIVATE_REJECTED, "session not active"))
+            return
         with STATE.lock:
-            record = STATE.lookup(requested or None)
             live = record["live"]
             messages = [dict(item) for item in record["messages"]]
             title = record["title"]
@@ -834,6 +1011,8 @@ def _dispatch(wfile, req: dict) -> None:
                 rid,
                 {
                     "session_id": live,
+                    "stored_session_id": record["stored"],
+                    "session_key": record["stored"],
                     "messages": messages,
                     "info": {"title": title, "model": "fake-model", "running": False},
                     "open_requests": open_requests,
@@ -863,11 +1042,16 @@ def _dispatch(wfile, req: dict) -> None:
     if method == "prompt.submit":
         session_id = str(params.get("session_id") or SESSION_LIVE)
         text = str(params.get("text") or "")
+        record = STATE.lookup(session_id)
+        if record is None:
+            _send_json(wfile, _err(rid, SESSION_NOT_FOUND, "session not found"))
+            return
+        live = record["live"]
         _send_json(wfile, _ok(rid, {"status": "streaming"}))
         _append_message(session_id, "user", text)
         _emit_changed()
         with STATE.lock:
-            live = STATE.lookup(session_id)["live"]
+            live = STATE.lookup(live)["live"] if STATE.lookup(live) else live
             delta = "Hello"
             done = "Hello from Hermes"
             if TEST_HOOKS and STATE.scripted_reply is not None:
@@ -943,6 +1127,7 @@ def _handle_socket(handler: BaseHTTPRequestHandler, ticket: str) -> None:
     )
     with STATE.lock:
         STATE.sockets.append(handler.wfile)
+        STATE.connections.append(handler.connection)
     try:
         while True:
             frame = _read_frame(handler.rfile)
@@ -971,6 +1156,11 @@ def _handle_socket(handler: BaseHTTPRequestHandler, ticket: str) -> None:
                 _dispatch(handler.wfile, message)
     finally:
         _detach(handler.wfile)
+        with STATE.lock:
+            try:
+                STATE.connections.remove(handler.connection)
+            except ValueError:
+                pass
 
 
 class Handler(BaseHTTPRequestHandler):
@@ -1102,6 +1292,9 @@ class Handler(BaseHTTPRequestHandler):
             self._json_response(200, rotated)
             return
         self._json_response(404, {"error": "not found"})
+
+
+threading.Thread(target=_changed_watcher, name="sessions-changed", daemon=True).start()
 
 
 def serve(host: str, port: int) -> ThreadingHTTPServer:
