@@ -110,6 +110,12 @@ data class SessionRow(
 
 data class TranscriptMessage(val role: String, val text: String)
 
+data class ResumedSession(
+    val sessionId: String,
+    val messages: List<TranscriptMessage>,
+    val openRequests: List<ServerRequest>,
+)
+
 data class ReplayResult(
     val events: List<GatewayEvent>,
     val latestSeq: Int,
@@ -274,7 +280,7 @@ class HermesClient(
         return result.optString("session_id")
     }
 
-    suspend fun resumeSession(sessionId: String): Pair<String, List<TranscriptMessage>> {
+    suspend fun resumeSession(sessionId: String): ResumedSession {
         val result = rpc(
             "session.resume",
             JSONObject()
@@ -282,9 +288,9 @@ class HermesClient(
                 .put("omit_messages", false)
                 .put("inline_images", false),
         )
-        deliverOpenRequests(result.optJSONArray("open_requests"))
+        val openRequests = deliverOpenRequests(result.optJSONArray("open_requests"))
         val live = result.optString("session_id").ifEmpty { sessionId }
-        return live to messagesFrom(result.optJSONArray("messages"))
+        return ResumedSession(live, messagesFrom(result.optJSONArray("messages")), openRequests)
     }
 
     suspend fun history(sessionId: String): List<TranscriptMessage> {
@@ -319,6 +325,20 @@ class HermesClient(
             "approval.received",
             JSONObject().put("session_id", sessionId).put("request_id", requestId),
         )
+    }
+
+    /** Settle an approval so Hermes emits request.cancel to every connected client. */
+    suspend fun answerApproval(sessionId: String, requestId: String, choice: String) {
+        val result = rpc(
+            "approval.respond",
+            JSONObject()
+                .put("session_id", sessionId)
+                .put("request_id", requestId)
+                .put("choice", choice),
+        )
+        if (result.optInt("resolved") == 0) {
+            throw HermesException("Approval was already resolved")
+        }
     }
 
     fun respond(id: String, result: JSONObject) {
@@ -450,8 +470,10 @@ class HermesClient(
 
     private fun <T> requestCopy(source: List<T>): List<T> = source.toList()
 
-    private fun deliverOpenRequests(array: JSONArray?) {
-        jsonObjects(array).mapNotNull { requestFromOpen(it) }.forEach { publishRequest(it) }
+    private fun deliverOpenRequests(array: JSONArray?): List<ServerRequest> {
+        val requests = jsonObjects(array).mapNotNull { requestFromOpen(it) }
+        requests.forEach { publishRequest(it) }
+        return requests
     }
 
     private fun handleClose() {

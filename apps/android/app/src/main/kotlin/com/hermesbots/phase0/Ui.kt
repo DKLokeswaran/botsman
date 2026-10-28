@@ -3,13 +3,16 @@ package com.hermesbots.phase0
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.FlowRow
+import androidx.compose.foundation.layout.defaultMinSize
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.ime
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeDrawing
@@ -17,18 +20,47 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.union
 import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.relocation.BringIntoViewRequester
+import androidx.compose.foundation.relocation.bringIntoViewRequester
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.graphics.vector.PathParser
+import androidx.compose.ui.platform.LocalClipboardManager
+import androidx.compose.ui.text.AnnotatedString
+import androidx.compose.ui.text.SpanStyle
+import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontFamily
+import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
+import com.mikepenz.markdown.compose.components.markdownComponents
+import com.mikepenz.markdown.compose.elements.MarkdownCodeBlock
+import com.mikepenz.markdown.compose.elements.MarkdownCodeFence
+import com.mikepenz.markdown.compose.elements.MarkdownListItems
+import com.mikepenz.markdown.compose.elements.listDepth
 import com.mikepenz.markdown.m3.Markdown
+import kotlinx.coroutines.delay
 
 @Composable
 fun Phase0Screen(
@@ -137,26 +169,38 @@ private fun ChatBlock(
     state.sessions.forEach { session ->
         Slab(session.title.ifEmpty { session.id }, { onOpen(session.id) })
     }
-    state.approval?.let { card ->
-        Column(Modifier.fillMaxWidth().border(1.dp, MaterialTheme.colorScheme.primary).padding(12.dp)) {
-            Text("NEEDS YOU", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.primary)
-            Text(card.description, color = MaterialTheme.colorScheme.onBackground)
-            if (state.showCommand) {
-                Text(card.command, fontFamily = FragmentMono, color = MaterialTheme.colorScheme.onSurfaceVariant)
-            }
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                Slab("Allow once", onAllow)
-                Slab("Deny", onDeny)
-                Slab(if (state.showCommand) "Hide command" else "Full command", onToggleCommand)
-            }
-        }
-    }
     state.messages.forEach { line ->
         Text(line.role.uppercase(), style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
-        if (line.role == "assistant") {
-            Markdown(line.text.ifEmpty { "…" })
-        } else {
-            Text(line.text, color = if (line.role == "error") MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onBackground)
+        when (line.role) {
+            "assistant" -> ReplyMarkdown(line.text)
+            "user" -> UserMessage(line.text)
+            else -> Text(line.text, color = if (line.role == "error") MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onBackground)
+        }
+    }
+    state.approval?.let { card ->
+        val bring = remember(card.id) { BringIntoViewRequester() }
+        LaunchedEffect(card.id, card.resolvedLabel) { bring.bringIntoView() }
+        Column(
+            Modifier
+                .bringIntoViewRequester(bring)
+                .fillMaxWidth()
+                .border(1.dp, MaterialTheme.colorScheme.primary)
+                .padding(12.dp),
+        ) {
+            Text("NEEDS YOU", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.primary)
+            Text(card.description, color = MaterialTheme.colorScheme.onBackground)
+            if (card.resolvedLabel != null) {
+                Text(card.resolvedLabel.uppercase(), style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.primary, modifier = Modifier.padding(top = 8.dp))
+            } else {
+                if (state.showCommand) {
+                    Text(card.command, fontFamily = FragmentMono, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
+                FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Slab("Allow once", onAllow)
+                    Slab("Deny", onDeny)
+                    Slab(if (state.showCommand) "Hide command" else "Full command", onToggleCommand)
+                }
+            }
         }
     }
 }
@@ -176,19 +220,178 @@ private fun Composer(
             Text(file.name, fontFamily = FontFamily.Monospace, color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
     }
-    OutlinedTextField(
-        value = state.draft,
-        onValueChange = onDraft,
-        modifier = Modifier.fillMaxWidth().heightIn(min = 72.dp).padding(top = 8.dp),
-        label = { Text("Message") },
-    )
-    Row(Modifier.padding(vertical = 8.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-        Slab("Send", onSend)
-        Slab("Paste image", onPaste)
-        Slab("Image", onPickImage)
-        Slab("File", onPickFile)
+    var menu by remember { mutableStateOf(false) }
+    Row(
+        Modifier.fillMaxWidth().padding(vertical = 8.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(4.dp),
+    ) {
+        Box {
+            IconButton(onClick = { menu = true }, modifier = Modifier.size(40.dp)) {
+                Icon(AttachIcon, contentDescription = "Attach", tint = MaterialTheme.colorScheme.onSurface)
+            }
+            DropdownMenu(expanded = menu, onDismissRequest = { menu = false }) {
+                DropdownMenuItem(text = { Text("Image") }, onClick = { menu = false; onPickImage() })
+                DropdownMenuItem(text = { Text("File") }, onClick = { menu = false; onPickFile() })
+                DropdownMenuItem(text = { Text("Paste image") }, onClick = { menu = false; onPaste() })
+            }
+        }
+        OutlinedTextField(
+            value = state.draft,
+            onValueChange = onDraft,
+            modifier = Modifier.weight(1f).defaultMinSize(minWidth = 0.dp),
+            placeholder = { Text("Message") },
+            minLines = 1,
+            maxLines = 4,
+        )
+        IconButton(onClick = onSend, modifier = Modifier.size(40.dp)) {
+            Icon(SendIcon, contentDescription = "Send", tint = MaterialTheme.colorScheme.primary)
+        }
     }
 }
+
+@Composable
+private fun ReplyMarkdown(text: String) {
+    val primary = MaterialTheme.colorScheme.primary
+    val components = markdownComponents(
+        unorderedList = { model ->
+            MarkdownListItems(model.content, model.node, depth = model.listDepth) { _, _, _ ->
+                Text("•", color = primary, modifier = Modifier.padding(end = 8.dp))
+            }
+        },
+        orderedList = { model ->
+            MarkdownListItems(model.content, model.node, depth = model.listDepth) { index, listNumber, _ ->
+                Text("${listNumber + index}.", color = primary, modifier = Modifier.padding(end = 8.dp))
+            }
+        },
+        codeFence = { model ->
+            MarkdownCodeFence(model.content, model.node, style = model.typography.code) { code, language, style ->
+                CodeCard(code.trimEnd(), language?.takeIf { it.isNotBlank() } ?: "text", style)
+            }
+        },
+        codeBlock = { model ->
+            MarkdownCodeBlock(model.content, model.node, style = model.typography.code) { code, language, style ->
+                CodeCard(code.trimEnd(), language?.takeIf { it.isNotBlank() } ?: "text", style)
+            }
+        },
+    )
+    Markdown(text.ifEmpty { "…" }, components = components)
+}
+
+@Composable
+private fun CodeCard(code: String, language: String, style: TextStyle) {
+    var copied by remember(code) { mutableStateOf(false) }
+    LaunchedEffect(copied) {
+        if (copied) {
+            delay(1500)
+            copied = false
+        }
+    }
+    @Suppress("DEPRECATION")
+    val clipboard = LocalClipboardManager.current
+    Column(Modifier.fillMaxWidth().padding(vertical = 6.dp).background(MaterialTheme.colorScheme.surfaceVariant)) {
+        Row(
+            Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 2.dp),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Text(language, fontFamily = FragmentMono, color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.labelMedium)
+            TextButton(onClick = {
+                clipboard.setText(AnnotatedString(code))
+                copied = true
+            }) {
+                Text(if (copied) "Copied" else "Copy", style = MaterialTheme.typography.labelMedium)
+            }
+        }
+        Text(
+            highlightCode(code),
+            modifier = Modifier.horizontalScroll(rememberScrollState()).padding(8.dp),
+            style = style.copy(fontFamily = FragmentMono, color = MaterialTheme.colorScheme.onBackground),
+        )
+    }
+}
+
+@Composable
+private fun UserMessage(text: String) {
+    var expanded by remember(text) { mutableStateOf(false) }
+    var overflow by remember(text) { mutableStateOf(false) }
+    Text(
+        text,
+        color = MaterialTheme.colorScheme.onBackground,
+        maxLines = if (expanded) Int.MAX_VALUE else 6,
+        overflow = TextOverflow.Ellipsis,
+        onTextLayout = { result ->
+            if (!expanded) overflow = result.hasVisualOverflow
+        },
+    )
+    if (overflow || expanded) {
+        TextButton(onClick = { expanded = !expanded }) {
+            Text(if (expanded) "Show less" else "Show more", style = MaterialTheme.typography.labelMedium)
+        }
+    }
+}
+
+private val KEYWORDS = setOf(
+    "const", "let", "var", "function", "return", "if", "else", "for", "while", "class", "import", "from", "export",
+    "def", "elif", "None", "True", "False", "async", "await", "echo", "cd", "fi", "then", "do", "done",
+)
+
+private fun highlightCode(code: String): AnnotatedString {
+    val keyword = SpanStyle(color = Color(0xFFFFA41C))
+    val string = SpanStyle(color = Color(0xFF71FF19))
+    val comment = SpanStyle(color = Color(0xFF999999))
+    val number = SpanStyle(color = Color(0xFF7DD3FC))
+    return buildAnnotatedString {
+        var index = 0
+        while (index < code.length) {
+            val rest = code.substring(index)
+            when {
+                rest.startsWith("//") || rest.startsWith("#") -> {
+                    val end = code.indexOf('\n', index).let { if (it < 0) code.length else it }
+                    withStyle(comment) { append(code.substring(index, end)) }
+                    index = end
+                }
+                code[index] == '"' || code[index] == '\'' -> {
+                    val quote = code[index]
+                    var end = index + 1
+                    while (end < code.length && code[end] != quote && code[end] != '\n') {
+                        if (code[end] == '\\' && end + 1 < code.length) end += 1
+                        end += 1
+                    }
+                    if (end < code.length && code[end] == quote) end += 1
+                    withStyle(string) { append(code.substring(index, end)) }
+                    index = end
+                }
+                code[index].isDigit() -> {
+                    var end = index + 1
+                    while (end < code.length && (code[end].isDigit() || code[end] == '.')) end += 1
+                    withStyle(number) { append(code.substring(index, end)) }
+                    index = end
+                }
+                code[index].isLetter() || code[index] == '_' -> {
+                    var end = index + 1
+                    while (end < code.length && (code[end].isLetterOrDigit() || code[end] == '_')) end += 1
+                    val word = code.substring(index, end)
+                    if (word in KEYWORDS) withStyle(keyword) { append(word) } else append(word)
+                    index = end
+                }
+                else -> {
+                    append(code[index])
+                    index += 1
+                }
+            }
+        }
+    }
+}
+
+private fun glyph(path: String): ImageVector {
+    return ImageVector.Builder(defaultWidth = 24.dp, defaultHeight = 24.dp, viewportWidth = 24f, viewportHeight = 24f).apply {
+        addPath(pathData = PathParser().parsePathString(path).toNodes(), fill = SolidColor(Color.Black))
+    }.build()
+}
+
+private val AttachIcon = glyph("M16.5,6v11.5c0,2.21 -1.79,4 -4,4s-4,-1.79 -4,-4V5c0,-1.38 1.12,-2.5 2.5,-2.5s2.5,1.12 2.5,2.5v10.5c0,0.55 -0.45,1 -1,1s-1,-0.45 -1,-1V6H10v9.5c0,1.38 1.12,2.5 2.5,2.5s2.5,-1.12 2.5,-2.5V5c0,-2.21 -1.79,-4 -4,-4S7,2.79 7,5v12.5c0,3.04 2.46,5.5 5.5,5.5s5.5,-2.46 5.5,-5.5V6H16.5z")
+private val SendIcon = glyph("M2.01,21L23,12 2.01,3 2,10l15,2 -15,2z")
 
 @Composable
 private fun Slab(label: String, onClick: () -> Unit) {

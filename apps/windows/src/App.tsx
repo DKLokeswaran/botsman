@@ -3,8 +3,6 @@ import { getCurrentWindow } from "@tauri-apps/api/window";
 import { disable, enable, isEnabled } from "@tauri-apps/plugin-autostart";
 import { isPermissionGranted, requestPermission, sendNotification } from "@tauri-apps/plugin-notification";
 import { useEffect, useRef, useState } from "react";
-import ReactMarkdown from "react-markdown";
-import remarkGfm from "remark-gfm";
 import {
   HermesClient,
   HermesError,
@@ -17,6 +15,7 @@ import {
 import { Button } from "./components/ui/button";
 import { Input } from "./components/ui/input";
 import { Textarea } from "./components/ui/textarea";
+import { Reply, UserLine } from "./markdown";
 import { tauriHttp, tauriSocket } from "./gateway";
 
 const DEFAULT_SERVER = "http://100.113.35.96:9119";
@@ -41,6 +40,7 @@ type Approval = {
   requestId: string;
   description: string;
   command: string;
+  resolvedLabel: string | null;
 };
 type Staged = { name: string; url: string | null };
 type Vault = { username: string; refreshToken: string; provider: string };
@@ -104,10 +104,20 @@ export function App() {
   const liveRef = useRef<string | null>(null);
   const closing = useRef(false);
   const fileRef = useRef<HTMLInputElement>(null);
+  const approvalRef = useRef<HTMLElement>(null);
+  const resolvedIds = useRef<Set<string>>(new Set());
+  const answeredHere = useRef<Set<string>>(new Set());
 
   useEffect(() => {
     liveRef.current = liveId;
   }, [liveId]);
+
+  useEffect(() => {
+    if (!approval) {
+      return;
+    }
+    approvalRef.current?.scrollIntoView({ block: "end" });
+  }, [approval]);
 
   useEffect(() => {
     const stored = localStorage.getItem(SERVER_KEY);
@@ -143,9 +153,47 @@ export function App() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  function forgetApproval(id: string, reason: string | null) {
+    if (!id) {
+      return;
+    }
+    resolvedIds.current.add(id);
+    setApproval((current) => {
+      if (!current || (current.id !== id && current.requestId !== id)) {
+        return current;
+      }
+      resolvedIds.current.add(current.id);
+      if (answeredHere.current.has(current.id) || reason !== "resolved") {
+        return null;
+      }
+      return { ...current, resolvedLabel: "Approved on another device" };
+    });
+  }
+
+  function syncOpenApprovals(open: ServerRequest[]) {
+    const ids = new Set(open.filter((request) => request.method === "approval").map((request) => request.id));
+    setApproval((current) => {
+      if (!current || current.resolvedLabel || resolvedIds.current.has(current.id)) {
+        return current;
+      }
+      return ids.has(current.id) ? current : null;
+    });
+  }
+
   function applyEvent(event: GatewayEvent) {
     if (event.seq !== null && event.sessionId) {
       seqs.current[event.sessionId] = Math.max(seqs.current[event.sessionId] ?? 0, event.seq);
+    }
+    if (event.type === "request.cancel") {
+      forgetApproval(String(event.payload.id ?? ""), String(event.payload.reason ?? ""));
+      return;
+    }
+    if (event.type === "approval.cancelled") {
+      const ids = Array.isArray(event.payload.request_ids) ? event.payload.request_ids : [];
+      for (const id of ids) {
+        forgetApproval(String(id), null);
+      }
+      return;
     }
     const live = liveRef.current;
     if (event.sessionId && live && event.sessionId !== live) {
@@ -197,12 +245,16 @@ export function App() {
       clientRef.current?.decline(request.id);
       return;
     }
+    if (resolvedIds.current.has(request.id) || answeredHere.current.has(request.id)) {
+      return;
+    }
     const card: Approval = {
       id: request.id,
       sessionId: String(request.params.session_id ?? ""),
       requestId: String(request.params.request_id ?? ""),
       description: String(request.params.description || "Approval needed"),
       command: String(request.params.command ?? ""),
+      resolvedLabel: null,
     };
     setApproval((current) => (current?.id === card.id ? current : card));
     setShowCommand(false);
@@ -254,6 +306,7 @@ export function App() {
     const live = liveRef.current;
     if (live) {
       const replay = await client.replay(live, seqs.current[live] ?? 0);
+      syncOpenApprovals(replay.openRequests);
       if (replay.truncated) {
         await openSession(live);
       }
@@ -346,6 +399,7 @@ export function App() {
       liveRef.current = opened.sessionId;
       setLiveId(opened.sessionId);
       setLines(history.map((row) => ({ role: row.role || "assistant", text: row.text })));
+      syncOpenApprovals(opened.openRequests);
       setStatus("Connected");
     } catch (error) {
       setStatus(error instanceof Error ? error.message : "Could not open the session");
@@ -386,14 +440,24 @@ export function App() {
     }
   }
 
-  function answer(choice: "once" | "deny") {
-    if (!approval) {
+  async function answer(choice: "once" | "deny") {
+    const card = approval;
+    const client = clientRef.current;
+    if (!card || card.resolvedLabel || !client) {
       return;
     }
-    clientRef.current?.respond(approval.id, { choice });
-    setApproval(null);
-    setShowCommand(false);
-    setStatus(choice === "deny" ? "Denied" : "Allowed once");
+    answeredHere.current.add(card.id);
+    resolvedIds.current.add(card.id);
+    try {
+      await client.answerApproval(card.sessionId, card.requestId, choice);
+      setApproval((current) => (current?.id === card.id ? null : current));
+      setShowCommand(false);
+      setStatus(choice === "deny" ? "Denied" : "Allowed once");
+    } catch (error) {
+      answeredHere.current.delete(card.id);
+      resolvedIds.current.delete(card.id);
+      setStatus(error instanceof Error ? error.message : "Approval failed");
+    }
   }
 
   function stageFile(file: File) {
@@ -469,38 +533,46 @@ export function App() {
                 </Button>
               ))}
             </div>
-            {approval ? (
-              <section className="border border-primary p-3">
-                <p className="font-[family-name:var(--font-label)] text-[12px] tracking-[0.08em] text-primary uppercase">Needs you</p>
-                <p>{approval.description}</p>
-                {showCommand ? <pre className="font-mono text-sm text-muted-foreground">{approval.command}</pre> : null}
-                <div className="mt-2 flex gap-2">
-                  <Button type="button" onClick={() => answer("once")}>
-                    Allow once
-                  </Button>
-                  <Button type="button" onClick={() => answer("deny")}>
-                    Deny
-                  </Button>
-                  <Button type="button" onClick={() => setShowCommand((value) => !value)}>
-                    {showCommand ? "Hide command" : "Full command"}
-                  </Button>
-                </div>
-              </section>
-            ) : null}
             {lines.map((line, index) => (
               <article key={`${index}-${line.role}`}>
                 <p className="font-[family-name:var(--font-label)] text-[12px] tracking-[0.08em] text-muted-foreground uppercase">
                   {line.role}
                 </p>
                 {line.role === "assistant" ? (
-                  <div className="reply">
-                    <ReactMarkdown remarkPlugins={[remarkGfm]}>{line.text || "…"}</ReactMarkdown>
-                  </div>
+                  <Reply text={line.text} />
+                ) : line.role === "user" ? (
+                  <UserLine text={line.text} />
                 ) : (
                   <p className={line.role === "error" ? "text-[var(--error)]" : undefined}>{line.text}</p>
                 )}
               </article>
             ))}
+            {approval ? (
+              <section ref={approvalRef} className="border border-primary p-3">
+                <p className="font-[family-name:var(--font-label)] text-[12px] tracking-[0.08em] text-primary uppercase">Needs you</p>
+                <p>{approval.description}</p>
+                {approval.resolvedLabel ? (
+                  <p className="mt-2 font-[family-name:var(--font-label)] text-[12px] tracking-[0.08em] text-primary uppercase">
+                    {approval.resolvedLabel}
+                  </p>
+                ) : (
+                  <>
+                    {showCommand ? <pre className="font-mono text-sm text-muted-foreground">{approval.command}</pre> : null}
+                    <div className="mt-2 flex gap-2">
+                      <Button type="button" onClick={() => void answer("once")}>
+                        Allow once
+                      </Button>
+                      <Button type="button" onClick={() => void answer("deny")}>
+                        Deny
+                      </Button>
+                      <Button type="button" onClick={() => setShowCommand((value) => !value)}>
+                        {showCommand ? "Hide command" : "Full command"}
+                      </Button>
+                    </div>
+                  </>
+                )}
+              </section>
+            ) : null}
           </>
         ) : (
           <form

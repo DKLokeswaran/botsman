@@ -53,19 +53,119 @@ body {
   font-family: var(--font-body);
 }
 
-.reply :where(p, ul, ol) {
-  margin: 0.3rem 0;
+.reply :where(p, ul, ol, blockquote) {
+  margin: 0.35rem 0;
 }
-.reply :where(pre) {
-  overflow-x: auto;
-  background: var(--bg-3);
-  border-radius: 4px;
-  padding: 0.6rem 0.75rem;
+.reply :where(ul) {
+  list-style: disc;
+  padding-inline-start: 1.25rem;
+}
+.reply :where(ol) {
+  list-style: decimal;
+  padding-inline-start: 1.25rem;
+}
+.reply :where(li) {
+  margin: 0.15rem 0;
+}
+.reply :where(h1, h2, h3, h4, h5, h6) {
+  font-family: var(--font-display);
+  font-weight: 700;
+  margin: 0.7rem 0 0.3rem;
+  line-height: 1.25;
+}
+.reply :where(a) {
+  color: var(--cyan);
+}
+.reply :where(blockquote) {
+  padding-inline-start: 0.75rem;
+  border-inline-start: 2px solid var(--accent);
+  color: var(--fg-muted);
+}
+.reply :where(table) {
+  width: 100%;
+  border-collapse: collapse;
+  margin: 0.4rem 0;
+}
+.reply :where(th, td) {
+  border: 1px solid var(--line);
+  padding: 0.3rem 0.5rem;
+  text-align: start;
+}
+.reply :where(th) {
+  font-family: var(--font-label);
+  font-size: 12px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
 }
 .reply :where(code) {
   font-family: var(--font-mono);
   font-size: 0.9em;
 }
-.reply :where(a) {
+.reply :where(p code, li code, td code) {
+  background: var(--bg-3);
+  padding: 0.05em 0.35em;
+  border-radius: 3px;
+}
+.fence {
+  margin: 0.4rem 0;
+  background: var(--bg-3);
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  overflow: hidden;
+}
+.fence-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  padding: 0.3rem 0.55rem;
+  border-bottom: 1px solid var(--line);
+}
+.fence-bar span {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  color: var(--fg-muted);
+}
+.fence-bar button,
+.more {
+  font-family: var(--font-label);
+  font-size: 12px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--accent);
+  background: none;
+  border: 0;
+  padding: 0;
+  cursor: pointer;
+}
+.fence pre {
+  margin: 0;
+  overflow-x: auto;
+  padding: 0.6rem 0.75rem;
+}
+.fence code {
+  font-family: var(--font-mono);
+  font-size: 0.9em;
+}
+.hljs-keyword,
+.hljs-built_in,
+.hljs-title,
+.hljs-function {
+  color: var(--accent);
+}
+.hljs-string,
+.hljs-attr {
   color: var(--cyan);
+}
+.hljs-comment,
+.hljs-quote {
+  color: var(--fg-muted);
+}
+.hljs-number,
+.hljs-literal {
+  color: #7dd3fc;
+}
+.user-text {
+  margin: 0;
+  white-space: pre-wrap;
 }

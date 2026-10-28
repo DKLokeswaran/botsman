@@ -149,6 +149,37 @@ test("handshake, approval, and reconnect replay", async () => {
   }
 });
 
+test("two clients share one approval", async () => {
+  const fake = await startFake();
+  const first = client(fake.port);
+  const second = client(fake.port);
+  try {
+    const material = await first.login("tester", "tester");
+    const firstCard = first.waitForServerRequest("approval");
+    const secondCard = second.waitForServerRequest("approval");
+    const cancel = second.waitForEvent("request.cancel");
+    await first.connect(material.accessToken);
+    await second.connect(material.accessToken);
+    const left = await firstCard;
+    const right = await secondCard;
+    assert.equal(left.id, right.id);
+    await first.answerApproval(String(left.params.session_id), String(left.params.request_id), "once");
+    const gone = await cancel;
+    assert.equal(gone.payload.id, left.id);
+    assert.equal(gone.payload.method, "approval");
+    assert.equal(gone.payload.reason, "resolved");
+    const replay = await second.replay("live-1", 0);
+    assert.equal(
+      replay.openRequests.some((request) => request.id === left.id),
+      false,
+    );
+  } finally {
+    first.close();
+    second.close();
+    fake.stop();
+  }
+});
+
 test("session cookies accept host and secure prefixes", () => {
   const headers = [
     {

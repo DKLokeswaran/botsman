@@ -14,6 +14,7 @@ CONTRACT = ROOT / "gateway-contract.openrpc.json"
 REQUIRED_METHODS = [
     "approval.pending",
     "approval.received",
+    "approval.respond",
     "client.capabilities",
     "ping",
     "profiles.list",

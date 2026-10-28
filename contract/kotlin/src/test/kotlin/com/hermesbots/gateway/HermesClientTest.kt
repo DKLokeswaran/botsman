@@ -126,8 +126,8 @@ class HermesClientTest {
                 val sessions = gateway.listSessions()
                 assertEquals("sess-1", sessions.first().id)
                 val opened = gateway.resumeSession("sess-1")
-                assertEquals("live-1", opened.first)
-                assertEquals("Say hello", opened.second.first().text)
+                assertEquals("live-1", opened.sessionId)
+                assertEquals("Say hello", opened.messages.first().text)
                 gateway.submit("live-1", "Say hello")
                 approvalJob.await() to completeJob.await()
             }
@@ -160,6 +160,40 @@ class HermesClientTest {
             }
         } finally {
             gateway.close()
+        }
+    }
+
+    @Test
+    fun twoClientsShareOneApproval() = withFake { port, http ->
+        val first = HermesClient("http://127.0.0.1:$port", http)
+        val second = HermesClient("http://127.0.0.1:$port", http)
+        try {
+            val material = runBlocking { first.login("tester", "tester") }
+            val (card, other, cancel) = runBlocking {
+                val firstCard = async { first.waitForServerRequest("approval") }
+                val secondCard = async { second.waitForServerRequest("approval") }
+                val cancelJob = async { second.waitForEvent("request.cancel") }
+                yield()
+                first.connect(material.accessToken)
+                second.connect(material.accessToken)
+                val left = firstCard.await()
+                val right = secondCard.await()
+                first.answerApproval(
+                    left.params.optString("session_id"),
+                    left.params.optString("request_id"),
+                    "once",
+                )
+                Triple(left, right, cancelJob.await())
+            }
+            assertEquals(card.id, other.id)
+            assertEquals(card.id, cancel.payload.optString("id"))
+            assertEquals("approval", cancel.payload.optString("method"))
+            assertEquals("resolved", cancel.payload.optString("reason"))
+            val replay = runBlocking { second.replay("live-1", 0) }
+            assertTrue(replay.openRequests.none { it.id == card.id })
+        } finally {
+            first.close()
+            second.close()
         }
     }
 }

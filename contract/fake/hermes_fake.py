@@ -48,6 +48,7 @@ class State:
         self.approval_sent = False
         self.activated = False
         self.answers: list[dict] = []
+        self.sockets: list = []
 
     def mint_session(self, username: str) -> tuple[str, str]:
         access = "at." + secrets.token_urlsafe(18)
@@ -109,6 +110,7 @@ class State:
 
 
 STATE = State()
+WRITE_LOCK = threading.Lock()
 
 
 def _json_bytes(payload: dict) -> bytes:
@@ -147,8 +149,9 @@ def _write_frame(wfile, opcode: int, data: bytes) -> None:
         header.append(127)
         header += struct.pack("!Q", size)
     try:
-        wfile.write(bytes(header) + data)
-        wfile.flush()
+        with WRITE_LOCK:
+            wfile.write(bytes(header) + data)
+            wfile.flush()
     except (BrokenPipeError, ConnectionResetError, OSError):
         return
 
@@ -247,10 +250,10 @@ def _approval_params() -> dict:
     }
 
 
-def _ensure_approval() -> dict | None:
+def _ensure_approval() -> None:
     with STATE.lock:
         if STATE.approval_sent:
-            return None
+            return
         STATE.approval_sent = True
         frame = {
             "id": "srq-phase0",
@@ -258,7 +261,56 @@ def _ensure_approval() -> dict | None:
             "params": _approval_params(),
         }
         STATE.open_requests[frame["id"]] = frame
-        return frame
+
+
+def _push_open_requests(wfile) -> None:
+    with STATE.lock:
+        frames = [dict(item) for item in STATE.open_requests.values()]
+    for approval in frames:
+        _send_json(
+            wfile,
+            {
+                "jsonrpc": "2.0",
+                "id": approval["id"],
+                "method": approval["method"],
+                "params": approval["params"],
+            },
+        )
+
+
+def _find_open(rpc_id: str | None, request_id: str | None) -> dict | None:
+    if rpc_id:
+        return STATE.open_requests.get(rpc_id)
+    if request_id:
+        for item in STATE.open_requests.values():
+            if str(item["params"].get("request_id")) == str(request_id):
+                return item
+        return None
+    if not STATE.open_requests:
+        return None
+    return next(iter(STATE.open_requests.values()))
+
+
+def _settle_approval(rpc_id: str | None, request_id: str | None, choice) -> int:
+    """Pop the open approval and tell every socket, matching Hermes request.cancel."""
+    with STATE.lock:
+        match = _find_open(rpc_id, request_id)
+        if match is None:
+            return 0
+        STATE.open_requests.pop(match["id"], None)
+        STATE.next_seq += 1
+        params = {
+            "type": "request.cancel",
+            "session_id": match["params"].get("session_id") or SESSION_LIVE,
+            "payload": {"id": match["id"], "method": match["method"], "reason": "resolved"},
+            "seq": STATE.next_seq,
+        }
+        STATE.events.append(params)
+        STATE.answers.append({"id": match["id"], "choice": choice, "request_id": match["params"].get("request_id")})
+        sockets = list(STATE.sockets)
+    for sock in sockets:
+        _send_json(sock, _event_frame(params))
+    return 1
 
 
 def _dispatch(wfile, req: dict) -> None:
@@ -277,17 +329,8 @@ def _dispatch(wfile, req: dict) -> None:
             _ok(rid, {"server_requests": ["approval", "clarify"], "declines_not_shown": True}),
         )
         if params.get("server_requests"):
-            approval = _ensure_approval()
-            if approval is not None:
-                _send_json(
-                    wfile,
-                    {
-                        "jsonrpc": "2.0",
-                        "id": approval["id"],
-                        "method": approval["method"],
-                        "params": approval["params"],
-                    },
-                )
+            _ensure_approval()
+            _push_open_requests(wfile)
         return
     if method == "profiles.list":
         _send_json(wfile, _ok(rid, PROFILES))
@@ -378,6 +421,15 @@ def _dispatch(wfile, req: dict) -> None:
     if method == "approval.received":
         _send_json(wfile, _ok(rid, {"acknowledged": True}))
         return
+    if method == "approval.respond":
+        request_id = params.get("request_id")
+        count = _settle_approval(
+            None,
+            str(request_id) if request_id else None,
+            params.get("choice"),
+        )
+        _send_json(wfile, _ok(rid, {"resolved": count}))
+        return
     if method == "approval.pending":
         with STATE.lock:
             approvals = [
@@ -424,32 +476,40 @@ def _handle_socket(handler: BaseHTTPRequestHandler, ticket: str) -> None:
             }
         ),
     )
-    while True:
-        frame = _read_frame(handler.rfile)
-        if frame is None:
-            return
-        opcode, data = frame
-        if opcode == 0x8:
-            _write_frame(handler.wfile, 0x8, data[:2])
-            return
-        if opcode == 0x9:
-            _write_frame(handler.wfile, 0xA, data)
-            continue
-        if opcode != 0x1:
-            continue
-        try:
-            message = json.loads(data.decode("utf-8"))
-        except json.JSONDecodeError:
-            _send_json(handler.wfile, _err(None, -32700, "parse error"))
-            continue
-        if isinstance(message, dict) and "method" not in message and "id" in message:
-            result = message.get("result") if isinstance(message.get("result"), dict) else {}
-            with STATE.lock:
-                STATE.open_requests.pop(str(message["id"]), None)
-                STATE.answers.append({"id": message["id"], "result": result, "error": message.get("error")})
-            continue
-        if isinstance(message, dict) and message.get("method"):
-            _dispatch(handler.wfile, message)
+    with STATE.lock:
+        STATE.sockets.append(handler.wfile)
+    try:
+        while True:
+            frame = _read_frame(handler.rfile)
+            if frame is None:
+                return
+            opcode, data = frame
+            if opcode == 0x8:
+                _write_frame(handler.wfile, 0x8, data[:2])
+                return
+            if opcode == 0x9:
+                _write_frame(handler.wfile, 0xA, data)
+                continue
+            if opcode != 0x1:
+                continue
+            try:
+                message = json.loads(data.decode("utf-8"))
+            except json.JSONDecodeError:
+                _send_json(handler.wfile, _err(None, -32700, "parse error"))
+                continue
+            if isinstance(message, dict) and "method" not in message and "id" in message:
+                result = message.get("result") if isinstance(message.get("result"), dict) else {}
+                choice = result.get("choice") if isinstance(result, dict) else None
+                _settle_approval(str(message["id"]), None, choice)
+                continue
+            if isinstance(message, dict) and message.get("method"):
+                _dispatch(handler.wfile, message)
+    finally:
+        with STATE.lock:
+            try:
+                STATE.sockets.remove(handler.wfile)
+            except ValueError:
+                pass
 
 
 class Handler(BaseHTTPRequestHandler):

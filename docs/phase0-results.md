@@ -4,9 +4,9 @@ This file records what was exercised while the test apps were built, and what st
 
 ## Verified here
 
-- Hermes v0.22.5 contract file is pinned. `contract/check_contract.py` accepts it. The clients call 13 methods that are in the file. `gateway.ping` is not in the file, which matches the gateway source.
-- The TypeScript client tests pass against `contract/fake/hermes_fake.py`: bad password, cookie login, single-use ticket, refresh rotation, `gateway.ready`, `client.capabilities`, one approval, profiles, sessions, a prompt and `message.complete`, then a second connection that refreshes and replays with `session.events.since`.
-- The Kotlin client tests pass against the same fake server for the same cases.
+- Hermes v0.22.5 contract file is pinned. `contract/check_contract.py` accepts it. The methods the clients call, including `approval.respond`, are in the file. `gateway.ping` is not in the file, which matches the gateway source.
+- The TypeScript client tests pass against `contract/fake/hermes_fake.py`: bad password, cookie login, single-use ticket, refresh rotation, `gateway.ready`, `client.capabilities`, one approval, profiles, sessions, a prompt and `message.complete`, then a second connection that refreshes and replays with `session.events.since`. A separate test connects two clients: both see the same approval, one calls `approval.respond`, the other receives `request.cancel` with reason `resolved`, and a later replay does not return that approval in `open_requests`.
+- The Kotlin client tests pass against the same fake server for the same cases, including the two-client approval.
 - `notifier/test_notify.py` passes. Dry-run against the fake server prints an approval and a finished reply, and does not answer the approval.
 - `tokens/build_tokens.py --check` matches `tokens/zoetrik.json`.
 - The Windows frontend typechecks and `vite build` succeeds.
@@ -48,8 +48,8 @@ The dashboard rejects a Host header that is not the bound address or the configu
 - The Windows vault is the `keyring` crate talking to Credential Manager, behind Tauri commands. The official Tauri plugins do not wrap Credential Manager. Stronghold was not used.
 - The notifier joins sessions that are already live. It advertises `server_requests` so Hermes does not drop a question when the notifier is the only socket. It never answers. A real Allow or Deny from an app still settles the question. See `notifier/README.md`.
 - The clients are a thin hand-written set checked against the contract, not generated wrappers for all 258 methods.
-- Phase 0 approval buttons are Allow once and Deny. Unknown server requests from the apps are answered with `{value: ""}` so a question the test UI cannot show does not sit forever. That answer does settle the question.
-- Android image paste is a **Paste image** button. A Compose text field does not receive an image paste the way a Windows textarea does.
+- Phase 0 approval buttons are Allow once and Deny. The card is rendered once, after the transcript. Answering calls `approval.respond` so Hermes can emit `request.cancel` while the server request is still open. The device that tapped clears the card. Every other client marks it **Approved on another device**. A replay that no longer lists the request does not put the buttons back. Unknown server requests from the apps are answered with `{value: ""}` so a question the test UI cannot show does not sit forever. That answer does settle the question.
+- Android image paste, image pick, and file pick sit in the attach menu beside the message field. A Compose text field does not receive an image paste the way a Windows textarea does. The field is given no minimum width, so the attach icon, the field, and the send icon fit a 360dp screen without a horizontal scroll.
 - Attachments are shown and not uploaded.
 - The Windows installer is an unsigned per-user NSIS exe. No paid signing.
 - CI runs on pull requests and on pushes to `main`, with path filters, so a push to the pull request branch is not built a second time. The repository is private and the workflows stay on the free runners.

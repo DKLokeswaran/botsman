@@ -411,7 +411,10 @@ export class HermesClient {
     return String(result.session_id ?? "");
   }
 
-  async resumeSession(sessionId: string, profile?: string): Promise<{ sessionId: string; messages: TranscriptMessage[] }> {
+  async resumeSession(
+    sessionId: string,
+    profile?: string,
+  ): Promise<{ sessionId: string; messages: TranscriptMessage[]; openRequests: ServerRequest[] }> {
     const result = asRecord(
       await this.rpc("session.resume", {
         session_id: sessionId,
@@ -420,10 +423,11 @@ export class HermesClient {
         ...(profile ? { profile } : {}),
       }),
     );
-    this.deliverOpenRequests(result.open_requests);
+    const openRequests = this.deliverOpenRequests(result.open_requests);
     return {
       sessionId: String(result.session_id || sessionId),
       messages: messagesFrom(result.messages),
+      openRequests,
     };
   }
 
@@ -463,6 +467,20 @@ export class HermesClient {
 
   async noteApprovalVisible(sessionId: string, requestId: string): Promise<void> {
     await this.rpc("approval.received", { session_id: sessionId, request_id: requestId });
+  }
+
+  /** Settle an approval so Hermes emits request.cancel to every connected client. */
+  async answerApproval(sessionId: string, requestId: string, choice: string): Promise<void> {
+    const result = asRecord(
+      await this.rpc("approval.respond", {
+        session_id: sessionId,
+        request_id: requestId,
+        choice,
+      }),
+    );
+    if (result.resolved === 0) {
+      throw new HermesError("Approval was already resolved");
+    }
   }
 
   respond(id: string, result: Record<string, unknown>): void {
@@ -580,16 +598,19 @@ export class HermesClient {
     }
   }
 
-  private deliverOpenRequests(value: unknown): void {
+  private deliverOpenRequests(value: unknown): ServerRequest[] {
     if (!Array.isArray(value)) {
-      return;
+      return [];
     }
+    const requests: ServerRequest[] = [];
     for (const entry of value) {
       const request = requestFromOpen(entry);
       if (request) {
+        requests.push(request);
         this.publishRequest(request);
       }
     }
+    return requests;
   }
 
   private handleClose(info: SocketClose): void {
