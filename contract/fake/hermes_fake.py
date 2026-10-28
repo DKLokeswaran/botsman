@@ -496,7 +496,7 @@ class Handler(BaseHTTPRequestHandler):
             username = str(incoming.get("username") or "")
             password = str(incoming.get("password") or "")
             if username != FAKE_USER or password != FAKE_PASSWORD:
-                self._json_response(401, {"error": "Invalid credentials"})
+                self._json_response(401, {"detail": "Invalid credentials"})
                 return
             access, refresh = STATE.mint_session(username)
             self._json_response(
@@ -521,7 +521,7 @@ class Handler(BaseHTTPRequestHandler):
         if parsed.path == "/auth/native/refresh":
             rotated = STATE.rotate(str(incoming.get("refresh_token") or ""))
             if rotated is None:
-                self._json_response(401, {"error": "session_expired"})
+                self._json_response(401, {"detail": "Session expired"})
                 return
             self._json_response(200, rotated)
             return

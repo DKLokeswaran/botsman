@@ -106,6 +106,56 @@ export class HermesError extends Error {
   }
 }
 
+const SECRET_QUERY = /((?:^|[\s?&])(?:ticket|token|access_token|refresh_token|password)=)[^&#\s"']*/gi;
+const SECRET_JSON = /("(?:password|access_token|refresh_token|ticket|token)"\s*:\s*")[^"]*(")/gi;
+const BEARER = /Bearer\s+\S+/gi;
+const COOKIE_VALUE = /((?:__Host-|__Secure-)?hermes_session_[A-Za-z0-9_-]+)=[^;\s,]*/gi;
+const USERINFO = /:\/\/[^/\s@]+:[^/\s@]+@/g;
+
+/** Drop passwords, cookies, and tokens. The surrounding label stays so the failure is still readable. */
+export function scrubSecrets(text: string): string {
+  return text
+    .replace(USERINFO, "://[redacted]@")
+    .replace(BEARER, "Bearer [redacted]")
+    .replace(COOKIE_VALUE, "$1=[redacted]")
+    .replace(SECRET_QUERY, "$1[redacted]")
+    .replace(SECRET_JSON, '$1[redacted]$2');
+}
+
+export function publicUrl(url: string): string {
+  return scrubSecrets(url);
+}
+
+function readDetail(body: string): string | null {
+  try {
+    const detail = asRecord(JSON.parse(body)).detail;
+    if (typeof detail !== "string") {
+      return null;
+    }
+    const trimmed = scrubSecrets(detail).trim();
+    return trimmed || null;
+  } catch {
+    return null;
+  }
+}
+
+/** `Login failed (401: Invalid credentials)`. */
+export function httpFailureMessage(action: string, status: number, body: string): string {
+  const detail = readDetail(body);
+  return detail ? `${action} (${status}: ${detail})` : `${action} (${status})`;
+}
+
+/** Transport failure, including a scope error, DNS, connection refused, or a timeout, plus the URL. */
+export function transportFailureMessage(action: string, url: string, error: unknown): string {
+  const raw = error instanceof Error ? error.message : String(error);
+  const reason = scrubSecrets(raw).trim() || "request failed";
+  const safeUrl = publicUrl(url);
+  if (reason.includes(safeUrl)) {
+    return `${action}: ${reason}`;
+  }
+  return `${action}: ${reason} URL: ${safeUrl}`;
+}
+
 type Pending = {
   resolve: (value: unknown) => void;
   reject: (error: Error) => void;
@@ -225,36 +275,56 @@ export class HermesClient {
     this.socket = options.socket;
   }
 
+  private async request(
+    url: string,
+    input: { method: string; url: string; headers?: Record<string, string>; body?: string },
+    action: string,
+  ): Promise<HttpResponse> {
+    try {
+      return await this.http.request(input);
+    } catch (error) {
+      throw new HermesError(transportFailureMessage(action, url, error));
+    }
+  }
+
   async login(username: string, password: string): Promise<LoginMaterial> {
-    const response = await this.http.request({
+    const url = `${this.serverUrl}/auth/password-login`;
+    const response = await this.request(url, {
       method: "POST",
-      url: `${this.serverUrl}/auth/password-login`,
+      url,
       headers: { "content-type": "application/json" },
       body: JSON.stringify({ provider: "basic", username, password, next: "/" }),
-    });
-    if (response.status !== 200) {
-      throw new HermesError("Login failed", response.status);
-    }
+    }, "Login failed");
     const accessToken = sessionCookie(response.headers, "hermes_session_at");
     const refreshToken = sessionCookie(response.headers, "hermes_session_rt");
     const provider = sessionCookie(response.headers, "hermes_session_provider") ?? "basic";
-    if (!accessToken || !refreshToken) {
-      throw new HermesError("Login response did not include session cookies", response.status);
+    // A redirect is not followed. Cookies on that response still count, so Set-Cookie is not dropped.
+    if (accessToken && refreshToken) {
+      return { username, accessToken, refreshToken, provider, expiresAt: null };
     }
-    return { username, accessToken, refreshToken, provider, expiresAt: null };
+    if (response.status !== 200) {
+      throw new HermesError(httpFailureMessage("Login failed", response.status, response.body), response.status);
+    }
+    throw new HermesError("Login response did not include session cookies", response.status);
   }
 
   async refresh(material: Pick<LoginMaterial, "username" | "refreshToken" | "provider">): Promise<LoginMaterial> {
-    const response = await this.http.request({
+    const url = `${this.serverUrl}/auth/native/refresh`;
+    const response = await this.request(url, {
       method: "POST",
-      url: `${this.serverUrl}/auth/native/refresh`,
+      url,
       headers: { "content-type": "application/json" },
       body: JSON.stringify({ refresh_token: material.refreshToken, provider: material.provider }),
-    });
+    }, "Refresh failed");
     if (response.status !== 200) {
-      throw new HermesError("Session expired", response.status);
+      throw new HermesError(httpFailureMessage("Refresh failed", response.status, response.body), response.status);
     }
-    const body = asRecord(JSON.parse(response.body));
+    let body: Record<string, unknown>;
+    try {
+      body = asRecord(JSON.parse(response.body));
+    } catch {
+      throw new HermesError("Refresh response did not include tokens", response.status);
+    }
     const accessToken = String(body.access_token ?? "");
     const refreshToken = String(body.refresh_token ?? "");
     if (!accessToken || !refreshToken) {
@@ -270,13 +340,17 @@ export class HermesClient {
   }
 
   async ticket(accessToken: string): Promise<string> {
-    const response = await this.http.request({
+    const url = `${this.serverUrl}/api/auth/ws-ticket`;
+    const response = await this.request(url, {
       method: "POST",
-      url: `${this.serverUrl}/api/auth/ws-ticket`,
+      url,
       headers: { authorization: `Bearer ${accessToken}` },
-    });
+    }, "Could not mint a websocket ticket");
     if (response.status !== 200) {
-      throw new HermesError("Could not mint a websocket ticket", response.status);
+      throw new HermesError(
+        httpFailureMessage("Could not mint a websocket ticket", response.status, response.body),
+        response.status,
+      );
     }
     const body = asRecord(JSON.parse(response.body));
     const ticket = String(body.ticket ?? "");

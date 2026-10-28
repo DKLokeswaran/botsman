@@ -1,7 +1,7 @@
 {
   "$schema": "../gen/schemas/desktop-schema.json",
   "identifier": "default",
-  "description": "Phase 0 window. Hermes traffic is native HTTP and WebSocket, any host the user types.",
+  "description": "Phase 0 window. Hermes traffic is native HTTP and WebSocket. The http(s) and ws(s) patterns allow any host the user types, including a Tailscale name, a bare IP, and an explicit port.",
   "windows": ["main"],
   "permissions": [
     "core:default",

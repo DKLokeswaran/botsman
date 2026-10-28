@@ -30,6 +30,9 @@ import kotlinx.coroutines.withContext
 import okhttp3.OkHttpClient
 import org.json.JSONObject
 
+private const val DEFAULT_SERVER = "http://100.113.35.96:9119"
+private const val LEGACY_SERVER = "http://devbox.tail2eeb02.ts.net:9119"
+
 data class ChatLine(val role: String, val text: String)
 data class PendingApproval(
     val id: String,
@@ -41,7 +44,7 @@ data class PendingApproval(
 data class StagedFile(val name: String, val image: ImageBitmap?)
 
 data class Phase0State(
-    val serverUrl: String = "http://devbox.tail2eeb02.ts.net:9119",
+    val serverUrl: String = DEFAULT_SERVER,
     val username: String = "",
     val password: String = "",
     val status: String = "Signed out",
@@ -154,9 +157,18 @@ class Phase0Model(app: Application) : AndroidViewModel(app) {
     init {
         val saved = secure.load()
         val endpoint = app.getSharedPreferences(PUSH_PREFS, Context.MODE_PRIVATE)
+        val storedUrl = plain.getString("server_url", null)?.trim()?.trimEnd('/')
+        val serverUrl = if (storedUrl.isNullOrEmpty() || storedUrl.equals(LEGACY_SERVER, ignoreCase = true)) {
+            DEFAULT_SERVER
+        } else {
+            storedUrl
+        }
+        if (serverUrl != storedUrl) {
+            plain.edit().putString("server_url", serverUrl).apply()
+        }
         _state.update {
             it.copy(
-                serverUrl = plain.getString("server_url", it.serverUrl) ?: it.serverUrl,
+                serverUrl = serverUrl,
                 username = saved?.username ?: "",
                 pushEndpoint = endpoint.getString(PUSH_ENDPOINT, "") ?: "",
                 pushStatus = endpoint.getString(PUSH_STATUS, it.pushStatus) ?: it.pushStatus,
@@ -313,12 +325,15 @@ class Phase0Model(app: Application) : AndroidViewModel(app) {
             }
             establish(refreshed)
         } catch (error: Exception) {
+            val message = error.message ?: "Refresh failed"
             if (error is HermesException && error.status == 401) secure.clearSecret()
+            val rejected = error is HermesException && error.status == 401
             _state.update {
                 it.copy(
                     username = saved.username,
                     connected = false,
-                    status = "Sign in again",
+                    reconnecting = if (rejected) false else it.reconnecting,
+                    status = if (rejected) "Sign in again. $message" else message,
                 )
             }
         }
@@ -371,7 +386,10 @@ class Phase0Model(app: Application) : AndroidViewModel(app) {
                 delay(wait)
                 val saved = secure.load()
                 if (saved == null || saved.refreshToken.isEmpty()) {
-                    _state.update { it.copy(reconnecting = false, status = "Sign in again") }
+                    _state.update {
+                        val status = if (it.status.startsWith("Sign in again")) it.status else "Sign in again"
+                        it.copy(reconnecting = false, status = status)
+                    }
                     return@launch
                 }
                 try {

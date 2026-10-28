@@ -19,8 +19,20 @@ import { Input } from "./components/ui/input";
 import { Textarea } from "./components/ui/textarea";
 import { tauriHttp, tauriSocket } from "./gateway";
 
-const DEFAULT_SERVER = "http://devbox.tail2eeb02.ts.net:9119";
+const DEFAULT_SERVER = "http://100.113.35.96:9119";
+const LEGACY_SERVER = "http://devbox.tail2eeb02.ts.net:9119";
 const SERVER_KEY = "hermes-bots-server";
+
+function preferredServer(stored: string | null): string {
+  if (!stored) {
+    return DEFAULT_SERVER;
+  }
+  const normalized = stored.trim().replace(/\/+$/, "");
+  if (normalized.toLowerCase() === LEGACY_SERVER) {
+    return DEFAULT_SERVER;
+  }
+  return normalized;
+}
 
 type Line = { role: string; text: string };
 type Approval = {
@@ -99,9 +111,11 @@ export function App() {
 
   useEffect(() => {
     const stored = localStorage.getItem(SERVER_KEY);
-    if (stored) {
-      setServerUrl(stored);
+    const url = preferredServer(stored);
+    if (stored !== url) {
+      localStorage.setItem(SERVER_KEY, url);
     }
+    setServerUrl(url);
     void isEnabled()
       .then(setAutostart)
       .catch(() => undefined);
@@ -116,7 +130,7 @@ export function App() {
           setStatus("Sign in again");
           return;
         }
-        await restore(saved, stored || DEFAULT_SERVER);
+        await restore(saved, url);
       } catch {
         setStatus("Sign in again");
       }
@@ -258,13 +272,14 @@ export function App() {
       await openClient(url, material);
       return true;
     } catch (error) {
+      const message = error instanceof Error ? error.message : "Refresh failed";
       if (error instanceof HermesError && error.status === 401) {
         materialRef.current = null;
         await invoke("vault_clear_secret").catch(() => undefined);
         setReconnecting(false);
-        setStatus("Sign in again");
+        setStatus(`Sign in again. ${message}`);
       } else {
-        setStatus("Reconnecting");
+        setStatus(message);
       }
       setUsername(saved.username);
       setConnected(false);

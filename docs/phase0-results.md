@@ -38,6 +38,8 @@ One name is off. The report says `ping` is answered on the read thread and that 
 
 `session_authority` is only present when the messaging gateway mounted the dashboard. A normal `hermes serve` does not set it. The apps speak the legacy session methods and show the flag when it is true.
 
+The dashboard rejects a Host header that is not the bound address or the configured public hostname. `devbox.tail2eeb02.ts.net` returns HTTP 400 `{"detail":"Invalid Host header. Dashboard requests must use the bound hostname or the configured public hostname."}`. The bound address `http://100.113.35.96:9119` is accepted. Both apps default to that IP. Login and refresh failures show the status and `detail`, and a transport failure shows the reason plus the URL. Passwords, cookies, and tokens are not included.
+
 ## Judgment calls
 
 - minSdk is 26. compileSdk is 37 because current Compose (1.12, BOM 2026.09.00) requires it. The Android Gradle Plugin is 9.4.1 with built-in Kotlin 2.4.21, which is what that plugin set accepts. targetSdk is 35 so the process stays on Android 15 rules, including edge-to-edge. The screen pads with the safe drawing insets unioned with the IME inset.

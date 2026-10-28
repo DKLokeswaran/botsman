@@ -1,5 +1,6 @@
 package com.hermesbots.gateway
 
+import java.io.IOException
 import java.net.URLDecoder
 import java.net.URLEncoder
 import java.util.concurrent.ConcurrentHashMap
@@ -26,6 +27,44 @@ import org.json.JSONObject
  * OkHttp, which is what the Android app uses instead of a WebView.
  */
 class HermesException(message: String, val status: Int? = null, val code: Int? = null) : Exception(message)
+
+private val secretQuery = Regex("((?:^|[\\s?&])(?:ticket|token|access_token|refresh_token|password)=)[^&#\\s\"']*", RegexOption.IGNORE_CASE)
+private val secretJson = Regex("(\"(?:password|access_token|refresh_token|ticket|token)\"\\s*:\\s*\")[^\"]*(\")", RegexOption.IGNORE_CASE)
+private val bearer = Regex("Bearer\\s+\\S+", RegexOption.IGNORE_CASE)
+private val cookieValue = Regex("((?:__Host-|__Secure-)?hermes_session_[A-Za-z0-9_-]+)=[^;\\s,]*")
+private val userInfo = Regex("://[^/\\s@]+:[^/\\s@]+@")
+
+/** Drop passwords, cookies, and tokens. The surrounding label stays so the failure is still readable. */
+fun scrubSecrets(text: String): String {
+    return text
+        .replace(userInfo, "://[redacted]@")
+        .replace(bearer, "Bearer [redacted]")
+        .replace(cookieValue, "$1=[redacted]")
+        .replace(secretQuery, "$1[redacted]")
+        .replace(secretJson, "$1[redacted]$2")
+}
+
+fun httpFailureMessage(action: String, status: Int, body: String): String {
+    val detail = readDetail(body)
+    return if (detail == null) "$action ($status)" else "$action ($status: $detail)"
+}
+
+fun transportFailureMessage(action: String, url: String, error: Exception): String {
+    val reason = scrubSecrets(error.message ?: error.javaClass.simpleName).trim().ifEmpty { "request failed" }
+    val safeUrl = scrubSecrets(url)
+    return if (reason.contains(safeUrl)) "$action: $reason" else "$action: $reason URL: $safeUrl"
+}
+
+private fun readDetail(body: String): String? {
+    val detail = try {
+        JSONObject(body).opt("detail")
+    } catch (_: Exception) {
+        null
+    }
+    if (detail !is String) return null
+    val scrubbed = scrubSecrets(detail).trim()
+    return scrubbed.ifEmpty { null }
+}
 
 data class LoginMaterial(
     val username: String,
@@ -87,12 +126,18 @@ interface HermesListener {
 
 class HermesClient(
     serverUrl: String,
-    private val http: OkHttpClient = OkHttpClient.Builder()
+    httpClient: OkHttpClient = OkHttpClient.Builder()
         .connectTimeout(15, TimeUnit.SECONDS)
         .readTimeout(30, TimeUnit.SECONDS)
         .build(),
     var listener: HermesListener = object : HermesListener {},
 ) {
+    // Redirects are not followed. password-login can set the session cookie on a 3xx,
+    // and the next hop would not.
+    private val http = httpClient.newBuilder()
+        .followRedirects(false)
+        .followSslRedirects(false)
+        .build()
     val serverUrl: String = serverUrl.trimEnd('/')
     private val jsonMedia = "application/json".toMediaType()
     private val pending = ConcurrentHashMap<String, CompletableDeferred<Any?>>()
@@ -110,31 +155,40 @@ class HermesClient(
     private val waiterLock = Any()
 
     suspend fun login(username: String, password: String): LoginMaterial {
+        val url = "$serverUrl/auth/password-login"
         val body = JSONObject()
             .put("provider", "basic")
             .put("username", username)
             .put("password", password)
             .put("next", "/")
-        val response = post("$serverUrl/auth/password-login", body)
+        val response = post(url, body, "Login failed")
         response.use {
-            if (it.code != 200) throw HermesException("Login failed", it.code)
             val access = readSetCookie(it, "hermes_session_at")
-                ?: throw HermesException("Login response did not include session cookies", it.code)
             val refresh = readSetCookie(it, "hermes_session_rt")
-                ?: throw HermesException("Login response did not include session cookies", it.code)
             val provider = readSetCookie(it, "hermes_session_provider") ?: "basic"
-            return LoginMaterial(username, access, refresh, provider, null)
+            if (!access.isNullOrEmpty() && !refresh.isNullOrEmpty()) {
+                return LoginMaterial(username, access, refresh, provider, null)
+            }
+            val raw = it.body?.string().orEmpty()
+            if (it.code != 200) throw HermesException(httpFailureMessage("Login failed", it.code, raw), it.code)
+            throw HermesException("Login response did not include session cookies", it.code)
         }
     }
 
     suspend fun refresh(material: LoginMaterial): LoginMaterial {
+        val url = "$serverUrl/auth/native/refresh"
         val body = JSONObject()
             .put("refresh_token", material.refreshToken)
             .put("provider", material.provider)
-        val response = post("$serverUrl/auth/native/refresh", body)
+        val response = post(url, body, "Refresh failed")
         response.use {
-            if (it.code != 200) throw HermesException("Session expired", it.code)
-            val payload = JSONObject(it.body?.string().orEmpty())
+            val raw = it.body?.string().orEmpty()
+            if (it.code != 200) throw HermesException(httpFailureMessage("Refresh failed", it.code, raw), it.code)
+            val payload = try {
+                JSONObject(raw)
+            } catch (_: Exception) {
+                throw HermesException("Refresh response did not include tokens", it.code)
+            }
             val access = payload.optString("access_token")
             val refresh = payload.optString("refresh_token")
             if (access.isEmpty() || refresh.isEmpty()) {
@@ -150,16 +204,25 @@ class HermesClient(
     }
 
     suspend fun ticket(accessToken: String): String {
+        val url = "$serverUrl/api/auth/ws-ticket"
         val request = Request.Builder()
-            .url("$serverUrl/api/auth/ws-ticket")
+            .url(url)
             .header("authorization", "Bearer $accessToken")
             .post("".toRequestBody(null))
             .build()
-        http.newCall(request).execute().use { response ->
-            if (response.code != 200) throw HermesException("Could not mint a websocket ticket", response.code)
-            val payload = JSONObject(response.body?.string().orEmpty())
+        val response = try {
+            http.newCall(request).execute()
+        } catch (error: IOException) {
+            throw HermesException(transportFailureMessage("Could not mint a websocket ticket", url, error))
+        }
+        response.use {
+            val raw = it.body?.string().orEmpty()
+            if (it.code != 200) {
+                throw HermesException(httpFailureMessage("Could not mint a websocket ticket", it.code, raw), it.code)
+            }
+            val payload = JSONObject(raw)
             val ticket = payload.optString("ticket")
-            if (ticket.isEmpty()) throw HermesException("Ticket response was empty", response.code)
+            if (ticket.isEmpty()) throw HermesException("Ticket response was empty", it.code)
             return ticket
         }
     }
@@ -429,12 +492,16 @@ class HermesClient(
         }, 15, 15, TimeUnit.SECONDS)
     }
 
-    private fun post(url: String, body: JSONObject): Response {
+    private fun post(url: String, body: JSONObject, action: String): Response {
         val request = Request.Builder()
             .url(url)
             .post(body.toString().toRequestBody(jsonMedia))
             .build()
-        return http.newCall(request).execute()
+        try {
+            return http.newCall(request).execute()
+        } catch (error: IOException) {
+            throw HermesException(transportFailureMessage(action, url, error))
+        }
     }
 }
 

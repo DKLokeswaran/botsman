@@ -4,7 +4,15 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import test from "node:test";
 
-import { HermesClient, nodeHttp, nodeSocket, sessionCookie, splitCombinedSetCookie } from "../src/index.ts";
+import {
+  HermesClient,
+  HermesError,
+  nodeHttp,
+  nodeSocket,
+  sessionCookie,
+  splitCombinedSetCookie,
+  type HttpTransport,
+} from "../src/index.ts";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const fakeScript = path.resolve(here, "../../fake/hermes_fake.py");
@@ -48,7 +56,13 @@ test("login, ticket, and refresh", async () => {
   const fake = await startFake();
   try {
     const gateway = client(fake.port);
-    await assert.rejects(() => gateway.login("tester", "nope"), /Login failed/);
+    await assert.rejects(() => gateway.login("tester", "nope"), (error: unknown) => {
+      assert.ok(error instanceof HermesError);
+      assert.equal(error.status, 401);
+      assert.equal(error.message, "Login failed (401: Invalid credentials)");
+      assert.equal(error.message.includes("nope"), false);
+      return true;
+    });
     const material = await gateway.login("tester", "tester");
     assert.equal(material.username, "tester");
     assert.ok(material.accessToken.startsWith("at."));
@@ -68,7 +82,13 @@ test("login, ticket, and refresh", async () => {
 
     const rotated = await gateway.refresh(material);
     assert.notEqual(rotated.accessToken, material.accessToken);
-    await assert.rejects(() => gateway.refresh(material), /Session expired/);
+    await assert.rejects(() => gateway.refresh(material), (error: unknown) => {
+      assert.ok(error instanceof HermesError);
+      assert.equal(error.status, 401);
+      assert.equal(error.message, "Refresh failed (401: Session expired)");
+      assert.equal(error.message.includes(material.refreshToken), false);
+      return true;
+    });
   } finally {
     fake.stop();
   }
@@ -141,4 +161,69 @@ test("session cookies accept host and secure prefixes", () => {
   assert.equal(split.length, 2);
   assert.equal(sessionCookie(split, "hermes_session_at"), "at-1");
   assert.equal(sessionCookie(split, "hermes_session_rt"), "rt-1");
+});
+
+test("login surfaces Hermes detail and transport errors without secrets", async () => {
+  const password = "not-the-real-password";
+  let calls = 0;
+  const http: HttpTransport = {
+    async request(input) {
+      calls += 1;
+      if (calls === 1) {
+        assert.equal(input.url, "http://100.113.35.96:9119/auth/password-login");
+        return {
+          status: 400,
+          headers: [],
+          body: JSON.stringify({
+            detail: "Invalid Host header. Dashboard requests must use the bound hostname or the configured public hostname.",
+          }),
+        };
+      }
+      if (calls === 2) {
+        return {
+          status: 302,
+          headers: [
+            { name: "set-cookie", value: "hermes_session_at=at.kept; HttpOnly" },
+            { name: "set-cookie", value: "hermes_session_rt=rt.kept; HttpOnly" },
+            { name: "set-cookie", value: "hermes_session_provider=basic; HttpOnly" },
+            { name: "location", value: "http://100.113.35.96:9119/" },
+          ],
+          body: "",
+        };
+      }
+      throw new Error(
+        `url not allowed on the configured scope: ${input.url} password=${password} Bearer sekret ticket=sekret`,
+      );
+    },
+  };
+  const gateway = new HermesClient({
+    serverUrl: "http://100.113.35.96:9119",
+    http,
+    socket: nodeSocket(),
+  });
+  await assert.rejects(() => gateway.login("person", password), (error: unknown) => {
+    assert.ok(error instanceof HermesError);
+    assert.equal(error.status, 400);
+    assert.equal(
+      error.message,
+      "Login failed (400: Invalid Host header. Dashboard requests must use the bound hostname or the configured public hostname.)",
+    );
+    assert.equal(error.message.includes(password), false);
+    return true;
+  });
+  const kept = await gateway.login("person", password);
+  assert.equal(kept.accessToken, "at.kept");
+  assert.equal(kept.refreshToken, "rt.kept");
+  await assert.rejects(() => gateway.refresh(kept), (error: unknown) => {
+    assert.ok(error instanceof HermesError);
+    assert.equal(error.status, null);
+    assert.match(error.message, /Refresh failed: url not allowed on the configured scope/);
+    assert.match(error.message, /http:\/\/100\.113\.35\.96:9119\/auth\/native\/refresh/);
+    assert.equal(error.message.includes(password), false);
+    assert.equal(error.message.includes("sekret"), false);
+    assert.match(error.message, /password=\[redacted\]/);
+    assert.match(error.message, /ticket=\[redacted\]/);
+    assert.equal(error.message.includes(kept.refreshToken), false);
+    return true;
+  });
 });

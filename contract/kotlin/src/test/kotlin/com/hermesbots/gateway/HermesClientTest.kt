@@ -1,6 +1,7 @@
 package com.hermesbots.gateway
 
 import java.io.File
+import java.io.IOException
 import java.util.concurrent.TimeUnit
 import kotlinx.coroutines.async
 import kotlinx.coroutines.runBlocking
@@ -18,9 +19,12 @@ class HermesClientTest {
     fun loginTicketAndRefresh() = withFake { port, http ->
         val gateway = HermesClient("http://127.0.0.1:$port", http)
         try {
-            assertThrows<HermesException> {
+            val rejected = assertThrows<HermesException> {
                 runBlocking { gateway.login("tester", "nope") }
             }
+            assertEquals(401, rejected.status)
+            assertEquals("Login failed (401: Invalid credentials)", rejected.message)
+            assertTrue(!rejected.message!!.contains("nope"))
             val material = runBlocking { gateway.login("tester", "tester") }
             assertEquals("tester", material.username)
             assertTrue(material.accessToken.startsWith("at."))
@@ -56,9 +60,49 @@ class HermesClientTest {
 
             val rotated = runBlocking { gateway.refresh(material) }
             assertNotEquals(material.accessToken, rotated.accessToken)
-            assertThrows<HermesException> {
+            val expired = assertThrows<HermesException> {
                 runBlocking { gateway.refresh(material) }
             }
+            assertEquals(401, expired.status)
+            assertEquals("Refresh failed (401: Session expired)", expired.message)
+            assertTrue(!expired.message!!.contains(material.refreshToken))
+        } finally {
+            gateway.close()
+        }
+    }
+
+    @Test
+    fun loginDetailAndTransportError() {
+        val hostHeader = httpFailureMessage(
+            "Login failed",
+            400,
+            """{"detail":"Invalid Host header. Dashboard requests must use the bound hostname or the configured public hostname."}""",
+        )
+        assertEquals(
+            "Login failed (400: Invalid Host header. Dashboard requests must use the bound hostname or the configured public hostname.)",
+            hostHeader,
+        )
+        val transport = transportFailureMessage(
+            "Login failed",
+            "http://100.113.35.96:9119/auth/password-login",
+            IOException("url not allowed on the configured scope: http://100.113.35.96:9119/auth/password-login password=secret-value Bearer sekret"),
+        )
+        assertTrue(transport.contains("url not allowed on the configured scope"))
+        assertTrue(transport.contains("http://100.113.35.96:9119/auth/password-login"))
+        assertTrue(!transport.contains("secret-value"))
+        assertTrue(!transport.contains("sekret"))
+
+        val gateway = HermesClient(
+            "http://127.0.0.1:1",
+            OkHttpClient.Builder().connectTimeout(2, TimeUnit.SECONDS).readTimeout(2, TimeUnit.SECONDS).build(),
+        )
+        try {
+            val error = assertThrows<HermesException> {
+                runBlocking { gateway.login("tester", "secret-value") }
+            }
+            assertEquals(null, error.status)
+            assertTrue(error.message!!.contains("http://127.0.0.1:1/auth/password-login"), error.message)
+            assertTrue(!error.message!!.contains("secret-value"))
         } finally {
             gateway.close()
         }

@@ -4,6 +4,8 @@ A small Python process for the devbox. It logs in to Hermes v0.22.5, watches a f
 
 It binds its health port to the host you set (`BIND_HOST`, for example `100.113.35.96`). If that bind fails it exits. It does not fall back to `0.0.0.0`.
 
+`HERMES_URL` has to be the address Hermes is bound to, `http://100.113.35.96:9119`. The MagicDNS name is rejected with HTTP 400 `Invalid Host header`.
+
 ## What one socket can see
 
 Checked in Hermes v0.22.5 (`tui_gateway/server.py` `write_json`, `session_transports.py`, `server_requests.py`).

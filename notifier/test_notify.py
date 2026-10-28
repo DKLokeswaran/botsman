@@ -8,6 +8,7 @@ import os
 import subprocess
 import sys
 import tempfile
+import threading
 import time
 from pathlib import Path
 
@@ -66,19 +67,34 @@ def main() -> int:
     )
     try:
         assert proc.stdout is not None
+        assert proc.stderr is not None
+        stdout_lines: list[str] = []
+        stderr_lines: list[str] = []
+
+        def _collect(stream, sink: list[str]) -> None:
+            for line in stream:
+                sink.append(line)
+
+        threading.Thread(target=_collect, args=(proc.stdout, stdout_lines), daemon=True).start()
+        threading.Thread(target=_collect, args=(proc.stderr, stderr_lines), daemon=True).start()
         notes = []
+        seen = 0
         deadline = time.time() + 20
         while time.time() < deadline and len(notes) < 2:
-            line = proc.stdout.readline()
-            if not line:
-                if proc.poll() is not None:
+            while seen < len(stdout_lines):
+                line = stdout_lines[seen]
+                seen += 1
+                if line.startswith("NOTIFY "):
+                    notes.append(json.loads(line[len("NOTIFY ") :]))
+            if proc.poll() is not None:
+                time.sleep(0.2)
+                if seen >= len(stdout_lines):
                     break
                 continue
-            if line.startswith("NOTIFY "):
-                notes.append(json.loads(line[len("NOTIFY ") :]))
+            time.sleep(0.05)
         kinds = {item["kind"] for item in notes}
         if kinds != {"approval", "reply"}:
-            err = proc.stderr.read() if proc.stderr else ""
+            err = "".join(stderr_lines)
             print("unexpected notifications", notes, err, file=sys.stderr)
             return 1
         # The password must not appear in the child's output.

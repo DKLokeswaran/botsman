@@ -41,6 +41,10 @@ export function tauriHttp(): HttpTransport {
         method: input.method,
         headers: input.headers,
         body: input.body,
+        // Do not follow redirects. A 302 from password-login can carry Set-Cookie,
+        // and following it would present the next response, which does not.
+        maxRedirections: 0,
+        connectTimeout: 20_000,
       });
       return {
         status: response.status,

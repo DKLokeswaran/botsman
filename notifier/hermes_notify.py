@@ -197,10 +197,10 @@ class Gateway:
         status_line = header.split(b"\r\n", 1)[0].decode("ascii", errors="replace")
         if " 101 " not in status_line:
             raise RuntimeError(f"upgrade rejected: {status_line}")
-        raw.settimeout(1)
+        raw.settimeout(20)
         self.sock = raw
         self.attached.clear()
-        ready = self.read_frame()
+        ready = self.read_frame(20)
         if not ready or ready.get("method") != "event":
             raise RuntimeError("missing gateway.ready")
         self.call("client.capabilities", {"server_requests": True})
@@ -438,7 +438,7 @@ def main() -> None:
         except SystemExit:
             raise
         except Exception as exc:  # noqa: BLE001
-            print(f"reconnecting ({type(exc).__name__})", file=sys.stderr, flush=True)
+            print(f"reconnecting ({type(exc).__name__}: {exc})", file=sys.stderr, flush=True)
             gateway.close()
             gateway.access = ""
             time.sleep(backoff)

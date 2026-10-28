@@ -4,9 +4,11 @@ The apps are test builds. They are unsigned. Nothing in the repo contains your H
 
 Default server URL, already filled in:
 
-`http://devbox.tail2eeb02.ts.net:9119`
+`http://100.113.35.96:9119`
 
-The phone and the PC both need to be on your tailnet. Hermes must be running and bound to the Tailscale address, not only to localhost.
+That is the Tailscale address Hermes is bound to. The MagicDNS name `devbox.tail2eeb02.ts.net` is rejected. Hermes answers `POST /auth/password-login` with HTTP 400 and `detail` `Invalid Host header. Dashboard requests must use the bound hostname or the configured public hostname.` If the box still shows the MagicDNS name, replace it with the IP. A saved copy of that old default is replaced on the next launch.
+
+The phone and the PC both need to be on your tailnet. Hermes must be running and bound to `100.113.35.96`, not only to localhost. A failed login or refresh shows the HTTP status and Hermes's `detail`, for example `Login failed (401: Invalid credentials)`. A network or permission failure shows the reason and the URL that was tried. The password, cookies, and tokens are not shown.
 
 ## Get the builds
 
@@ -47,7 +49,7 @@ Play Protect may warn that the app is unknown. That is expected for a debug APK 
 3. Close the window with the X. The process should stay running. The tray icon is still there. Left-click it, or choose **Open**, and the window comes back. **Quit** on the tray menu exits.
 4. Open the app a second time from the Start menu while it is already running. It should focus the existing window, not start a second one.
 5. Quit from the tray. Open the app again. It should sign in by itself, without asking for the password. The status becomes **Connected**.
-6. On the server, restart Hermes if you can, or wait out the access token. The next launch should show **Sign in again** with your username already filled in, and an empty password. (A normal restart of the app alone should still auto-login. Forced expiry is the case that prefills the username.)
+6. On the server, restart Hermes if you can, or wait out the access token. The next launch should show **Sign in again** followed by the refresh failure, with your username already filled in, and an empty password. (A normal restart of the app alone should still auto-login. Forced expiry is the case that prefills the username.)
 7. Tap a session. The transcript appears. Type a short prompt in the bottom box and tap **Send**. Your line shows, then the reply. A reply that contains a short markdown list and a code fence should show the list and a monospaced block.
 8. Ask Hermes to run something that needs approval, for example a terminal command. A card titled **Needs you** appears, with **Allow once** and **Deny**. Tap one. The card goes away. Hermes continues or stops according to the tap. **Full command** shows the command text.
 9. Turn the tailnet off, or stop Hermes, while the app is open. A **Reconnecting** banner appears. Turn the network back. The banner goes away and the status returns to **Connected**. Send another prompt. The reply still arrives. Lines that finished while you were away show up again.
@@ -63,7 +65,7 @@ Play Protect may warn that the app is unknown. That is expected for a debug APK 
 3. On the login screen, tap **Register push**. If ntfy is installed, the status should move to registering and then show an endpoint URL in green. Leave that screen up long enough for the endpoint to appear. If ntfy is not installed, the status says to install it. Install ntfy from F-Droid or the Play Store, open ntfy once so it can be a distributor, come back, and tap **Register push** again.
 4. Type the server URL if it is not already right. Type your username and password. Tap **Log in**. Status becomes **Connected**. Profiles and sessions are listed.
 5. Force-stop the app from Android settings. Open it again. It should sign in by itself.
-6. To check expiry: on the server, restart Hermes if your dashboard secret is unset (that kills the session), or wait until the refresh token is rejected. Open the app. The username is filled in, the password is empty, and the status is **Sign in again**.
+6. To check expiry: on the server, restart Hermes if your dashboard secret is unset (that kills the session), or wait until the refresh token is rejected. Open the app. The username is filled in, the password is empty, and the status starts with **Sign in again** and includes the refresh failure.
 7. Tap a session. Send a prompt. The reply renders. A markdown list and a code fence should be readable.
 8. Trigger an approval. Tap **Allow once** or **Deny**. The card clears.
 9. Toggle airplane mode, or disconnect Tailscale, while a session is open. **Reconnecting** shows. Restore the network. The banner clears. A prompt still works, and anything that finished during the gap is filled in.
@@ -77,7 +79,7 @@ This is separate from the two apps. See `notifier/README.md`.
 
 1. Copy `notifier.env.example` to `~/.config/hermes-bots/notifier.env` and fill in your Hermes username and password on the machine. Do not commit that file.
 2. Set `NOTIFY_URL` to the endpoint from the Android screen, or to an ntfy topic.
-3. Set `BIND_HOST` to the devbox Tailscale address, such as `100.113.35.96`.
+3. Set `HERMES_URL` to `http://100.113.35.96:9119` and `BIND_HOST` to `100.113.35.96`. The MagicDNS name is rejected with the same Host-header 400 as the apps.
 4. Run it once with `--dry-run`. It should print `logged in` and `socket ready`, and it should not print the password.
 5. Open a session in one of the apps and send a prompt that asks for approval. The notifier prints a `NOTIFY` line of kind `approval`, and the phone shows a notification if `NOTIFY_URL` is the phone's endpoint. The approval card is still yours to tap in the app. The notifier does not tap Allow or Deny.
 6. `curl http://<BIND_HOST>:<BIND_PORT>/health` from another tailnet device returns `ok`. A machine off the tailnet should not reach it.
