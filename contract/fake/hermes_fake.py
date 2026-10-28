@@ -49,6 +49,26 @@ class State:
         self.activated = False
         self.answers: list[dict] = []
         self.sockets: list = []
+        self.attached: dict = {}
+        self.next_row = 2
+        self.next_session = 2
+        self.sessions: dict[str, dict] = {
+            SESSION_LIVE: {
+                "stored": SESSION_STORED,
+                "live": SESSION_LIVE,
+                "title": "Hello",
+                "messages": [{"role": "user", "text": "Say hello", "row_id": 1}],
+            }
+        }
+
+    def lookup(self, session_id: str | None) -> dict:
+        if session_id and session_id in self.sessions:
+            return self.sessions[session_id]
+        if session_id:
+            for record in self.sessions.values():
+                if record["stored"] == session_id:
+                    return record
+        return self.sessions[SESSION_LIVE]
 
     def mint_session(self, username: str) -> tuple[str, str]:
         access = "at." + secrets.token_urlsafe(18)
@@ -82,12 +102,12 @@ class State:
             row["used"] = True
             return True
 
-    def stamp(self, event_type: str, payload: dict) -> dict:
+    def stamp(self, event_type: str, payload: dict, session_id: str = SESSION_LIVE) -> dict:
         with self.lock:
             self.next_seq += 1
             params = {
                 "type": event_type,
-                "session_id": SESSION_LIVE,
+                "session_id": session_id,
                 "payload": payload,
                 "seq": self.next_seq,
             }
@@ -220,23 +240,68 @@ PROFILES = {
     "install_id": "fake",
 }
 
-SESSIONS = {
-    "sessions": [
-        {
-            "id": SESSION_STORED,
-            "title": "Hello",
-            "preview": "Say hello",
-            "started_at": 1,
-            "message_count": 1,
-            "source": "phase0",
-        }
-    ]
-}
+def _session_list() -> dict:
+    with STATE.lock:
+        rows = []
+        for record in STATE.sessions.values():
+            messages = record["messages"]
+            preview = messages[-1]["text"] if messages else ""
+            rows.append(
+                {
+                    "id": record["stored"],
+                    "title": record["title"],
+                    "preview": preview,
+                    "started_at": 1,
+                    "message_count": len(messages),
+                    "source": "phase0",
+                }
+            )
+    return {"sessions": rows}
 
-HISTORY = {
-    "count": 1,
-    "messages": [{"role": "user", "text": "Say hello", "row_id": 1}],
-}
+
+def _history(session_id: str | None) -> dict:
+    with STATE.lock:
+        record = STATE.lookup(session_id)
+        messages = [dict(item) for item in record["messages"]]
+    return {"count": len(messages), "messages": messages}
+
+
+def _attach(wfile, session_id: str) -> None:
+    with STATE.lock:
+        STATE.attached.setdefault(wfile, set()).add(session_id)
+
+
+def _targets(session_id: str | None) -> list:
+    with STATE.lock:
+        if session_id:
+            return [sock for sock, sessions in STATE.attached.items() if session_id in sessions]
+        return list(STATE.sockets)
+
+
+def _broadcast(params: dict, session_id: str | None) -> None:
+    frame = _event_frame(params)
+    for sock in _targets(session_id):
+        _send_json(sock, frame)
+
+
+def _emit_changed() -> None:
+    _broadcast(STATE.stamp("sessions.changed", {}, ""), None)
+
+
+def _append_message(session_id: str, role: str, text: str) -> None:
+    with STATE.lock:
+        record = STATE.lookup(session_id)
+        record["messages"].append({"role": role, "text": text, "row_id": STATE.next_row})
+        STATE.next_row += 1
+
+
+def _detach(wfile) -> None:
+    with STATE.lock:
+        STATE.attached.pop(wfile, None)
+        try:
+            STATE.sockets.remove(wfile)
+        except ValueError:
+            pass
 
 
 def _approval_params() -> dict:
@@ -292,25 +357,79 @@ def _find_open(rpc_id: str | None, request_id: str | None) -> dict | None:
 
 
 def _settle_approval(rpc_id: str | None, request_id: str | None, choice) -> int:
-    """Pop the open approval and tell every socket, matching Hermes request.cancel."""
+    """Pop the open approval. request.cancel carries a reason and no choice."""
     with STATE.lock:
         match = _find_open(rpc_id, request_id)
         if match is None:
             return 0
         STATE.open_requests.pop(match["id"], None)
-        STATE.next_seq += 1
-        params = {
-            "type": "request.cancel",
-            "session_id": match["params"].get("session_id") or SESSION_LIVE,
-            "payload": {"id": match["id"], "method": match["method"], "reason": "resolved"},
-            "seq": STATE.next_seq,
-        }
-        STATE.events.append(params)
+        session_id = str(match["params"].get("session_id") or SESSION_LIVE)
         STATE.answers.append({"id": match["id"], "choice": choice, "request_id": match["params"].get("request_id")})
-        sockets = list(STATE.sockets)
-    for sock in sockets:
-        _send_json(sock, _event_frame(params))
+    params = STATE.stamp(
+        "request.cancel",
+        {"id": match["id"], "method": match["method"], "reason": "resolved"},
+        session_id,
+    )
+    _broadcast(params, session_id)
+    if choice == "deny":
+        result = "BLOCKED: command denied by user"
+    elif choice in ("once", "session", "always"):
+        result = "ok"
+    else:
+        result = None
+    if result is not None:
+        done = STATE.stamp(
+            "tool.complete",
+            {"tool_id": "tool-1", "name": str(match["params"].get("tool_name") or "terminal"), "result": result, "result_text": result},
+            session_id,
+        )
+        _broadcast(done, session_id)
     return 1
+
+
+def _cancel_session_approvals(session_id: str) -> None:
+    """Interrupt/teardown: approval.cancelled is broadcast, and each card is withdrawn."""
+    with STATE.lock:
+        record = STATE.lookup(session_id)
+        live = record["live"]
+        stored = record["stored"]
+        dropped = [
+            item
+            for item in STATE.open_requests.values()
+            if str(item["params"].get("session_id") or live) in (live, stored)
+        ]
+        for item in dropped:
+            STATE.open_requests.pop(item["id"], None)
+        request_ids: list[str] = []
+        for item in dropped:
+            request_ids.append(str(item["id"]))
+            approval_id = item["params"].get("request_id")
+            if approval_id:
+                request_ids.append(str(approval_id))
+    for item in dropped:
+        sid = str(item["params"].get("session_id") or live)
+        _broadcast(
+            STATE.stamp(
+                "request.cancel",
+                {"id": item["id"], "method": item["method"], "reason": "interrupted"},
+                sid,
+            ),
+            sid,
+        )
+    _broadcast(
+        STATE.stamp(
+            "approval.cancelled",
+            {
+                "session_id": live,
+                "stored_session_id": stored,
+                "reason": "interrupted",
+                "cancelled_count": len(dropped),
+                "request_ids": request_ids,
+            },
+            live,
+        ),
+        None,
+    )
 
 
 def _dispatch(wfile, req: dict) -> None:
@@ -336,7 +455,7 @@ def _dispatch(wfile, req: dict) -> None:
         _send_json(wfile, _ok(rid, PROFILES))
         return
     if method == "session.list":
-        _send_json(wfile, _ok(rid, SESSIONS))
+        _send_json(wfile, _ok(rid, _session_list()))
         return
     if method == "session.active_list":
         _send_json(
@@ -360,13 +479,25 @@ def _dispatch(wfile, req: dict) -> None:
         )
         return
     if method == "session.create":
+        with STATE.lock:
+            number = STATE.next_session
+            STATE.next_session += 1
+            live = f"live-{number}"
+            stored = f"sess-{number}"
+            STATE.sessions[live] = {
+                "stored": stored,
+                "live": live,
+                "title": "New",
+                "messages": [],
+            }
+        _emit_changed()
         _send_json(
             wfile,
             _ok(
                 rid,
                 {
-                    "session_id": SESSION_LIVE,
-                    "stored_session_id": SESSION_STORED,
+                    "session_id": live,
+                    "stored_session_id": stored,
                     "message_count": 0,
                     "messages": [],
                     "info": {"title": "New", "model": "fake-model", "running": False},
@@ -374,20 +505,33 @@ def _dispatch(wfile, req: dict) -> None:
             ),
         )
         return
+    if method == "session.interrupt":
+        _cancel_session_approvals(str(params.get("session_id") or SESSION_LIVE))
+        _send_json(wfile, _ok(rid, {"interrupted": True}))
+        return
     if method in ("session.resume", "session.activate"):
         with STATE.lock:
-            open_requests = [dict(item) for item in STATE.open_requests.values()]
+            record = STATE.lookup(str(params.get("session_id") or "") or None)
+            live = record["live"]
+            messages = [dict(item) for item in record["messages"]]
+            title = record["title"]
+            open_requests = [
+                dict(item)
+                for item in STATE.open_requests.values()
+                if str(item["params"].get("session_id") or live) in (live, record["stored"])
+            ]
             first_activate = method == "session.activate" and not STATE.activated
             if method == "session.activate":
                 STATE.activated = True
+        _attach(wfile, live)
         _send_json(
             wfile,
             _ok(
                 rid,
                 {
-                    "session_id": SESSION_LIVE,
-                    "messages": HISTORY["messages"],
-                    "info": {"title": "Hello", "model": "fake-model", "running": False},
+                    "session_id": live,
+                    "messages": messages,
+                    "info": {"title": title, "model": "fake-model", "running": False},
                     "open_requests": open_requests,
                 },
             ),
@@ -396,11 +540,12 @@ def _dispatch(wfile, req: dict) -> None:
             params_done = STATE.stamp(
                 "message.complete",
                 {"text": "Finished while you were away", "status": "complete"},
+                live,
             )
-            _send_json(wfile, _event_frame(params_done))
+            _broadcast(params_done, live)
         return
     if method == "session.history":
-        _send_json(wfile, _ok(rid, HISTORY))
+        _send_json(wfile, _ok(rid, _history(str(params.get("session_id") or "") or None)))
         return
     if method == "session.events.since":
         try:
@@ -411,13 +556,21 @@ def _dispatch(wfile, req: dict) -> None:
         _send_json(wfile, _ok(rid, STATE.since(last_seen)))
         return
     if method == "prompt.submit":
+        session_id = str(params.get("session_id") or SESSION_LIVE)
+        text = str(params.get("text") or "")
         _send_json(wfile, _ok(rid, {"status": "streaming"}))
+        _append_message(session_id, "user", text)
+        _emit_changed()
+        with STATE.lock:
+            live = STATE.lookup(session_id)["live"]
         for event_type, payload in (
             ("message.start", {}),
             ("message.delta", {"text": "Hello"}),
             ("message.complete", {"text": "Hello from Hermes", "status": "complete"}),
         ):
-            _send_json(wfile, _event_frame(STATE.stamp(event_type, payload)))
+            _broadcast(STATE.stamp(event_type, payload, live), live)
+        _append_message(live, "assistant", "Hello from Hermes")
+        _emit_changed()
         return
     if method == "approval.received":
         _send_json(wfile, _ok(rid, {"acknowledged": True}))
@@ -506,11 +659,7 @@ def _handle_socket(handler: BaseHTTPRequestHandler, ticket: str) -> None:
             if isinstance(message, dict) and message.get("method"):
                 _dispatch(handler.wfile, message)
     finally:
-        with STATE.lock:
-            try:
-                STATE.sockets.remove(handler.wfile)
-            except ValueError:
-                pass
+        _detach(handler.wfile)
 
 
 class Handler(BaseHTTPRequestHandler):

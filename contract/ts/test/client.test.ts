@@ -167,6 +167,8 @@ test("two clients share one approval", async () => {
     const left = await firstCard;
     const right = await secondCard;
     assert.equal(left.id, right.id);
+    await first.resumeSession(String(left.params.session_id));
+    await second.resumeSession(String(right.params.session_id));
     await first.answerApproval(String(left.params.session_id), String(left.params.request_id), "once");
     const gone = await cancel;
     assert.equal(gone.payload.id, left.id);
@@ -177,6 +179,104 @@ test("two clients share one approval", async () => {
       replay.openRequests.some((request) => request.id === left.id),
       false,
     );
+  } finally {
+    first.close();
+    second.close();
+    fake.stop();
+  }
+});
+
+test("test_bug_message_from_socket_a_appears_for_socket_b", async () => {
+  const fake = await startFake();
+  const first = client(fake.port);
+  const second = client(fake.port);
+  const third = client(fake.port);
+  try {
+    const material = await first.login("tester", "tester");
+    await first.connect(material.accessToken);
+    await second.connect(material.accessToken);
+    await third.connect(material.accessToken);
+    await first.resumeSession("sess-1");
+    await second.resumeSession("sess-1");
+    const created = await third.createSession();
+    assert.notEqual(created, "live-1");
+    await third.resumeSession(created);
+    const seen: string[] = [];
+    third.onEvent = (event) => {
+      seen.push(event.type);
+    };
+    const changed = third.waitForEvent("sessions.changed");
+    const done = second.waitForEvent("message.complete");
+    await first.submit("live-1", "from the other phone");
+    await changed;
+    await done;
+    const history = await second.history("live-1");
+    assert.equal(
+      history.some((row) => row.text === "from the other phone"),
+      true,
+    );
+    assert.equal(seen.includes("message.complete"), false);
+    assert.equal(seen.includes("message.delta"), false);
+    assert.equal(seen.includes("sessions.changed"), true);
+  } finally {
+    first.close();
+    second.close();
+    third.close();
+    fake.stop();
+  }
+});
+
+test("test_bug_deny_cancel_has_no_choice", async () => {
+  const fake = await startFake();
+  const first = client(fake.port);
+  const second = client(fake.port);
+  try {
+    const material = await first.login("tester", "tester");
+    await first.connect(material.accessToken);
+    await second.connect(material.accessToken);
+    await first.resumeSession("sess-1");
+    await second.resumeSession("sess-1");
+    const cancel = second.waitForEvent("request.cancel");
+    const tool = second.waitForEvent("tool.complete");
+    await first.answerApproval("live-1", "req-1", "deny");
+    const gone = await cancel;
+    assert.equal(gone.payload.reason, "resolved");
+    assert.equal(gone.payload.method, "approval");
+    assert.equal("choice" in gone.payload, false);
+    const finished = await tool;
+    assert.match(String(finished.payload.result), /BLOCKED:/);
+    assert.match(String(finished.payload.result_text), /denied by user/);
+    const cancelled = second.waitForEvent("approval.cancelled");
+    await first.interruptSession("live-1");
+    const event = await cancelled;
+    const ids = event.payload.request_ids;
+    assert.ok(Array.isArray(ids));
+    assert.deepEqual(ids, []);
+  } finally {
+    first.close();
+    second.close();
+    fake.stop();
+  }
+});
+
+test("test_bug_approval_cancelled_names_request_ids", async () => {
+  const fake = await startFake();
+  const first = client(fake.port);
+  const second = client(fake.port);
+  try {
+    const material = await first.login("tester", "tester");
+    await first.connect(material.accessToken);
+    await second.connect(material.accessToken);
+    await first.resumeSession("sess-1");
+    await second.resumeSession("sess-1");
+    const cancelled = second.waitForEvent("approval.cancelled");
+    await first.interruptSession("live-1");
+    const event = await cancelled;
+    const ids = event.payload.request_ids;
+    assert.ok(Array.isArray(ids));
+    assert.equal((ids as string[]).includes("srq-phase0"), true);
+    assert.equal((ids as string[]).includes("req-1"), true);
+    assert.equal(event.payload.reason, "interrupted");
   } finally {
     first.close();
     second.close();

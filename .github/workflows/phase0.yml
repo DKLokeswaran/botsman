@@ -51,6 +51,7 @@ jobs:
           npx --prefix contract/ts tsc -p contract/ts --noEmit
           npm ci --prefix apps/windows
           npm run check --prefix apps/windows
+          npm test --prefix apps/windows
       - name: Kotlin client tests and debug APK
         working-directory: apps/android
         run: chmod +x ./gradlew && ./gradlew :hermes-client:test :app:testDebugUnitTest assembleDebug --no-daemon

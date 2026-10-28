@@ -214,18 +214,23 @@ private fun ChatBlock(
         LaunchedEffect(landed) {
             if (landed) bring.bringIntoView()
         }
-        Column(
-            Modifier
-                .bringIntoViewRequester(bring)
-                .fillMaxWidth()
-                .border(if (landed) 2.dp else 1.dp, MaterialTheme.colorScheme.primary)
-                .padding(12.dp),
-        ) {
-            Text("NEEDS YOU", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.primary)
-            Text(card.description, color = MaterialTheme.colorScheme.onBackground)
-            if (card.resolvedLabel != null) {
-                Text(card.resolvedLabel.uppercase(), style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.primary, modifier = Modifier.padding(top = 8.dp))
-            } else {
+        if (card.resolvedLabel != null) {
+            Text(
+                card.resolvedLabel.uppercase(),
+                style = MaterialTheme.typography.labelMedium,
+                color = MaterialTheme.colorScheme.primary,
+                modifier = Modifier.bringIntoViewRequester(bring).padding(top = 8.dp),
+            )
+        } else {
+            Column(
+                Modifier
+                    .bringIntoViewRequester(bring)
+                    .fillMaxWidth()
+                    .border(if (landed) 2.dp else 1.dp, MaterialTheme.colorScheme.primary)
+                    .padding(12.dp),
+            ) {
+                Text("NEEDS YOU", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.primary)
+                Text(card.description, color = MaterialTheme.colorScheme.onBackground)
                 if (state.showCommand) {
                     Text(card.command, fontFamily = FragmentMono, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }

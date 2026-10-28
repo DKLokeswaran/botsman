@@ -29,6 +29,28 @@ import { Input } from "./components/ui/input";
 import { Textarea } from "./components/ui/textarea";
 import { Reply, UserLine } from "./markdown";
 import { tauriHttp, tauriSocket } from "./gateway";
+import {
+  RESOLVED_CARD_MS,
+  choiceLabel,
+  expireResolved,
+  mergeHistory,
+  noteLocalChoice,
+  onApprovalCancelled,
+  onNewerMessage,
+  onRequestCancel,
+  onToolComplete,
+  rememberOpen,
+  restoreOpen,
+  sameTranscript,
+  syncOpen,
+  toolResultText,
+  transcriptGrew,
+  visibleApproval,
+  type ApprovalBook,
+  type ApprovalCard,
+  type ApprovalResult,
+  type HistoryEntry,
+} from "./session-sync";
 
 const DEFAULT_SERVER = "http://100.113.35.96:9119";
 const LEGACY_SERVER = "http://devbox.tail2eeb02.ts.net:9119";
@@ -92,14 +114,7 @@ function preferredServer(stored: string | null): string {
 }
 
 type Line = { role: string; text: string; messageId: string; seq: number | null };
-type Approval = {
-  id: string;
-  sessionId: string;
-  requestId: string;
-  description: string;
-  command: string;
-  resolvedLabel: string | null;
-};
+type Approval = ApprovalCard;
 type Question = {
   id: string;
   sessionId: string;
@@ -225,10 +240,35 @@ export function App() {
   const revealRef = useRef<(route: PushRoute | null) => void>(() => undefined);
   const resolvedIds = useRef<Set<string>>(new Set());
   const answeredHere = useRef<Set<string>>(new Set());
+  const approvalsRef = useRef<ApprovalBook>({});
+  const clearTimers = useRef<Record<string, ReturnType<typeof setTimeout>>>({});
+  const replaying = useRef(false);
+  const refreshQueue = useRef(Promise.resolve());
+  const refreshHandle = useRef<(attach: boolean) => void>(() => undefined);
 
   useEffect(() => {
     liveRef.current = liveId;
   }, [liveId]);
+
+  useEffect(() => {
+    let alive = true;
+    let unlisten: (() => void) | undefined;
+    void getCurrentWindow()
+      .onFocusChanged((event) => {
+        if (event.payload) refreshHandle.current(true);
+      })
+      .then((stop) => {
+        if (!alive) {
+          stop();
+          return;
+        }
+        unlisten = stop;
+      });
+    return () => {
+      alive = false;
+      unlisten?.();
+    };
+  }, []);
 
   useEffect(() => {
     if (!approval) {
@@ -381,31 +421,98 @@ export function App() {
     void toast(title, body, route);
   }
 
-  function forgetApproval(id: string, reason: string | null) {
-    if (!id) {
-      return;
-    }
-    resolvedIds.current.add(id);
-    const current = approvalMirror.current;
-    if (!current || (current.id !== id && current.requestId !== id)) {
-      return;
-    }
-    resolvedIds.current.add(current.id);
-    if (answeredHere.current.has(current.id) || reason !== "resolved") {
-      rememberApproval(null);
-      return;
-    }
-    rememberApproval({ ...current, resolvedLabel: "Approved on another device" });
+  function noteResolved(id: string) {
+    if (id) resolvedIds.current.add(id);
   }
 
-  function syncOpenApprovals(open: ServerRequest[]) {
-    const ids = new Set(open.filter((request) => request.method === "approval").map((request) => request.id));
-    const current = approvalMirror.current;
-    if (!current || current.resolvedLabel || resolvedIds.current.has(current.id)) {
-      return;
+  function publishApprovals(book: ApprovalBook) {
+    approvalsRef.current = book;
+    const card = visibleApproval(book, liveRef.current);
+    const previous = approvalMirror.current;
+    approvalMirror.current = card;
+    setApproval(card);
+    if (!card || card.resolvedLabel || card.id !== previous?.id) setShowCommand(false);
+  }
+
+  function armClear(sessionId: string) {
+    const existing = clearTimers.current[sessionId];
+    if (existing) clearTimeout(existing);
+    clearTimers.current[sessionId] = setTimeout(() => {
+      delete clearTimers.current[sessionId];
+      const result = expireResolved(approvalsRef.current, sessionId);
+      publishApprovals(result.book);
+    }, RESOLVED_CARD_MS);
+  }
+
+  function applyApproval(result: ApprovalResult, settle = false) {
+    for (const effect of result.effects) {
+      if (effect.type === "disarm") {
+        const existing = clearTimers.current[effect.sessionId];
+        if (existing) clearTimeout(existing);
+        delete clearTimers.current[effect.sessionId];
+      }
     }
-    if (!ids.has(current.id)) {
-      rememberApproval(null);
+    const previous = approvalsRef.current;
+    if (settle) {
+      for (const [sessionId, card] of Object.entries(previous)) {
+        const now = result.book[sessionId];
+        if (!now || now.id !== card.id || (now.resolvedLabel && !card.resolvedLabel)) {
+          noteResolved(card.id);
+          if (card.requestId) noteResolved(card.requestId);
+        }
+      }
+    }
+    publishApprovals(result.book);
+    for (const effect of result.effects) {
+      if (effect.type === "arm") armClear(effect.sessionId);
+    }
+  }
+
+  function syncOpenApprovals(sessionId: string, open: ServerRequest[]) {
+    const ids = new Set(open.filter((request) => request.method === "approval").map((request) => request.id));
+    applyApproval(syncOpen(approvalsRef.current, sessionId, ids));
+  }
+
+  async function mergeOpenHistory(client: HermesClient, live: string) {
+    const history = await client.history(live);
+    const rows: HistoryEntry[] = history.map((row) => ({ role: row.role, text: row.text, rowId: row.rowId }));
+    if (liveRef.current !== live) return;
+    const merged = mergeHistory(linesRef.current, rows);
+    const grew = transcriptGrew(linesRef.current, merged);
+    if (!sameTranscript(linesRef.current, merged)) {
+      linesRef.current = merged;
+      setLines(merged);
+    }
+    if (grew) applyApproval(onNewerMessage(approvalsRef.current, live));
+  }
+
+  function enqueueRefresh(attach: boolean) {
+    refreshQueue.current = refreshQueue.current
+      .catch(() => undefined)
+      .then(() => refreshLive(attach));
+  }
+
+  refreshHandle.current = enqueueRefresh;
+
+  async function refreshLive(attach: boolean) {
+    const client = clientRef.current;
+    if (!client) return;
+    try {
+      const nextSessions = await client.listSessions();
+      setSessions(nextSessions);
+      const live = liveRef.current;
+      if (!live) return;
+      if (attach) {
+        try {
+          await client.resumeSession(live);
+        } catch {
+          // History can still move if this socket was already attached.
+        }
+      }
+      if (liveRef.current !== live) return;
+      await mergeOpenHistory(client, live);
+    } catch {
+      // A missed refresh is retried on the next sessions.changed or foreground.
     }
   }
 
@@ -462,17 +569,21 @@ export function App() {
       messageIndex: landed.messageIndex,
     });
     if (landed.target === "approval" && landed.resolved) {
-      const live = approvalMirror.current;
+      const sessionId = route.sessionId || liveRef.current || "";
+      const live = sessionId ? approvalsRef.current[sessionId] : undefined;
       const matches = Boolean(live && (live.requestId === route.requestId || live.id === route.requestId));
-      if (!matches) {
-        rememberApproval({
+      if (!matches && sessionId) {
+        const card: Approval = {
           id: `push-${route.requestId}`,
-          sessionId: route.sessionId,
+          sessionId,
           requestId: route.requestId,
           description: route.body || route.title || "Approval",
           command: "",
           resolvedLabel: "Resolved",
-        });
+          awaitingTool: false,
+        };
+        approvalsRef.current = { ...approvalsRef.current, [sessionId]: card };
+        if (liveRef.current === sessionId) rememberApproval(card);
         setShowCommand(false);
       }
     }
@@ -496,15 +607,33 @@ export function App() {
       seqs.current[event.sessionId] = Math.max(seqs.current[event.sessionId] ?? 0, event.seq);
     }
     if (event.type === "request.cancel") {
-      forgetApproval(String(event.payload.id ?? ""), String(event.payload.reason ?? ""));
+      const id = String(event.payload.id ?? "");
+      noteResolved(id);
+      applyApproval(onRequestCancel(approvalsRef.current, id, String(event.payload.reason ?? ""), answeredHere.current), true);
       return;
     }
     if (event.type === "approval.cancelled") {
-      const ids = Array.isArray(event.payload.request_ids) ? event.payload.request_ids : [];
-      for (const id of ids) {
-        forgetApproval(String(id), null);
-      }
+      const ids = Array.isArray(event.payload.request_ids) ? event.payload.request_ids.map((id) => String(id)) : [];
+      for (const id of ids) noteResolved(id);
+      applyApproval(onApprovalCancelled(approvalsRef.current, ids), true);
       return;
+    }
+    if (event.type === "sessions.changed") {
+      if (!replaying.current) enqueueRefresh(true);
+      return;
+    }
+    if (event.type === "tool.complete") {
+      const sessionId = event.sessionId || liveRef.current || "";
+      if (sessionId) applyApproval(onToolComplete(approvalsRef.current, sessionId, toolResultText(event.payload)));
+      return;
+    }
+    if (
+      event.type === "message.start" ||
+      event.type === "message.delta" ||
+      event.type === "message.complete" ||
+      event.type === "error"
+    ) {
+      if (event.sessionId) applyApproval(onNewerMessage(approvalsRef.current, event.sessionId));
     }
     const live = liveRef.current;
     if (event.sessionId && live && event.sessionId !== live) {
@@ -593,28 +722,31 @@ export function App() {
     if (resolvedIds.current.has(request.id) || answeredHere.current.has(request.id)) {
       return;
     }
+    const sessionId = String(request.params.session_id ?? "") || liveRef.current || "";
     const card: Approval = {
       id: request.id,
-      sessionId: String(request.params.session_id ?? ""),
+      sessionId,
       requestId: String(request.params.request_id ?? ""),
       description: String(request.params.description || "Approval needed"),
       command: String(request.params.command ?? ""),
       resolvedLabel: null,
+      awaitingTool: false,
     };
-    if (approvalMirror.current?.id !== card.id) {
-      rememberApproval(card);
-    }
-    setShowCommand(false);
+    const known = approvalsRef.current[sessionId]?.id === card.id && !approvalsRef.current[sessionId]?.resolvedLabel;
+    applyApproval(rememberOpen(approvalsRef.current, card, resolvedIds.current));
+    if (!known) setShowCommand(false);
     void clientRef.current?.noteApprovalVisible(card.sessionId, card.requestId).catch(() => undefined);
-    void hidden().then((away) => {
-      if (away) {
-        notify(
-          "Approval waiting",
-          card.description,
-          routeFrom("approval", "Approval waiting", card.description, card.sessionId, card.requestId || card.id, "", null),
-        );
-      }
-    });
+    if (!known) {
+      void hidden().then((away) => {
+        if (away) {
+          notify(
+            "Approval waiting",
+            card.description,
+            routeFrom("approval", "Approval waiting", card.description, card.sessionId, card.requestId || card.id, "", null),
+          );
+        }
+      });
+    }
   }
 
   function bind(client: HermesClient) {
@@ -659,8 +791,17 @@ export function App() {
     if (route?.sessionId && route.sessionId !== live) {
       await openSession(route.sessionId, route.profile);
     } else if (live) {
-      const replay = await client.replay(live, seqs.current[live] ?? 0);
-      syncOpenApprovals(replay.openRequests);
+      await client.resumeSession(live);
+      await mergeOpenHistory(client, live);
+      replaying.current = true;
+      let replay;
+      try {
+        replay = await client.replay(live, seqs.current[live] ?? 0);
+      } finally {
+        replaying.current = false;
+      }
+      syncOpenApprovals(live, replay.openRequests);
+      await mergeOpenHistory(client, live);
       if (replay.truncated) {
         await openSession(live);
       } else if (route && (!route.sessionId || route.sessionId === live)) {
@@ -756,12 +897,17 @@ export function App() {
     try {
       const opened = await client.resumeSession(sessionId, profile || undefined);
       const history = await client.history(opened.sessionId);
-      const next = history.map((row) => blankLine(row.role || "assistant", row.text, row.rowId));
+      const rows: HistoryEntry[] = history.map((row) => ({ role: row.role, text: row.text, rowId: row.rowId }));
+      const switching = liveRef.current !== opened.sessionId;
+      const next = switching
+        ? rows.map((row) => blankLine(row.role || "assistant", row.text, row.rowId))
+        : mergeHistory(linesRef.current, rows);
       liveRef.current = opened.sessionId;
       linesRef.current = next;
       setLiveId(opened.sessionId);
       setLines(next);
-      syncOpenApprovals(opened.openRequests);
+      publishApprovals(approvalsRef.current);
+      syncOpenApprovals(opened.sessionId, opened.openRequests);
       setStatus("Connected");
       const route = pendingRoute.current;
       if (route && (!route.sessionId || route.sessionId === opened.sessionId)) {
@@ -780,10 +926,12 @@ export function App() {
     }
     try {
       const id = await client.createSession();
+      await client.resumeSession(id);
       liveRef.current = id;
       setLiveId(id);
       linesRef.current = [];
       setLines([]);
+      publishApprovals(approvalsRef.current);
       rememberQuestion(null);
       setFocus(null);
       setSessions(await client.listSessions());
@@ -802,6 +950,7 @@ export function App() {
     }
     setDraft("");
     commitLines((current) => current.concat(blankLine("user", text)));
+    applyApproval(onNewerMessage(approvalsRef.current, session));
     setStatus("Sending");
     try {
       await client.submit(session, text);
@@ -810,24 +959,22 @@ export function App() {
     }
   }
 
-  async function answer(choice: "once" | "deny") {
+  async function answer(choice: "once" | "session" | "always" | "deny") {
     const card = approvalMirror.current;
     const client = clientRef.current;
     if (!card || card.resolvedLabel || !client) {
       return;
     }
     answeredHere.current.add(card.id);
-    resolvedIds.current.add(card.id);
+    noteResolved(card.id);
+    applyApproval(noteLocalChoice(approvalsRef.current, card, choice), true);
     try {
       await client.answerApproval(card.sessionId, card.requestId, choice);
-      if (approvalMirror.current?.id === card.id) {
-        rememberApproval(null);
-      }
-      setShowCommand(false);
-      setStatus(choice === "deny" ? "Denied" : "Allowed once");
+      setStatus(choiceLabel(choice));
     } catch (error) {
       answeredHere.current.delete(card.id);
       resolvedIds.current.delete(card.id);
+      applyApproval(restoreOpen(approvalsRef.current, card));
       setStatus(error instanceof Error ? error.message : "Approval failed");
     }
   }
@@ -963,38 +1110,38 @@ export function App() {
               </article>
             ))}
             {approval ? (
-              <section
-                ref={approvalRef}
-                className={
-                  focus?.target === "approval" &&
-                  (!focus.requestId || focus.requestId === approval.requestId || focus.requestId === approval.id)
-                    ? "landed border border-primary p-3"
-                    : "border border-primary p-3"
-                }
-              >
-                <p className="font-[family-name:var(--font-label)] text-[12px] tracking-[0.08em] text-primary uppercase">Needs you</p>
-                <p>{approval.description}</p>
-                {approval.resolvedLabel ? (
-                  <p className="mt-2 font-[family-name:var(--font-label)] text-[12px] tracking-[0.08em] text-primary uppercase">
+              approval.resolvedLabel ? (
+                <section ref={approvalRef}>
+                  <p className="font-[family-name:var(--font-label)] text-[12px] tracking-[0.08em] text-primary uppercase">
                     {approval.resolvedLabel}
                   </p>
-                ) : (
-                  <>
-                    {showCommand ? <pre className="font-mono text-sm text-muted-foreground">{approval.command}</pre> : null}
-                    <div className="mt-2 flex gap-2">
-                      <Button type="button" onClick={() => void answer("once")}>
-                        Allow once
-                      </Button>
-                      <Button type="button" onClick={() => void answer("deny")}>
-                        Deny
-                      </Button>
-                      <Button type="button" onClick={() => setShowCommand((value) => !value)}>
-                        {showCommand ? "Hide command" : "Full command"}
-                      </Button>
-                    </div>
-                  </>
-                )}
-              </section>
+                </section>
+              ) : (
+                <section
+                  ref={approvalRef}
+                  className={
+                    focus?.target === "approval" &&
+                    (!focus.requestId || focus.requestId === approval.requestId || focus.requestId === approval.id)
+                      ? "landed border border-primary p-3"
+                      : "border border-primary p-3"
+                  }
+                >
+                  <p className="font-[family-name:var(--font-label)] text-[12px] tracking-[0.08em] text-primary uppercase">Needs you</p>
+                  <p>{approval.description}</p>
+                  {showCommand ? <pre className="font-mono text-sm text-muted-foreground">{approval.command}</pre> : null}
+                  <div className="mt-2 flex gap-2">
+                    <Button type="button" onClick={() => void answer("once")}>
+                      Allow once
+                    </Button>
+                    <Button type="button" onClick={() => void answer("deny")}>
+                      Deny
+                    </Button>
+                    <Button type="button" onClick={() => setShowCommand((value) => !value)}>
+                      {showCommand ? "Hide command" : "Full command"}
+                    </Button>
+                  </div>
+                </section>
+              )
             ) : null}
             {question ? (
               <section
