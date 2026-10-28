@@ -520,8 +520,12 @@ def _dispatch(wfile, req: dict) -> None:
                 for item in STATE.open_requests.values()
                 if str(item["params"].get("session_id") or live) in (live, record["stored"])
             ]
-            first_activate = method == "session.activate" and not STATE.activated
-            if method == "session.activate":
+            # The notifier resumes with omit_messages and does not render a transcript.
+            # The first such attach, like the first session.activate, still delivers one
+            # finished reply so a watcher can see a session event. App resumes do not.
+            watching = method == "session.activate" or bool(params.get("omit_messages"))
+            first_activate = watching and not STATE.activated
+            if watching:
                 STATE.activated = True
         _attach(wfile, live)
         _send_json(

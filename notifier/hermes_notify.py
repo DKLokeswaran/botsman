@@ -492,7 +492,7 @@ class Gateway:
                 self.profiles[sid] = profile
             if sid in self.attached:
                 continue
-            self.call("session.activate", {"session_id": sid, "omit_messages": True})
+            self.call("session.resume", {"session_id": sid, "omit_messages": True})
             self.attached.add(sid)
 
     def close(self) -> None:

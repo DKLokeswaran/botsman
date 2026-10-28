@@ -48,6 +48,14 @@ class Phase0ModelSyncTest {
         )
         assertEquals(LABEL_ANSWERED_ELSEWHERE, stayed.book["live-1"]?.resolvedLabel)
 
+        val early = onToolComplete(mapOf("live-1" to card("live-1")), "live-1", "BLOCKED: command denied by user")
+        assertNull(early.book["live-1"]?.resolvedLabel)
+        assertEquals(false, early.book["live-1"]?.awaitingTool)
+        val afterEarly = onRequestCancel(early.book, "srq-1", "resolved", emptySet())
+        assertEquals(LABEL_ANSWERED_ELSEWHERE, afterEarly.book["live-1"]?.resolvedLabel)
+        val deniedAfter = onToolComplete(afterEarly.book, "live-1", "BLOCKED: command denied by user")
+        assertEquals(LABEL_DENIED_ELSEWHERE, deniedAfter.book["live-1"]?.resolvedLabel)
+
         val localKept = onRequestCancel(open.book, "srq-1", "resolved", setOf("srq-1"))
         assertEquals(LABEL_DENIED, localKept.book["live-1"]?.resolvedLabel)
     }
@@ -63,6 +71,24 @@ class Phase0ModelSyncTest {
         val resolved = onRequestCancel(book, "srq-1", "resolved", emptySet())
         assertNull(visibleApproval(resolved.book, "live-2")?.resolvedLabel)
         assertEquals(LABEL_ANSWERED_ELSEWHERE, visibleApproval(resolved.book, "live-1")?.resolvedLabel)
+
+        val hidden = rememberOpen(emptyMap(), card("live-2", "srq-9"), emptySet())
+        assertNull(visibleApproval(hidden.book, "live-1"))
+        assertEquals("srq-9", hidden.book["live-2"]?.id)
+
+        val second = rememberOpen(
+            mapOf("live-1" to card("live-1"), "live-2" to card("live-2", "srq-2")),
+            card("live-1", "srq-3").copy(requestId = "req-3"),
+            emptySet(),
+        )
+        assertEquals("srq-3", second.book["live-1"]?.id)
+        assertEquals("srq-2", second.book["live-2"]?.id)
+        val oldCancel = onRequestCancel(second.book, "srq-1", "resolved", emptySet())
+        assertNull(oldCancel.book["live-1"]?.resolvedLabel)
+        assertEquals("srq-3", oldCancel.book["live-1"]?.id)
+        val newCancel = onRequestCancel(second.book, "req-3", "resolved", emptySet())
+        assertEquals(LABEL_ANSWERED_ELSEWHERE, newCancel.book["live-1"]?.resolvedLabel)
+        assertNull(newCancel.book["live-2"]?.resolvedLabel)
     }
 
     @Test
@@ -90,6 +116,19 @@ class Phase0ModelSyncTest {
         val untouched = card("live-2", "srq-2").copy(requestId = "req-2")
         val other = onApprovalCancelled(mapOf("live-2" to untouched), listOf("req-1"))
         assertEquals("srq-2", other.book["live-2"]?.id)
+
+        val stillOpen = mapOf("live-1" to card("live-1"))
+        assertNull(syncOpen(stillOpen, "live-1", setOf("srq-1")).book["live-1"]?.resolvedLabel)
+        assertEquals("srq-1", syncOpen(stillOpen, "live-1", setOf("req-1")).book["live-1"]?.id)
+        assertNull(visibleApproval(syncOpen(stillOpen, "live-1", emptySet()).book, "live-1"))
+        val kept = mapOf("live-1" to card("live-1").copy(resolvedLabel = LABEL_ANSWERED_ELSEWHERE, awaitingTool = true))
+        assertEquals(LABEL_ANSWERED_ELSEWHERE, syncOpen(kept, "live-1", emptySet()).book["live-1"]?.resolvedLabel)
+
+        val closed = onRequestCancel(stillOpen, "srq-1", "resolved", emptySet())
+        assertEquals(listOf("req-1"), idsLeavingOpen(stillOpen, closed.book))
+        assertEquals(emptyList<String>(), idsLeavingOpen(closed.book, expireResolved(closed.book, "live-1").book))
+        val replaced = mapOf("live-1" to card("live-1", "srq-3").copy(requestId = "req-3"))
+        assertEquals(listOf("req-1"), idsLeavingOpen(stillOpen, replaced))
     }
 
     @Test

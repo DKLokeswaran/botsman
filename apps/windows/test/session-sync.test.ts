@@ -16,6 +16,8 @@ import {
   onNewerMessage,
   onRequestCancel,
   onToolComplete,
+  rememberOpen,
+  syncOpen,
   visibleApproval,
   type ApprovalCard,
 } from "../src/session-sync.ts";
@@ -62,6 +64,14 @@ test("test_bug_deny_shown_as_denied_on_the_other_device", () => {
   );
   assert.equal(stayed.book["live-1"]?.resolvedLabel, LABEL_ANSWERED_ELSEWHERE);
 
+  const early = onToolComplete({ "live-1": card("live-1") }, "live-1", "BLOCKED: command denied by user");
+  assert.equal(early.book["live-1"]?.resolvedLabel, null);
+  assert.equal(early.book["live-1"]?.awaitingTool, false);
+  const afterEarly = onRequestCancel(early.book, "srq-1", "resolved", new Set());
+  assert.equal(afterEarly.book["live-1"]?.resolvedLabel, LABEL_ANSWERED_ELSEWHERE);
+  const deniedAfter = onToolComplete(afterEarly.book, "live-1", "BLOCKED: command denied by user");
+  assert.equal(deniedAfter.book["live-1"]?.resolvedLabel, LABEL_DENIED_ELSEWHERE);
+
   const localKept = onRequestCancel(open.book, "srq-1", "resolved", new Set(["srq-1"]));
   assert.equal(localKept.book["live-1"]?.resolvedLabel, LABEL_DENIED);
 });
@@ -76,6 +86,24 @@ test("test_bug_approval_does_not_leak_into_other_sessions", () => {
   const resolved = onRequestCancel(book, "srq-1", "resolved", new Set());
   assert.equal(visibleApproval(resolved.book, "live-2")?.resolvedLabel, null);
   assert.equal(visibleApproval(resolved.book, "live-1")?.resolvedLabel, LABEL_ANSWERED_ELSEWHERE);
+
+  const hidden = rememberOpen({}, card("live-2", "srq-9"), new Set());
+  assert.equal(visibleApproval(hidden.book, "live-1"), null);
+  assert.equal(hidden.book["live-2"]?.id, "srq-9");
+
+  const second = rememberOpen(
+    { "live-1": card("live-1"), "live-2": card("live-2", "srq-2") },
+    { ...card("live-1", "srq-3"), requestId: "req-3" },
+    new Set(),
+  );
+  assert.equal(second.book["live-1"]?.id, "srq-3");
+  assert.equal(second.book["live-2"]?.id, "srq-2");
+  const oldCancel = onRequestCancel(second.book, "srq-1", "resolved", new Set());
+  assert.equal(oldCancel.book["live-1"]?.resolvedLabel, null);
+  assert.equal(oldCancel.book["live-1"]?.id, "srq-3");
+  const newCancel = onRequestCancel(second.book, "req-3", "resolved", new Set());
+  assert.equal(newCancel.book["live-1"]?.resolvedLabel, LABEL_ANSWERED_ELSEWHERE);
+  assert.equal(newCancel.book["live-2"]?.resolvedLabel, null);
 });
 
 test("test_bug_resolved_card_clears", () => {
@@ -105,6 +133,15 @@ test("test_bug_resolved_card_clears", () => {
   };
   const other = onApprovalCancelled({ "live-2": untouched }, ["req-1"]);
   assert.equal(other.book["live-2"]?.id, "srq-2");
+
+  const stillOpen = { "live-1": card("live-1") };
+  assert.equal(syncOpen(stillOpen, "live-1", new Set(["srq-1"])).book["live-1"]?.resolvedLabel, null);
+  assert.equal(syncOpen(stillOpen, "live-1", new Set(["req-1"])).book["live-1"]?.id, "srq-1");
+  assert.equal(visibleApproval(syncOpen(stillOpen, "live-1", new Set()).book, "live-1"), null);
+  const kept = {
+    "live-1": { ...card("live-1"), resolvedLabel: LABEL_ANSWERED_ELSEWHERE, awaitingTool: true },
+  };
+  assert.equal(syncOpen(kept, "live-1", new Set()).book["live-1"]?.resolvedLabel, LABEL_ANSWERED_ELSEWHERE);
 });
 
 test("test_bug_history_merge_message_from_other_device", () => {

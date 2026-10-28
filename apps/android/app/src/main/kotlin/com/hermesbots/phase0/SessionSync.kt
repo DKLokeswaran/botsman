@@ -226,6 +226,17 @@ fun expireResolved(book: Map<String, PendingApproval>, sessionId: String): Appro
     return ApprovalResult(without(book, sessionId), listOf(ApprovalEffect("disarm", sessionId)))
 }
 
+/** Request ids whose open card just closed. The Android notification uses the same id. */
+fun idsLeavingOpen(previous: Map<String, PendingApproval>, next: Map<String, PendingApproval>): List<String> {
+    val ids = mutableListOf<String>()
+    for ((sessionId, card) in previous) {
+        val now = next[sessionId]
+        val stillOpen = now != null && now.id == card.id && now.resolvedLabel == null
+        if (!stillOpen && card.resolvedLabel == null && card.requestId.isNotEmpty()) ids.add(card.requestId)
+    }
+    return ids
+}
+
 fun syncOpen(book: Map<String, PendingApproval>, sessionId: String, openIds: Set<String>): ApprovalResult {
     val card = book[sessionId] ?: return unchanged(book)
     if (card.resolvedLabel != null) return unchanged(book)

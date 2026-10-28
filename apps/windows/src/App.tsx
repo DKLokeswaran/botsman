@@ -271,6 +271,14 @@ export function App() {
   }, []);
 
   useEffect(() => {
+    const onVisible = () => {
+      if (document.visibilityState === "visible") refreshHandle.current(true);
+    };
+    document.addEventListener("visibilitychange", onVisible);
+    return () => document.removeEventListener("visibilitychange", onVisible);
+  }, []);
+
+  useEffect(() => {
     if (!approval) {
       return;
     }

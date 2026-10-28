@@ -273,6 +273,14 @@ class HermesClientTest {
             assertTrue(!cancel.payload.has("choice"))
             assertTrue(tool.payload.optString("result").contains("BLOCKED:"))
             assertTrue(tool.payload.optString("result_text").contains("denied by user"))
+            val cancelled = runBlocking {
+                val job = async { second.waitForEvent("approval.cancelled") }
+                yield()
+                first.interruptSession("live-1")
+                job.await()
+            }
+            val ids = cancelled.payload.optJSONArray("request_ids")
+            assertTrue(ids != null && ids.length() == 0)
         } finally {
             first.close()
             second.close()

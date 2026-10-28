@@ -122,6 +122,7 @@ class Phase0Model(app: Application) : AndroidViewModel(app) {
     private var approvals: Map<String, PendingApproval> = emptyMap()
     private val clearJobs = mutableMapOf<String, Job>()
     private var replaying = false
+    private var refreshTail: Job? = null
     private var pendingRoute: PushRoute? = null
     private var pendingRelease: LatestRelease? = null
     private var reconnectJob: Job? = null
@@ -153,6 +154,7 @@ class Phase0Model(app: Application) : AndroidViewModel(app) {
                         if (id.isNotEmpty()) {
                             noteResolved(id)
                             requestIds.add(id)
+                            dismissApprovalNotification(getApplication(), id)
                         }
                     }
                 }
@@ -677,6 +679,9 @@ class Phase0Model(app: Application) : AndroidViewModel(app) {
             next
         }
         val choice = route.action
+        if (focus.target == "approval" && focus.resolved && route.requestId.isNotEmpty()) {
+            dismissApprovalNotification(getApplication(), route.requestId)
+        }
         if (!focus.resolved && (choice == "once" || choice == "deny") && focus.target == "approval") {
             val card = _state.value.approval
             if (card != null && card.resolvedLabel == null && (card.requestId == route.requestId || card.id == route.requestId)) {
@@ -709,6 +714,7 @@ class Phase0Model(app: Application) : AndroidViewModel(app) {
     private fun applyApproval(settle: Boolean = false, transform: (Map<String, PendingApproval>) -> ApprovalResult) {
         val published: PendingApproval?
         val effects: List<ApprovalEffect>
+        var leaving = emptyList<String>()
         synchronized(approvalLock) {
             val result = transform(approvals)
             for (effect in result.effects) {
@@ -716,6 +722,7 @@ class Phase0Model(app: Application) : AndroidViewModel(app) {
             }
             val previous = approvals
             approvals = result.book
+            leaving = idsLeavingOpen(previous, approvals)
             if (settle) {
                 for ((sessionId, card) in previous) {
                     val now = approvals[sessionId]
@@ -728,6 +735,7 @@ class Phase0Model(app: Application) : AndroidViewModel(app) {
             published = _state.value.liveSessionId?.let { approvals[it] }
             effects = result.effects
         }
+        for (id in leaving) dismissApprovalNotification(getApplication(), id)
         _state.update { current ->
             val sameCard = published?.id == current.approval?.id
             current.copy(
@@ -759,7 +767,9 @@ class Phase0Model(app: Application) : AndroidViewModel(app) {
     }
 
     private fun refreshLive(attach: Boolean) {
-        viewModelScope.launch {
+        val earlier = refreshTail
+        refreshTail = viewModelScope.launch {
+            earlier?.join()
             val current = client ?: return@launch
             if (!_state.value.connected) return@launch
             try {
