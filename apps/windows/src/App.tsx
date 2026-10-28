@@ -35,6 +35,7 @@ import {
   type SessionRow,
 } from "@hermes-bots/gateway-client";
 import { buildNumber, commitSha, versionName } from "./build-info";
+import { beginUpdateDownload, formatUpdateProgress } from "./update-download";
 import { Button } from "./components/ui/button";
 import { Input } from "./components/ui/input";
 import { Textarea } from "./components/ui/textarea";
@@ -239,6 +240,7 @@ export function App() {
   const [updateDetail, setUpdateDetail] = useState("");
   const clientRef = useRef<HermesClient | null>(null);
   const latestRef = useRef<LatestRelease | null>(null);
+  const updateDownloadRef = useRef(false);
   const materialRef = useRef<LoginMaterial | null>(null);
   const seqs = useRef<Record<string, number>>({});
   const liveRef = useRef<string | null>(null);
@@ -361,6 +363,27 @@ export function App() {
       setShowJumpToLatest(shouldShowJumpToLatest(distanceRef.current));
     }
   }, [lines, liveId, focus?.target, scrollToBottom, refreshScrollMetrics]);
+
+  useEffect(() => {
+    let alive = true;
+    let unlisten: (() => void) | undefined;
+    void listen<{ received: number; total: number | null }>("update-download-progress", (event) => {
+      if (!alive) {
+        return;
+      }
+      setUpdateDetail(formatUpdateProgress(event.payload.received, event.payload.total));
+    }).then((stop) => {
+      if (!alive) {
+        void stop();
+        return;
+      }
+      unlisten = stop;
+    });
+    return () => {
+      alive = false;
+      unlisten?.();
+    };
+  }, []);
 
   useEffect(() => {
     let alive = true;
@@ -508,20 +531,32 @@ export function App() {
   }
 
   async function applyWindowsUpdate() {
-    const artifact = latestRef.current?.windows;
+    const release = latestRef.current;
+    const artifact = release?.windows;
     if (!artifact) {
       return;
     }
+    if (!beginUpdateDownload(updateDownloadRef.current)) {
+      return;
+    }
+    updateDownloadRef.current = true;
     setUpdatePhase("working");
-    setUpdateDetail("Downloading the update");
+    setUpdateDetail(formatUpdateProgress(0, artifact.size > 0 ? artifact.size : null));
     try {
-      await invoke("apply_update", { url: artifact.url, sha256: artifact.sha256, size: artifact.size });
+      await invoke("apply_update", {
+        url: artifact.url,
+        sha256: artifact.sha256,
+        size: artifact.size,
+        build: release.build,
+      });
       setUpdatePhase("available");
       setUpdateDetail("The installer is running. Confirm it, then reopen Hermes Bots.");
     } catch (error) {
       const message = error instanceof Error && error.message ? error.message : String(error);
-      setUpdatePhase("available");
+      setUpdatePhase("error");
       setUpdateDetail(message);
+    } finally {
+      updateDownloadRef.current = false;
     }
   }
 
@@ -1481,9 +1516,19 @@ export function App() {
         {updatePhase === "checking" ? <p className="text-sm text-muted-foreground">Checking for updates</p> : null}
         {updatePhase === "error" ? <p className="text-sm text-[var(--error)]">{updateDetail}</p> : null}
         <div className="flex flex-wrap gap-2">
-          {updatePhase === "available" || updatePhase === "working" ? (
+          {updatePhase === "available" ? (
             <Button type="button" onClick={() => void applyWindowsUpdate()}>
               Update
+            </Button>
+          ) : null}
+          {updatePhase === "working" ? (
+            <Button type="button" disabled>
+              Downloading…
+            </Button>
+          ) : null}
+          {updatePhase === "error" ? (
+            <Button type="button" onClick={() => void applyWindowsUpdate()}>
+              Retry
             </Button>
           ) : null}
           {updatePhase === "current" ? (
@@ -1491,7 +1536,7 @@ export function App() {
               Up to date
             </Button>
           ) : null}
-          <Button type="button" onClick={() => void checkUpdates(updateBase)}>
+          <Button type="button" onClick={() => void checkUpdates(updateBase)} disabled={updatePhase === "working"}>
             Check for updates
           </Button>
         </div>

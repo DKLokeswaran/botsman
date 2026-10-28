@@ -297,8 +297,8 @@ private fun LoginBlock(
         keyboardOptions = PasswordKeyboard,
     )
     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-        Slab("Log in", onLogin)
-        Slab("Register push", onRegisterPush)
+        Slab("Log in", onClick = onLogin)
+        Slab("Register push", onClick = onRegisterPush)
     }
     Text(state.pushStatus, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
     if (state.pushEndpoint.isNotEmpty()) {
@@ -327,10 +327,10 @@ private fun ChatBlock(
     }
     Text("SESSIONS", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.primary)
     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-        Slab("New session", onNew)
+        Slab("New session", onClick = onNew)
     }
     state.sessions.forEach { session ->
-        Slab(session.title.ifEmpty { session.id }, { onOpen(session.id) })
+        Slab(session.title.ifEmpty { session.id }, onClick = { onOpen(session.id) })
     }
     state.messages.forEachIndexed { index, line ->
         key(chatLineKey(state.liveSessionId, index, line.role, line.messageId)) {
@@ -390,9 +390,9 @@ private fun ChatBlock(
                     Text(card.command, fontFamily = FragmentMono, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
                 FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Slab("Allow once", onAllow)
-                    Slab("Deny", onDeny)
-                    Slab(if (state.showCommand) "Hide command" else "Full command", onToggleCommand)
+                    Slab("Allow once", onClick = onAllow)
+                    Slab("Deny", onClick = onDeny)
+                    Slab(if (state.showCommand) "Hide command" else "Full command", onClick = onToggleCommand)
                 }
             }
         }
@@ -630,10 +630,12 @@ private fun AboutBlock(
     }
     FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
         when (state.updatePhase) {
-            "available", "working" -> Slab("Update", onApplyUpdate)
-            "current" -> Slab("Up to date") {}
+            "available" -> Slab("Update", onClick = onApplyUpdate)
+            "working" -> Slab("Downloading…", enabled = false, onClick = onApplyUpdate)
+            "current" -> Slab("Up to date", onClick = {})
+            "error" -> Slab("Retry", onClick = onApplyUpdate)
         }
-        Slab("Check for updates", onCheckUpdate)
+        Slab("Check for updates", enabled = state.updatePhase != "working", onClick = onCheckUpdate)
     }
     if (state.updatePhase == "available" && state.updateDetail.isNotEmpty()) {
         Text(state.updateDetail, color = MaterialTheme.colorScheme.error)
@@ -641,9 +643,10 @@ private fun AboutBlock(
 }
 
 @Composable
-private fun Slab(label: String, onClick: () -> Unit) {
+private fun Slab(label: String, enabled: Boolean = true, onClick: () -> Unit) {
     Button(
         onClick = onClick,
+        enabled = enabled,
         shape = MaterialTheme.shapes.extraSmall,
         colors = ButtonDefaults.buttonColors(
             containerColor = MaterialTheme.colorScheme.tertiary,
