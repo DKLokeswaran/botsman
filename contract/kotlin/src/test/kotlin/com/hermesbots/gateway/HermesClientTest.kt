@@ -320,6 +320,71 @@ class HermesClientTest {
             second.close()
         }
     }
+
+    @Test
+    fun test_bug_login_stray_whitespace() {
+        assertEquals(
+            "Login failed (401: invalid_credentials)",
+            httpFailureMessage("Login failed", 401, """{"detail":{"reason":"invalid_credentials"}}"""),
+        )
+        assertEquals(
+            "Login failed (401: Invalid credentials)",
+            httpFailureMessage("Login failed", 401, """{"detail":"Invalid credentials","reason":"invalid_credentials"}"""),
+        )
+        assertEquals(
+            "Login failed (429: rate_limited)",
+            httpFailureMessage("Login failed", 429, """{"reason":"rate_limited"}"""),
+        )
+        withFake { port, http ->
+            val bodies = mutableListOf<String>()
+            val types = mutableListOf<String>()
+            val watching = http.newBuilder().addInterceptor { chain ->
+                val request = chain.request()
+                if (request.url.encodedPath == "/auth/password-login") {
+                    val buffer = okio.Buffer()
+                    request.body?.writeTo(buffer)
+                    bodies.add(buffer.readUtf8())
+                    types.add(request.body?.contentType()?.toString().orEmpty())
+                }
+                chain.proceed(request)
+            }.build()
+            val gateway = HermesClient("http://127.0.0.1:$port", watching)
+            try {
+                val username = " Person "
+                val password = "a+b/c "
+                val rejected = assertThrows<HermesException> {
+                    runBlocking { gateway.login(username, password) }
+                }
+                assertEquals(401, rejected.status)
+                assertEquals("Login failed (401: Invalid credentials)", rejected.message)
+                val sent = JSONObject(bodies.first())
+                assertEquals(username, sent.getString("username"))
+                assertEquals(password, sent.getString("password"))
+                assertEquals("basic", sent.getString("provider"))
+                assertEquals("/", sent.getString("next"))
+                assertTrue(bodies.first().contains("a+b/c "))
+                assertTrue(!bodies.first().contains("a%2B"))
+                assertTrue(types.first().startsWith("application/json"), types.first())
+                assertTrue(!types.first().contains("form-urlencoded"), types.first())
+
+                assertEquals(401, loginStatus(gateway, "Tester", "tester"))
+                assertEquals(401, loginStatus(gateway, "tester ", "tester"))
+                assertEquals(401, loginStatus(gateway, " tester", "tester"))
+                assertEquals(401, loginStatus(gateway, "tester", "tester "))
+                val material = runBlocking { gateway.login("tester", "tester") }
+                assertEquals("tester", material.username)
+            } finally {
+                gateway.close()
+            }
+        }
+    }
+}
+
+private fun loginStatus(gateway: HermesClient, username: String, password: String): Int? {
+    val error = assertThrows<HermesException> {
+        runBlocking { gateway.login(username, password) }
+    }
+    return error.status
 }
 
 private fun withFake(block: (Int, OkHttpClient) -> Unit) {

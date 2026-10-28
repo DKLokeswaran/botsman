@@ -56,14 +56,29 @@ fun transportFailureMessage(action: String, url: String, error: Exception): Stri
 }
 
 private fun readDetail(body: String): String? {
-    val detail = try {
-        JSONObject(body).opt("detail")
+    val root = try {
+        JSONObject(body)
     } catch (_: Exception) {
-        null
+        return null
     }
-    if (detail !is String) return null
-    val scrubbed = scrubSecrets(detail).trim()
+    val text = when {
+        root.has("detail") && !root.isNull("detail") -> when (val detail = root.opt("detail")) {
+            is String -> detail
+            is JSONObject -> firstString(detail, "reason", "message")
+            else -> null
+        }
+        else -> firstString(root, "reason")
+    } ?: return null
+    val scrubbed = scrubSecrets(text).trim()
     return scrubbed.ifEmpty { null }
+}
+
+private fun firstString(root: JSONObject, vararg keys: String): String? {
+    for (key in keys) {
+        val value = root.opt(key)
+        if (value is String && value.isNotEmpty()) return value
+    }
+    return null
 }
 
 data class LoginMaterial(

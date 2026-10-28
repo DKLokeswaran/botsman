@@ -7,7 +7,7 @@
     "dev": "vite",
     "build": "tsc --noEmit && vite build",
     "check": "tsc --noEmit && node --test contrast.regression.test.mjs",
-    "test": "vitest run && node --experimental-strip-types --test test/chat-scroll.test.ts test/session-sync.test.ts",
+    "test": "vitest run && node --experimental-strip-types --test test/chat-scroll.test.ts test/session-sync.test.ts test/login-form.test.ts",
     "tauri": "tauri",
     "e2e:serve": "vite build --config e2e/vite.config.ts --mode e2e && vite preview --config e2e/vite.config.ts --mode e2e --host 127.0.0.1 --port 4173 --strictPort",
     "e2e": "node e2e/assert-shipped-bundle.mjs && tsc -p e2e/tsconfig.json --noEmit && playwright test --config e2e/playwright.config.ts"

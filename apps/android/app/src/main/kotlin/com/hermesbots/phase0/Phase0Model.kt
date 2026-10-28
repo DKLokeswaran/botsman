@@ -331,21 +331,27 @@ class Phase0Model(app: Application) : AndroidViewModel(app) {
 
     fun login() {
         val snapshot = _state.value
+        val credentials = credentialsForLogin(snapshot.username, snapshot.password)
         viewModelScope.launch {
-            _state.update { it.copy(status = "Signing in", password = "") }
+            _state.update { it.copy(status = "Signing in", username = credentials.username, password = "") }
             plain.edit().putString("server_url", snapshot.serverUrl).apply()
             try {
                 val fresh = withContext(Dispatchers.IO) {
                     val signing = HermesClient(snapshot.serverUrl, http)
                     try {
-                        signing.login(snapshot.username, snapshot.password)
+                        signing.login(credentials.username, credentials.password)
                     } finally {
                         signing.close()
                     }
                 }
                 establish(fresh)
             } catch (error: Exception) {
-                _state.update { it.copy(status = error.message ?: "Login failed", connected = false) }
+                val message = if (error is HermesException) {
+                    loginFailureStatus(error.status, error.message ?: "Login failed", credentials.password)
+                } else {
+                    error.message ?: "Login failed"
+                }
+                _state.update { it.copy(status = message, connected = false, username = credentials.username) }
             }
         }
     }

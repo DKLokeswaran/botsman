@@ -8,6 +8,7 @@ import {
   HermesClient,
   HermesError,
   formatPush,
+  httpFailureMessage,
   nodeHttp,
   nodeSocket,
   openRequestIds,
@@ -55,6 +56,73 @@ function client(port: number): HermesClient {
     socket: nodeSocket(),
   });
 }
+
+test("test_bug_login_stray_whitespace", async () => {
+  assert.equal(
+    httpFailureMessage("Login failed", 401, JSON.stringify({ detail: { reason: "invalid_credentials" } })),
+    "Login failed (401: invalid_credentials)",
+  );
+  assert.equal(
+    httpFailureMessage(
+      "Login failed",
+      401,
+      JSON.stringify({ detail: "Invalid credentials", reason: "invalid_credentials" }),
+    ),
+    "Login failed (401: Invalid credentials)",
+  );
+  assert.equal(
+    httpFailureMessage("Login failed", 429, JSON.stringify({ reason: "rate_limited" })),
+    "Login failed (429: rate_limited)",
+  );
+
+  const username = " Person ";
+  const password = "a+b/c ";
+  let body = "";
+  let contentType = "";
+  const http: HttpTransport = {
+    async request(input) {
+      body = input.body ?? "";
+      contentType = input.headers?.["content-type"] ?? "";
+      return {
+        status: 401,
+        headers: [],
+        body: JSON.stringify({ detail: "Invalid credentials", reason: "invalid_credentials" }),
+      };
+    },
+  };
+  const recording = new HermesClient({ serverUrl: "http://127.0.0.1:9", http, socket: nodeSocket() });
+  await assert.rejects(() => recording.login(username, password), (error: unknown) => {
+    assert.ok(error instanceof HermesError);
+    assert.equal(error.status, 401);
+    assert.equal(error.message, "Login failed (401: Invalid credentials)");
+    return true;
+  });
+  assert.equal(contentType, "application/json");
+  const sent = JSON.parse(body) as { username: string; password: string; provider: string; next: string };
+  assert.equal(sent.username, username);
+  assert.equal(sent.password, password);
+  assert.equal(sent.provider, "basic");
+  assert.equal(sent.next, "/");
+  assert.equal(body.includes("a%2B"), false);
+  assert.equal(body.includes("a+b/c "), true);
+
+  const fake = await startFake();
+  try {
+    const live = client(fake.port);
+    await assert.rejects(() => live.login("Tester", "tester"), (error: unknown) => {
+      assert.ok(error instanceof HermesError);
+      assert.equal(error.status, 401);
+      return true;
+    });
+    await assert.rejects(() => live.login("tester ", "tester"));
+    await assert.rejects(() => live.login(" tester", "tester"));
+    await assert.rejects(() => live.login("tester", "tester "));
+    const material = await live.login("tester", "tester");
+    assert.equal(material.username, "tester");
+  } finally {
+    fake.stop();
+  }
+});
 
 test("login, ticket, and refresh", async () => {
   const fake = await startFake();

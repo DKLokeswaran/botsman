@@ -35,6 +35,7 @@ import { Button } from "./components/ui/button";
 import { Input } from "./components/ui/input";
 import { Textarea } from "./components/ui/textarea";
 import { chatLineKey } from "./chat-line-key";
+import { credentialsForLogin, loginFailureStatus, passwordInputProps, usernameInputProps } from "./login-form";
 import { Reply, UserLine } from "./markdown";
 import { tauriHttp, tauriSocket } from "./gateway";
 import {
@@ -993,14 +994,17 @@ export function App() {
     localStorage.setItem(SERVER_KEY, url);
     setServerUrl(url);
     setStatus("Signing in");
-    const typed = password;
+    const credentials = credentialsForLogin(username, password);
+    setUsername(credentials.username);
     setPassword("");
     const probe = new HermesClient({ serverUrl: url, http: tauriHttp(), socket: tauriSocket() });
     try {
-      const material = await probe.login(username.trim(), typed);
+      const material = await probe.login(credentials.username, credentials.password);
       await openClient(url, material);
     } catch (error) {
-      setStatus(error instanceof Error ? error.message : "Login failed");
+      const message = error instanceof Error ? error.message : "Login failed";
+      const status = error instanceof HermesError ? error.status : null;
+      setStatus(loginFailureStatus(status, message, credentials.password));
       setConnected(false);
     } finally {
       probe.close();
@@ -1315,11 +1319,11 @@ export function App() {
             </label>
             <label className="block space-y-1">
               <span className="font-[family-name:var(--font-label)] text-[12px] tracking-[0.08em] uppercase">Username</span>
-              <Input value={username} onChange={(event) => setUsername(event.target.value)} autoCapitalize="off" spellCheck={false} />
+              <Input value={username} onChange={(event) => setUsername(event.target.value)} {...usernameInputProps} />
             </label>
             <label className="block space-y-1">
               <span className="font-[family-name:var(--font-label)] text-[12px] tracking-[0.08em] uppercase">Password</span>
-              <Input type="password" value={password} onChange={(event) => setPassword(event.target.value)} />
+              <Input value={password} onChange={(event) => setPassword(event.target.value)} {...passwordInputProps} />
             </label>
             <Button type="submit">Log in</Button>
             <p className="text-sm text-muted-foreground">
