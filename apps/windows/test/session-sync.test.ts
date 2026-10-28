@@ -182,8 +182,16 @@ test("test_bug_stale_session_resume_shows_list", () => {
     liveId: "live-1",
     lines: [{ role: "user", text: "hello", messageId: "", seq: null }],
     status: "Connected",
+    approval: { id: "srq-1" },
+    question: { id: "q-1" },
+    focus: { target: "message", messageIndex: 0 },
+    showCommand: true,
   });
   assert.equal(dropped.liveId, null);
   assert.equal(dropped.lines.length, 0);
   assert.equal(dropped.status, SESSION_UNAVAILABLE_NOTICE);
+  assert.equal(dropped.approval, null);
+  assert.equal(dropped.question, null);
+  assert.equal(dropped.focus, null);
+  assert.equal(dropped.showCommand, false);
 });

@@ -91,11 +91,15 @@ export const SESSION_UNAVAILABLE_NOTICE = "That chat is no longer available";
 export function afterStaleSessionDropped<T extends { liveId: string | null; lines: TranscriptLine[]; status: string }>(
   view: T,
   notice: string = SESSION_UNAVAILABLE_NOTICE,
-): T {
+): T & { approval: null; question: null; focus: null; showCommand: false } {
   return {
     ...view,
     liveId: null,
     lines: [],
+    approval: null,
+    question: null,
+    focus: null,
+    showCommand: false,
     status: notice,
   };
 }

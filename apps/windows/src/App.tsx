@@ -45,6 +45,7 @@ import { tauriHttp, tauriSocket } from "./gateway";
 import {
   RESOLVED_CARD_MS,
   SESSION_UNAVAILABLE_NOTICE as STALE_SESSION_NOTICE,
+  afterStaleSessionDropped,
   choiceLabel,
   expireResolved,
   mergeHistory,
@@ -637,13 +638,19 @@ export function App() {
     if (liveRef.current !== null && liveRef.current !== sessionId) {
       return;
     }
-    liveRef.current = null;
-    linesRef.current = [];
-    setLiveId(null);
-    setLines([]);
-    rememberQuestion(null);
-    setShowCommand(false);
-    setStatus(STALE_SESSION_NOTICE);
+    const cleared = afterStaleSessionDropped({
+      liveId: liveRef.current,
+      lines: linesRef.current,
+      status: STALE_SESSION_NOTICE,
+    });
+    liveRef.current = cleared.liveId;
+    linesRef.current = cleared.lines;
+    setLiveId(cleared.liveId);
+    setLines(cleared.lines);
+    rememberQuestion(cleared.question);
+    setShowCommand(cleared.showCommand);
+    setFocus(cleared.focus);
+    setStatus(cleared.status);
   }
 
   async function resumeOrDrop(

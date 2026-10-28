@@ -1,6 +1,7 @@
 package com.hermesbots.phase0
 
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
 import org.junit.Test
 
@@ -170,10 +171,30 @@ class Phase0ModelSyncTest {
                 liveSessionId = "live-1",
                 messages = listOf(ChatLine("user", "hello")),
                 status = "Connected",
+                approval = card("live-1"),
+                question = PendingQuestion(
+                    id = "q-1",
+                    sessionId = "live-1",
+                    requestId = "req-q",
+                    text = "Which file?",
+                ),
+                focus = RouteFocusState(
+                    target = "message",
+                    requestId = "",
+                    messageId = "1",
+                    seq = 1,
+                    resolved = false,
+                    messageIndex = 0,
+                ),
+                showCommand = true,
             ),
         )
         assertNull(dropped.liveSessionId)
         assertEquals(0, dropped.messages.size)
         assertEquals("That chat is no longer available", dropped.status)
+        assertNull(dropped.approval)
+        assertNull(dropped.question)
+        assertNull(dropped.focus)
+        assertFalse(dropped.showCommand)
     }
 }

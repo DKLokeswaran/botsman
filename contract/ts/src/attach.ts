@@ -1,3 +1,5 @@
+import { HermesError } from "./index.ts";
+
 export const SESSION_UNAVAILABLE_NOTICE = "That chat is no longer available";
 export const SESSION_UNAVAILABLE_CODE = 4007;
 export const RESUME_RETRY_MS = 30_000;
@@ -5,14 +7,13 @@ export const RECONNECT_BACKOFF_CAP_MS = 15_000;
 
 /** JSON-RPC failure on session.resume / session.activate that means the id is gone server-side. */
 export function isSessionAttachFailure(error: unknown): boolean {
-  if (typeof error !== "object" || error === null) {
+  if (!(error instanceof HermesError)) {
     return false;
   }
-  const candidate = error as { code?: number | null; message?: string };
-  if (candidate.code === SESSION_UNAVAILABLE_CODE) {
+  if (error.code === SESSION_UNAVAILABLE_CODE) {
     return true;
   }
-  return String(candidate.message ?? "").toLowerCase().includes("session not found");
+  return error.message.toLowerCase().includes("session not found");
 }
 
 export function parseRetryAfterSeconds(headers: { name: string; value: string }[]): number | null {
