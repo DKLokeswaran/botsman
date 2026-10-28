@@ -164,13 +164,33 @@ export function publicUrl(url: string): string {
   return scrubSecrets(url);
 }
 
+function firstString(record: Record<string, unknown>, keys: string[]): string | null {
+  for (const key of keys) {
+    const value = record[key];
+    if (typeof value === "string" && value) {
+      return value;
+    }
+  }
+  return null;
+}
+
 function readDetail(body: string): string | null {
   try {
-    const detail = asRecord(JSON.parse(body)).detail;
-    if (typeof detail !== "string") {
+    const root = asRecord(JSON.parse(body));
+    let text: string | null;
+    if ("detail" in root && root.detail != null) {
+      if (typeof root.detail === "string") {
+        text = root.detail;
+      } else {
+        text = firstString(asRecord(root.detail), ["reason", "message"]);
+      }
+    } else {
+      text = firstString(root, ["reason"]);
+    }
+    if (!text) {
       return null;
     }
-    const trimmed = scrubSecrets(detail).trim();
+    const trimmed = scrubSecrets(text).trim();
     return trimmed || null;
   } catch {
     return null;

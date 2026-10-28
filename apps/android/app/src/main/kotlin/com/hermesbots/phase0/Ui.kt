@@ -53,6 +53,7 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.graphics.vector.PathParser
 import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.text.AnnotatedString
+import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.buildAnnotatedString
@@ -278,8 +279,23 @@ private fun LoginBlock(
 ) {
     OutlinedTextField(state.serverUrl, onServer, Modifier.fillMaxWidth(), label = { Text("Hermes server") }, singleLine = true)
     OutlinedTextField(state.updateBase, onUpdateBase, Modifier.fillMaxWidth(), label = { Text("Update server") }, singleLine = true)
-    OutlinedTextField(state.username, onUsername, Modifier.fillMaxWidth(), label = { Text("Username") }, singleLine = true)
-    OutlinedTextField(state.password, onPassword, Modifier.fillMaxWidth(), label = { Text("Password") }, singleLine = true)
+    OutlinedTextField(
+        state.username,
+        onUsername,
+        Modifier.fillMaxWidth(),
+        label = { Text("Username") },
+        singleLine = true,
+        keyboardOptions = UsernameKeyboard,
+    )
+    OutlinedTextField(
+        state.password,
+        onPassword,
+        Modifier.fillMaxWidth(),
+        label = { Text("Password") },
+        singleLine = true,
+        visualTransformation = PasswordVisualTransformation(),
+        keyboardOptions = PasswordKeyboard,
+    )
     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
         Slab("Log in", onLogin)
         Slab("Register push", onRegisterPush)

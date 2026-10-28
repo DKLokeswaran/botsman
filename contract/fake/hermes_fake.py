@@ -928,10 +928,20 @@ class Handler(BaseHTTPRequestHandler):
                 self.end_headers()
                 self.wfile.write(raw)
                 return
-            username = str(incoming.get("username") or "")
-            password = str(incoming.get("password") or "")
-            if username != FAKE_USER or password != FAKE_PASSWORD:
-                self._json_response(401, {"detail": "Invalid credentials"})
+            # Exact, case-sensitive match. Spaces are part of the credential.
+            # Real Hermes rejects these as invalid_credentials, not a later 401.
+            username = incoming.get("username") if isinstance(incoming, dict) else None
+            password = incoming.get("password") if isinstance(incoming, dict) else None
+            if (
+                not isinstance(username, str)
+                or not isinstance(password, str)
+                or username != FAKE_USER
+                or password != FAKE_PASSWORD
+            ):
+                self._json_response(
+                    401,
+                    {"detail": "Invalid credentials", "reason": "invalid_credentials"},
+                )
                 return
             access, refresh = STATE.mint_session(username)
             self._json_response(
