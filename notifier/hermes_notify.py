@@ -27,6 +27,7 @@ from urllib.parse import quote, urlparse
 
 WS_GUID = "258EAFA5-E914-47DA-95CA-C5AB0DC85B11"
 SECRET_KEYS = {"HERMES_PASSWORD", "NOTIFY_TOKEN", "HERMES_REFRESH"}
+MAX_PUSH_BYTES = 4096
 
 
 def load_env(path: str) -> dict[str, str]:
@@ -91,6 +92,56 @@ def request_json(method: str, url: str, body: dict | None = None, headers: dict 
         return exc.code, payload, []
 
 
+def _clip(value: str, limit: int) -> str:
+    text = value.replace("\x00", "")
+    return text if len(text) <= limit else text[:limit]
+
+
+def build_notify(
+    *,
+    kind: str,
+    title: str,
+    body: str,
+    session_id: str = "",
+    profile: str = "",
+    request_id: str = "",
+    message_id: str = "",
+    seq: int | None = None,
+) -> dict:
+    """One push. The JSON body stays under 4 KB so UnifiedPush will accept it."""
+    record = {
+        "kind": kind,
+        "title": _clip(title, 140),
+        "body": _clip(body, 700),
+        "session_id": _clip(session_id, 200),
+        "profile": _clip(profile, 200),
+        "request_id": _clip(request_id, 200),
+        "message_id": _clip(message_id, 200),
+        "seq": seq if isinstance(seq, int) else None,
+    }
+    while len(json.dumps(record, ensure_ascii=False, separators=(",", ":")).encode("utf-8")) > MAX_PUSH_BYTES and record["body"]:
+        record["body"] = record["body"][: max(0, len(record["body"]) // 2)]
+    return record
+
+
+def notify_bytes(record: dict) -> bytes:
+    raw = json.dumps(record, ensure_ascii=False, separators=(",", ":")).encode("utf-8")
+    if len(raw) > MAX_PUSH_BYTES:
+        raise ValueError("push payload exceeds 4 KB")
+    return raw
+
+
+def message_id_from(payload: dict) -> str:
+    turn = payload.get("persisted_turn")
+    if not isinstance(turn, dict):
+        return ""
+    row = turn.get("final_assistant_row_id")
+    if isinstance(row, int):
+        return str(row)
+    submission = turn.get("submission_id")
+    return submission if isinstance(submission, str) else ""
+
+
 def cookie_value(cookies: list[str], name: str) -> str:
     for header in cookies:
         pair = header.split(";", 1)[0]
@@ -109,6 +160,8 @@ class Gateway:
         self.sock: socket.socket | None = None
         self.next_id = 0
         self.attached: set[str] = set()
+        self.profiles: dict[str, str] = {}
+        self.pending = b""
         self.dry_run = False
         self.notify_url = ""
         self.notify_token = ""
@@ -200,6 +253,10 @@ class Gateway:
         raw.settimeout(20)
         self.sock = raw
         self.attached.clear()
+        self.pending = b""
+        split = header.split(b"\r\n\r\n", 1)
+        if len(split) == 2:
+            self.pending = split[1]
         ready = self.read_frame(20)
         if not ready or ready.get("method") != "event":
             raise RuntimeError("missing gateway.ready")
@@ -287,20 +344,18 @@ class Gateway:
     def _read_exact(self, size: int) -> bytes | None:
         if self.sock is None or size == 0:
             return b""
-        chunks = []
-        remaining = size
-        while remaining:
+        while len(self.pending) < size:
             try:
-                chunk = self.sock.recv(remaining)
+                chunk = self.sock.recv(size - len(self.pending))
             except socket.timeout:
-                if chunks:
+                if self.pending:
                     continue
                 raise
             if not chunk:
                 return None
-            chunks.append(chunk)
-            remaining -= len(chunk)
-        return b"".join(chunks)
+            self.pending += chunk
+        data, self.pending = self.pending[:size], self.pending[size:]
+        return data
 
     def _pong(self, data: bytes) -> None:
         if self.sock is None:
@@ -313,6 +368,12 @@ class Gateway:
         except OSError:
             return
 
+    def profile_for(self, session_id: str, params: dict) -> str:
+        named = params.get("profile")
+        if isinstance(named, str) and named:
+            return named
+        return self.profiles.get(session_id, "")
+
     def handle(self, frame: dict) -> None:
         method = frame.get("method")
         if method == "event":
@@ -321,36 +382,92 @@ class Gateway:
             return
         if isinstance(method, str) and "id" in frame:
             params = frame.get("params") if isinstance(frame.get("params"), dict) else {}
+            session_id = str(params.get("session_id") or "")
             if method == "approval":
-                self.emit("approval", "Approval waiting", str(params.get("description") or params.get("command") or "Approval"))
+                self.emit_record(
+                    build_notify(
+                        kind="approval",
+                        title="Approval waiting",
+                        body=str(params.get("description") or params.get("command") or "Approval"),
+                        session_id=session_id,
+                        profile=self.profile_for(session_id, params),
+                        request_id=str(params.get("request_id") or ""),
+                    )
+                )
             elif method == "clarify":
                 questions = params.get("questions") if isinstance(params.get("questions"), list) else []
-                first = questions[0].get("question") if questions and isinstance(questions[0], dict) else "Question"
-                self.emit("clarify", "Question waiting", str(first))
+                first = questions[0] if questions and isinstance(questions[0], dict) else {}
+                question = str(first.get("question") or "Question")
+                request_id = str(first.get("qid") or frame.get("id") or "")
+                self.emit_record(
+                    build_notify(
+                        kind="clarify",
+                        title="Question waiting",
+                        body=question,
+                        session_id=session_id,
+                        profile=self.profile_for(session_id, params),
+                        request_id=request_id,
+                    )
+                )
             return
 
     def on_event(self, event_type: str, params: dict) -> None:
         payload = params.get("payload") if isinstance(params.get("payload"), dict) else {}
+        session_id = str(params.get("session_id") or "")
+        seq = params.get("seq") if isinstance(params.get("seq"), int) else None
+        profile = self.profile_for(session_id, params)
         if event_type == "message.complete":
             status = str(payload.get("status") or "")
             text = str(payload.get("text") or "")
             if status == "error" or payload.get("error"):
-                self.emit("error", "Hermes error", str(payload.get("error") or text or "Reply failed")[:240])
+                self.emit_record(
+                    build_notify(
+                        kind="error",
+                        title="Hermes error",
+                        body=str(payload.get("error") or text or "Reply failed"),
+                        session_id=session_id,
+                        profile=profile,
+                        message_id=message_id_from(payload),
+                        seq=seq,
+                    )
+                )
             elif text or status == "complete":
-                self.emit("reply", "Reply finished", (text or "Reply finished")[:240])
+                self.emit_record(
+                    build_notify(
+                        kind="reply",
+                        title="Reply finished",
+                        body=text or "Reply finished",
+                        session_id=session_id,
+                        profile=profile,
+                        message_id=message_id_from(payload),
+                        seq=seq,
+                    )
+                )
         elif event_type == "error":
-            self.emit("error", "Hermes error", str(payload.get("message") or payload.get("text") or "Error")[:240])
+            self.emit_record(
+                build_notify(
+                    kind="error",
+                    title="Hermes error",
+                    body=str(payload.get("message") or payload.get("text") or "Error"),
+                    session_id=session_id,
+                    profile=profile,
+                    seq=seq,
+                )
+            )
 
-    def emit(self, kind: str, title: str, body: str) -> None:
-        record = {"kind": kind, "title": title, "body": body}
-        print("NOTIFY " + json.dumps(record, ensure_ascii=False), flush=True)
+    def emit_record(self, record: dict) -> None:
+        data = notify_bytes(record)
+        print("NOTIFY " + data.decode("utf-8"), flush=True)
         self.sent += 1
         if not self.dry_run and self.notify_url:
-            data = body.encode("utf-8")
             req = urllib.request.Request(self.notify_url, data=data, method="POST")
-            req.add_header("Title", title)
-            req.add_header("Content-Type", "text/plain")
-            req.add_header("Tags", kind)
+            title = str(record.get("title") or "")
+            try:
+                req.add_header("Title", title.encode("latin-1", "replace").decode("latin-1"))
+            except (UnicodeError, ValueError):
+                pass
+            req.add_header("Content-Type", "application/json")
+            req.add_header("Tags", str(record.get("kind") or ""))
             if self.notify_token:
                 req.add_header("Authorization", f"Bearer {self.notify_token}")
             try:
@@ -368,7 +485,12 @@ class Gateway:
             if not isinstance(row, dict):
                 continue
             sid = str(row.get("id") or "")
-            if not sid or sid in self.attached:
+            if not sid:
+                continue
+            profile = row.get("profile")
+            if isinstance(profile, str) and profile:
+                self.profiles[sid] = profile
+            if sid in self.attached:
                 continue
             self.call("session.activate", {"session_id": sid, "omit_messages": True})
             self.attached.add(sid)
@@ -380,6 +502,7 @@ class Gateway:
             except OSError:
                 pass
             self.sock = None
+            self.pending = b""
 
 
 def main() -> None:

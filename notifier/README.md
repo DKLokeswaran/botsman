@@ -31,9 +31,23 @@ The first real answer wins. A JSON-RPC error `4404` is a "not shown here" declin
 
 Copy `notifier.env.example` to a path outside the repo, or to `notifier.env` in this directory (that filename is gitignored). Fill in the Hermes username and password yourself. Nothing in the repo or in CI has a real login.
 
-The process prints `logged in as <username>` and `NOTIFY {kind, title, body}`. It does not print the password, the refresh token, or the websocket ticket.
+The process prints `logged in as <username>` and one `NOTIFY` line per event. The line is the JSON body it POSTs. It does not print the password, the refresh token, or the websocket ticket.
+
+```json
+{"kind":"approval","title":"Approval waiting","body":"Read the repo","session_id":"…","profile":"default","request_id":"…","message_id":"","seq":null}
+```
+
+`kind` is `approval`, `clarify`, `reply`, or `error`. `profile` is filled when the session list included one. Approvals and questions set `request_id`. Replies set `message_id` (the persisted row id when Hermes sent one) and `seq`. The encoded body stays under 4 KB. The POST is `Content-Type: application/json`, with `Title` and `Tags` headers. There are no new environment variables.
 
 `NOTIFY_URL` is an ntfy topic URL or the endpoint string shown on the Android settings screen. `NOTIFY_TOKEN` is optional and is sent as `Authorization: Bearer`.
+
+Copy the new `hermes_notify.py` over the one the service runs, then restart it. Nothing else in `notifier.env` changes.
+
+```bash
+systemctl --user restart hermes-bots-notify.service
+```
+
+A tmux process needs the same script and a new session. Install the new Android APK at the same time. The new app still opens the home screen for an old plain-text body. The previous app would show a JSON body as raw text.
 
 ## Dry run
 

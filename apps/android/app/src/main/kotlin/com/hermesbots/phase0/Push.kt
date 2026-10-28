@@ -11,6 +11,7 @@ import android.content.pm.PackageManager
 import android.os.Build
 import androidx.core.app.NotificationCompat
 import androidx.core.content.ContextCompat
+import com.hermesbots.gateway.parsePush
 import org.unifiedpush.android.connector.PushService
 import org.unifiedpush.android.connector.UnifiedPush
 import org.unifiedpush.android.connector.data.PushEndpoint
@@ -19,7 +20,10 @@ import org.unifiedpush.android.connector.data.PushMessage
 const val PUSH_PREFS = "hermes_bots_push"
 const val PUSH_ENDPOINT = "endpoint"
 const val PUSH_STATUS = "status"
-private const val CHANNEL_ID = "hermes-bots"
+private const val CHANNEL_APPROVALS = "hermes-approvals"
+private const val CHANNEL_QUESTIONS = "hermes-questions"
+private const val CHANNEL_REPLIES = "hermes-replies"
+private const val CHANNEL_ERRORS = "hermes-errors"
 private const val INSTANCE = "hermes"
 
 class HermesPushService : PushService() {
@@ -49,29 +53,71 @@ class HermesPushService : PushService() {
 fun showHermesNotification(context: Context, text: String) {
     val manager = context.getSystemService(NotificationManager::class.java)
     if (Build.VERSION.SDK_INT >= 26) {
-        val channel = NotificationChannel(CHANNEL_ID, "Hermes Bots", NotificationManager.IMPORTANCE_DEFAULT)
-        manager.createNotificationChannel(channel)
+        ensureChannels(manager)
     }
-    val intent = Intent(context, MainActivity::class.java).apply {
-        flags = Intent.FLAG_ACTIVITY_SINGLE_TOP or Intent.FLAG_ACTIVITY_CLEAR_TOP
-        putExtra("push_body", text)
+    val route = parsePush(text)
+    val channel = when (route?.kind) {
+        "approval" -> CHANNEL_APPROVALS
+        "clarify" -> CHANNEL_QUESTIONS
+        "error" -> CHANNEL_ERRORS
+        else -> CHANNEL_REPLIES
     }
-    val pending = PendingIntent.getActivity(
+    val title = route?.title?.takeIf { it.isNotBlank() } ?: "Hermes Bots"
+    val body = route?.body?.takeIf { it.isNotBlank() } ?: text
+    val tap = PendingIntent.getActivity(
         context,
-        text.hashCode(),
-        intent,
+        requestCode(text, 0),
+        openIntent(context, text, structured = route != null, action = null),
         PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
     )
-    val notification = NotificationCompat.Builder(context, CHANNEL_ID)
+    val builder = NotificationCompat.Builder(context, channel)
         .setSmallIcon(R.drawable.ic_notify)
-        .setContentTitle("Hermes Bots")
-        .setContentText(text)
-        .setStyle(NotificationCompat.BigTextStyle().bigText(text))
-        .setContentIntent(pending)
+        .setContentTitle(title)
+        .setContentText(body)
+        .setStyle(NotificationCompat.BigTextStyle().bigText(body))
+        .setContentIntent(tap)
         .setAutoCancel(true)
-        .build()
-    manager.notify(text.hashCode(), notification)
+    if (route?.kind == "approval") {
+        builder.addAction(0, "Allow once", actionIntent(context, text, "once"))
+        builder.addAction(0, "Deny", actionIntent(context, text, "deny"))
+    }
+    manager.notify((text.hashCode() and 0x7fffffff), builder.build())
 }
+
+private fun ensureChannels(manager: NotificationManager) {
+    listOf(
+        CHANNEL_APPROVALS to "Approvals",
+        CHANNEL_QUESTIONS to "Questions",
+        CHANNEL_REPLIES to "Replies",
+        CHANNEL_ERRORS to "Errors",
+    ).forEach { (id, name) ->
+        manager.createNotificationChannel(NotificationChannel(id, name, NotificationManager.IMPORTANCE_DEFAULT))
+    }
+}
+
+private fun openIntent(context: Context, raw: String, structured: Boolean, action: String?): Intent {
+    return Intent(context, MainActivity::class.java).apply {
+        flags = Intent.FLAG_ACTIVITY_SINGLE_TOP or Intent.FLAG_ACTIVITY_CLEAR_TOP
+        if (structured) {
+            putExtra("push_json", raw)
+            if (action != null) putExtra("push_action", action)
+        } else {
+            putExtra("push_body", raw)
+        }
+    }
+}
+
+private fun actionIntent(context: Context, raw: String, action: String): PendingIntent {
+    val slot = if (action == "once") 1 else 2
+    return PendingIntent.getActivity(
+        context,
+        requestCode(raw, slot),
+        openIntent(context, raw, structured = true, action = action),
+        PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
+    )
+}
+
+private fun requestCode(seed: String, slot: Int): Int = (seed.hashCode() and 0x7ffffffc) + slot
 
 fun registerUnifiedPush(activity: Activity) {
     val distributors = UnifiedPush.getDistributors(activity)

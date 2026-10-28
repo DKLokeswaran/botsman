@@ -352,6 +352,7 @@ def _dispatch(wfile, req: dict) -> None:
                             "message_count": 1,
                             "model": "fake-model",
                             "preview": "Say hello",
+                            "profile": "default",
                         }
                     ]
                 },

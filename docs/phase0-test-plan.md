@@ -56,7 +56,7 @@ Play Protect may warn that the app is unknown. That is expected for a debug APK 
 10. Click the message box and paste a screenshot (a copied image). A thumbnail appears above the box. The image is not uploaded. Tap **Attach file**, pick a small file, and its name appears. An image file also shows a thumbnail.
 11. Click **Try Tamil and Hindi typing here**. Switch the Windows keyboard to Tamil, type a few letters, then Hindi. The characters should appear as you type.
 12. Tap **Autostart off**. It should flip to **Autostart on**. Sign out of Windows and sign back in. Hermes Bots should start. Flip it off again if you do not want that left on.
-13. Tap **Send test toast**. A Windows toast titled Hermes Bots should appear. Then minimise the window, or close it to the tray, and send a prompt from another client (or wait for a reply). A toast should appear for that reply or for an approval. Clicking the app from the toast is the system toast click. The tray **Open** item brings the window back.
+13. Tap **Send test toast**. A Windows toast titled Hermes Bots should appear. Then minimise the window, or close it to the tray, and send a prompt from another client (or wait for a reply). A toast should appear for that reply or for an approval. Click the toast while it is still on screen. The window comes back on that session, and the approval card or the reply is outlined. If the toast has already moved to Action Center, Windows does not report the click: use the tray **Open** item, which opens the same session.
 
 ## Android checklist
 
@@ -71,7 +71,7 @@ Play Protect may warn that the app is unknown. That is expected for a debug APK 
 9. Toggle airplane mode, or disconnect Tailscale, while a session is open. **Reconnecting** shows. Restore the network. The banner clears. A prompt still works, and anything that finished during the gap is filled in.
 10. Focus the message field and open the keyboard. The composer is one row: an attach icon, the message field, and a send icon. It fits the screen width with no sideways scroll, and it stays above the keyboard. The system bars are edge to edge. The field **Try Tamil and Hindi typing here** is at the bottom. Switch the keyboard to Tamil, type, then Hindi. The characters appear.
 11. Tap the attach icon. **Image**, **File**, and **Paste image** are in that menu. Paste or pick an image and a thumbnail appears. Pick any other file and its name appears. Nothing is uploaded.
-12. From a computer, POST a line of text to the endpoint URL shown in the app (or let the notifier do it). A notification titled Hermes Bots appears. Tap it. The app opens and the text is shown as **Opened from notification**.
+12. Let the notifier deliver an approval (or POST a JSON body with `kind`, `session_id`, and `request_id` to the endpoint). The notification uses the Approvals channel and has **Allow once** and **Deny**. Tap the notification. The app opens that session and outlines the card. If the request was already answered, the card says **Resolved** and the buttons are gone. **Allow once** or **Deny** on the notification itself answers it when the card is still open. A finished reply uses the Replies channel and opens on that message. A plain text POST, the old notifier shape, still opens the app and shows **Opened from notification**. Android settings can mute Replies without muting Approvals.
 
 ## Notifier on the devbox
 
@@ -81,7 +81,7 @@ This is separate from the two apps. See `notifier/README.md`.
 2. Set `NOTIFY_URL` to the endpoint from the Android screen, or to an ntfy topic.
 3. Set `HERMES_URL` to `http://100.113.35.96:9119` and `BIND_HOST` to `100.113.35.96`. The MagicDNS name is rejected with the same Host-header 400 as the apps.
 4. Run it once with `--dry-run`. It should print `logged in` and `socket ready`, and it should not print the password.
-5. Open a session in one of the apps and send a prompt that asks for approval. The notifier prints a `NOTIFY` line of kind `approval`, and the phone shows a notification if `NOTIFY_URL` is the phone's endpoint. The approval card is still yours to tap in the app. The notifier does not tap Allow or Deny.
+5. Open a session in one of the apps and send a prompt that asks for approval. The notifier prints one `NOTIFY` line whose body is JSON (`kind`, `title`, `body`, `session_id`, `profile` when known, `request_id`, and for a reply `message_id` or `seq`). The phone shows that notification if `NOTIFY_URL` is the phone's endpoint. Tapping it opens the session. The notifier does not tap Allow or Deny. No new environment variables. After you copy the new `hermes_notify.py`, restart the process (`systemctl --user restart hermes-bots-notify.service`, or restart the tmux session). Install the new APK with that restart. A new JSON body on the previous APK would show the raw JSON. An old plain-text body on the new APK still opens the app.
 6. `curl http://<BIND_HOST>:<BIND_PORT>/health` from another tailnet device returns `ok`. A machine off the tailnet should not reach it.
 
 ## What a pass looks like

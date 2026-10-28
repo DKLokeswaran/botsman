@@ -84,7 +84,20 @@ export interface SessionRow {
 export interface TranscriptMessage {
   role: string;
   text: string;
+  rowId: string;
 }
+
+export {
+  formatPush,
+  openRequestIds,
+  parsePush,
+  routeFocus,
+  type PushKind,
+  type PushRequest,
+  type PushRoute,
+  type RouteFocus,
+  type TrackedMessage,
+} from "./push.ts";
 
 export interface ReplayResult {
   events: GatewayEvent[];
@@ -665,7 +678,12 @@ function messagesFrom(value: unknown): TranscriptMessage[] {
   }
   return value.map((row) => {
     const item = asRecord(row);
-    return { role: String(item.role ?? ""), text: String(item.text ?? "") };
+    const rowId = item.row_id;
+    return {
+      role: String(item.role ?? ""),
+      text: String(item.text ?? ""),
+      rowId: rowId === undefined || rowId === null ? "" : String(rowId),
+    };
   });
 }
 

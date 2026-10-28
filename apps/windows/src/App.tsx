@@ -1,14 +1,20 @@
 import { invoke } from "@tauri-apps/api/core";
+import { listen } from "@tauri-apps/api/event";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { disable, enable, isEnabled } from "@tauri-apps/plugin-autostart";
-import { isPermissionGranted, requestPermission, sendNotification } from "@tauri-apps/plugin-notification";
+import { isPermissionGranted, onAction, requestPermission, sendNotification } from "@tauri-apps/plugin-notification";
 import { useEffect, useRef, useState } from "react";
 import {
   HermesClient,
   HermesError,
+  formatPush,
+  openRequestIds,
+  parsePush,
+  routeFocus,
   type GatewayEvent,
   type LoginMaterial,
   type ProfileRow,
+  type PushRoute,
   type ServerRequest,
   type SessionRow,
 } from "@hermes-bots/gateway-client";
@@ -33,7 +39,7 @@ function preferredServer(stored: string | null): string {
   return normalized;
 }
 
-type Line = { role: string; text: string };
+type Line = { role: string; text: string; messageId: string; seq: number | null };
 type Approval = {
   id: string;
   sessionId: string;
@@ -42,16 +48,61 @@ type Approval = {
   command: string;
   resolvedLabel: string | null;
 };
+type Question = {
+  id: string;
+  sessionId: string;
+  requestId: string;
+  text: string;
+  resolvedLabel: string | null;
+};
+type Focus = {
+  target: string;
+  requestId: string;
+  messageId: string;
+  seq: number | null;
+  resolved: boolean;
+  messageIndex: number;
+};
 type Staged = { name: string; url: string | null };
 type Vault = { username: string; refreshToken: string; provider: string };
 
-async function toast(title: string, body: string) {
+function blankLine(role: string, text: string, messageId = "", seq: number | null = null): Line {
+  return { role, text, messageId, seq };
+}
+
+function messageIdFrom(payload: Record<string, unknown>): string {
+  const turn = payload.persisted_turn;
+  if (!turn || typeof turn !== "object") {
+    return "";
+  }
+  const record = turn as Record<string, unknown>;
+  if (typeof record.final_assistant_row_id === "number") {
+    return String(record.final_assistant_row_id);
+  }
+  return typeof record.submission_id === "string" ? record.submission_id : "";
+}
+
+function routeFrom(kind: PushRoute["kind"], title: string, body: string, sessionId: string, requestId: string, messageId: string, seq: number | null): PushRoute {
+  return {
+    kind,
+    title,
+    body,
+    sessionId,
+    profile: "",
+    requestId,
+    messageId,
+    seq,
+    action: null,
+  };
+}
+
+async function toast(title: string, body: string, route?: PushRoute) {
   let granted = await isPermissionGranted();
   if (!granted) {
     granted = (await requestPermission()) === "granted";
   }
   if (granted) {
-    sendNotification({ title, body });
+    sendNotification({ title, body, extra: route ? { route: formatPush(route) } : undefined });
   }
 }
 
@@ -93,6 +144,8 @@ export function App() {
   const [liveId, setLiveId] = useState<string | null>(null);
   const [lines, setLines] = useState<Line[]>([]);
   const [approval, setApproval] = useState<Approval | null>(null);
+  const [question, setQuestion] = useState<Question | null>(null);
+  const [focus, setFocus] = useState<Focus | null>(null);
   const [showCommand, setShowCommand] = useState(false);
   const [draft, setDraft] = useState("");
   const [ime, setIme] = useState("");
@@ -105,6 +158,14 @@ export function App() {
   const closing = useRef(false);
   const fileRef = useRef<HTMLInputElement>(null);
   const approvalRef = useRef<HTMLElement>(null);
+  const questionRef = useRef<HTMLElement>(null);
+  const lineRefs = useRef<Array<HTMLElement | null>>([]);
+  const linesRef = useRef<Line[]>([]);
+  const approvalMirror = useRef<Approval | null>(null);
+  const questionMirror = useRef<Question | null>(null);
+  const pendingRoute = useRef<PushRoute | null>(null);
+  const lastRoute = useRef<PushRoute | null>(null);
+  const revealRef = useRef<(route: PushRoute | null) => void>(() => undefined);
   const resolvedIds = useRef<Set<string>>(new Set());
   const answeredHere = useRef<Set<string>>(new Set());
 
@@ -117,7 +178,54 @@ export function App() {
       return;
     }
     approvalRef.current?.scrollIntoView({ block: "end" });
-  }, [approval]);
+  }, [approval, focus]);
+
+  useEffect(() => {
+    if (focus?.target === "question") {
+      questionRef.current?.scrollIntoView({ block: "end" });
+    }
+    if (focus?.target === "message" && focus.messageIndex >= 0) {
+      lineRefs.current[focus.messageIndex]?.scrollIntoView({ block: "center" });
+    }
+  }, [focus, lines, question]);
+
+  useEffect(() => {
+    let alive = true;
+    let stopAction: (() => void) | undefined;
+    let stopTray: (() => void) | undefined;
+    void onAction((event) => {
+      const raw = event.notification?.extra?.route;
+      const route = typeof raw === "string" ? parsePush(raw) : null;
+      lastRoute.current = null;
+      revealRef.current(route);
+    }).then((listener) => {
+      if (!alive) {
+        void listener.unregister();
+        return;
+      }
+      stopAction = () => {
+        void listener.unregister();
+      };
+    });
+    void listen("tray-open", () => {
+      const route = lastRoute.current;
+      lastRoute.current = null;
+      if (route) {
+        revealRef.current(route);
+      }
+    }).then((unlisten) => {
+      if (!alive) {
+        unlisten();
+        return;
+      }
+      stopTray = unlisten;
+    });
+    return () => {
+      alive = false;
+      stopAction?.();
+      stopTray?.();
+    };
+  }, []);
 
   useEffect(() => {
     const stored = localStorage.getItem(SERVER_KEY);
@@ -153,31 +261,137 @@ export function App() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  function rememberApproval(card: Approval | null) {
+    approvalMirror.current = card;
+    setApproval(card);
+  }
+
+  function rememberQuestion(card: Question | null) {
+    questionMirror.current = card;
+    setQuestion(card);
+  }
+
+  function commitLines(recipe: (current: Line[]) => Line[]) {
+    const next = recipe(linesRef.current);
+    linesRef.current = next;
+    setLines(next);
+  }
+
+  function notify(title: string, body: string, route?: PushRoute) {
+    if (route) {
+      lastRoute.current = route;
+    }
+    void toast(title, body, route);
+  }
+
   function forgetApproval(id: string, reason: string | null) {
     if (!id) {
       return;
     }
     resolvedIds.current.add(id);
-    setApproval((current) => {
-      if (!current || (current.id !== id && current.requestId !== id)) {
-        return current;
-      }
-      resolvedIds.current.add(current.id);
-      if (answeredHere.current.has(current.id) || reason !== "resolved") {
-        return null;
-      }
-      return { ...current, resolvedLabel: "Approved on another device" };
-    });
+    const current = approvalMirror.current;
+    if (!current || (current.id !== id && current.requestId !== id)) {
+      return;
+    }
+    resolvedIds.current.add(current.id);
+    if (answeredHere.current.has(current.id) || reason !== "resolved") {
+      rememberApproval(null);
+      return;
+    }
+    rememberApproval({ ...current, resolvedLabel: "Approved on another device" });
   }
 
   function syncOpenApprovals(open: ServerRequest[]) {
     const ids = new Set(open.filter((request) => request.method === "approval").map((request) => request.id));
-    setApproval((current) => {
-      if (!current || current.resolvedLabel || resolvedIds.current.has(current.id)) {
-        return current;
+    const current = approvalMirror.current;
+    if (!current || current.resolvedLabel || resolvedIds.current.has(current.id)) {
+      return;
+    }
+    if (!ids.has(current.id)) {
+      rememberApproval(null);
+    }
+  }
+
+  function holdsQuestion(request: ServerRequest): boolean {
+    const route = pendingRoute.current;
+    if (!route || route.kind !== "clarify") {
+      return false;
+    }
+    const session = String(request.params.session_id ?? "");
+    if (route.sessionId && session && route.sessionId !== session) {
+      return false;
+    }
+    if (!route.requestId || route.requestId === request.id) {
+      return true;
+    }
+    const questions = Array.isArray(request.params.questions) ? request.params.questions : [];
+    return questions.some((item) => {
+      if (!item || typeof item !== "object") {
+        return false;
       }
-      return ids.has(current.id) ? current : null;
+      return String((item as Record<string, unknown>).qid ?? "") === route.requestId;
     });
+  }
+
+  function liveOpenRequests(): ServerRequest[] {
+    const requests: ServerRequest[] = [];
+    const card = approvalMirror.current;
+    if (card && !card.resolvedLabel) {
+      requests.push({ id: card.id, method: "approval", params: { request_id: card.requestId } });
+    }
+    const asked = questionMirror.current;
+    if (asked && !asked.resolvedLabel) {
+      requests.push({
+        id: asked.id,
+        method: "clarify",
+        params: { questions: [{ qid: asked.requestId }] },
+      });
+    }
+    return requests;
+  }
+
+  function placeFocus(route: PushRoute, open: ServerRequest[], transcript: Line[]) {
+    const landed = routeFocus(
+      route,
+      openRequestIds(open.map((request) => ({ id: request.id, params: request.params }))),
+      transcript.map((line) => ({ messageId: line.messageId, seq: line.seq })),
+    );
+    setFocus({
+      target: landed.target,
+      requestId: landed.requestId,
+      messageId: landed.messageId,
+      seq: landed.seq,
+      resolved: landed.resolved,
+      messageIndex: landed.messageIndex,
+    });
+    if (landed.target === "approval" && landed.resolved) {
+      const live = approvalMirror.current;
+      const matches = Boolean(live && (live.requestId === route.requestId || live.id === route.requestId));
+      if (!matches) {
+        rememberApproval({
+          id: `push-${route.requestId}`,
+          sessionId: route.sessionId,
+          requestId: route.requestId,
+          description: route.body || route.title || "Approval",
+          command: "",
+          resolvedLabel: "Resolved",
+        });
+        setShowCommand(false);
+      }
+    }
+    if (landed.target === "question") {
+      const live = questionMirror.current;
+      const matches = Boolean(live && (live.requestId === route.requestId || live.id === route.requestId));
+      if (!matches) {
+        rememberQuestion({
+          id: `push-${route.requestId}`,
+          sessionId: route.sessionId,
+          requestId: route.requestId,
+          text: route.body || route.title || "Question",
+          resolvedLabel: landed.resolved ? "Resolved" : null,
+        });
+      }
+    }
   }
 
   function applyEvent(event: GatewayEvent) {
@@ -204,13 +418,13 @@ export function App() {
       if (!chunk || chunk === "null") {
         return;
       }
-      setLines((current) => {
+      commitLines((current) => {
         const next = current.slice();
         const last = next[next.length - 1];
         if (last?.role === "assistant") {
-          next[next.length - 1] = { role: "assistant", text: last.text + chunk };
+          next[next.length - 1] = { ...last, text: last.text + chunk };
         } else {
-          next.push({ role: "assistant", text: chunk });
+          next.push(blankLine("assistant", chunk));
         }
         return next;
       });
@@ -218,29 +432,63 @@ export function App() {
       const text = String(event.payload.text ?? "");
       const failed = event.payload.status === "error";
       const body = text || String(event.payload.error ?? "Reply finished");
-      setLines((current) => {
+      const messageId = messageIdFrom(event.payload);
+      commitLines((current) => {
         const next = current.slice();
-        if (next[next.length - 1]?.role === "assistant") {
-          next[next.length - 1] = { role: failed ? "error" : "assistant", text: body };
+        const last = next[next.length - 1];
+        if (last?.role === "assistant") {
+          next[next.length - 1] = {
+            role: failed ? "error" : "assistant",
+            text: body,
+            messageId: messageId || last.messageId,
+            seq: event.seq,
+          };
         } else {
-          next.push({ role: failed ? "error" : "assistant", text: body });
+          next.push(blankLine(failed ? "error" : "assistant", body, messageId, event.seq));
         }
         return next;
       });
       setStatus(failed ? "Reply failed" : "Connected");
       void hidden().then((away) => {
         if (away) {
-          void toast("Hermes Bots", body.slice(0, 180));
+          notify(
+            failed ? "Hermes error" : "Reply finished",
+            body.slice(0, 180),
+            routeFrom(failed ? "error" : "reply", failed ? "Hermes error" : "Reply finished", body.slice(0, 700), event.sessionId, "", messageId, event.seq),
+          );
         }
       });
     } else if (event.type === "error") {
       const text = String(event.payload.message ?? event.payload.text ?? "Error");
-      setLines((current) => current.concat({ role: "error", text }));
+      commitLines((current) => current.concat(blankLine("error", text, "", event.seq)));
       setStatus("Error");
+      void hidden().then((away) => {
+        if (away) {
+          notify("Hermes error", text.slice(0, 180), routeFrom("error", "Hermes error", text.slice(0, 700), event.sessionId, "", "", event.seq));
+        }
+      });
     }
   }
 
   function applyRequest(request: ServerRequest) {
+    if (request.method === "clarify") {
+      if (!holdsQuestion(request)) {
+        clientRef.current?.decline(request.id);
+        return;
+      }
+      const questions = Array.isArray(request.params.questions) ? request.params.questions : [];
+      const first = questions[0] && typeof questions[0] === "object" ? (questions[0] as Record<string, unknown>) : {};
+      const text = String(first.question || "Question");
+      const qid = String(first.qid || request.id);
+      rememberQuestion({
+        id: request.id,
+        sessionId: String(request.params.session_id ?? ""),
+        requestId: qid,
+        text,
+        resolvedLabel: null,
+      });
+      return;
+    }
     if (request.method !== "approval") {
       clientRef.current?.decline(request.id);
       return;
@@ -256,12 +504,18 @@ export function App() {
       command: String(request.params.command ?? ""),
       resolvedLabel: null,
     };
-    setApproval((current) => (current?.id === card.id ? current : card));
+    if (approvalMirror.current?.id !== card.id) {
+      rememberApproval(card);
+    }
     setShowCommand(false);
     void clientRef.current?.noteApprovalVisible(card.sessionId, card.requestId).catch(() => undefined);
     void hidden().then((away) => {
       if (away) {
-        void toast("Hermes Bots", card.description);
+        notify(
+          "Approval waiting",
+          card.description,
+          routeFrom("approval", "Approval waiting", card.description, card.sessionId, card.requestId || card.id, "", null),
+        );
       }
     });
   }
@@ -303,13 +557,21 @@ export function App() {
     const [nextProfiles, nextSessions] = await Promise.all([client.listProfiles(), client.listSessions()]);
     setProfiles(nextProfiles);
     setSessions(nextSessions);
+    const route = pendingRoute.current;
     const live = liveRef.current;
-    if (live) {
+    if (route?.sessionId && route.sessionId !== live) {
+      await openSession(route.sessionId, route.profile);
+    } else if (live) {
       const replay = await client.replay(live, seqs.current[live] ?? 0);
       syncOpenApprovals(replay.openRequests);
       if (replay.truncated) {
         await openSession(live);
+      } else if (route && (!route.sessionId || route.sessionId === live)) {
+        pendingRoute.current = null;
+        placeFocus(route, replay.openRequests, linesRef.current);
       }
+    } else if (route?.sessionId) {
+      await openSession(route.sessionId, route.profile);
     }
   }
 
@@ -388,19 +650,27 @@ export function App() {
     }
   }
 
-  async function openSession(sessionId: string) {
+  async function openSession(sessionId: string, profile = "") {
     const client = clientRef.current;
     if (!client) {
       return;
     }
+    rememberQuestion(null);
     try {
-      const opened = await client.resumeSession(sessionId);
+      const opened = await client.resumeSession(sessionId, profile || undefined);
       const history = await client.history(opened.sessionId);
+      const next = history.map((row) => blankLine(row.role || "assistant", row.text, row.rowId));
       liveRef.current = opened.sessionId;
+      linesRef.current = next;
       setLiveId(opened.sessionId);
-      setLines(history.map((row) => ({ role: row.role || "assistant", text: row.text })));
+      setLines(next);
       syncOpenApprovals(opened.openRequests);
       setStatus("Connected");
+      const route = pendingRoute.current;
+      if (route && (!route.sessionId || route.sessionId === opened.sessionId)) {
+        pendingRoute.current = null;
+        placeFocus(route, opened.openRequests, next);
+      }
     } catch (error) {
       setStatus(error instanceof Error ? error.message : "Could not open the session");
     }
@@ -415,7 +685,10 @@ export function App() {
       const id = await client.createSession();
       liveRef.current = id;
       setLiveId(id);
+      linesRef.current = [];
       setLines([]);
+      rememberQuestion(null);
+      setFocus(null);
       setSessions(await client.listSessions());
       setStatus("New session");
     } catch (error) {
@@ -431,7 +704,7 @@ export function App() {
       return;
     }
     setDraft("");
-    setLines((current) => current.concat({ role: "user", text }));
+    commitLines((current) => current.concat(blankLine("user", text)));
     setStatus("Sending");
     try {
       await client.submit(session, text);
@@ -441,7 +714,7 @@ export function App() {
   }
 
   async function answer(choice: "once" | "deny") {
-    const card = approval;
+    const card = approvalMirror.current;
     const client = clientRef.current;
     if (!card || card.resolvedLabel || !client) {
       return;
@@ -450,7 +723,9 @@ export function App() {
     resolvedIds.current.add(card.id);
     try {
       await client.answerApproval(card.sessionId, card.requestId, choice);
-      setApproval((current) => (current?.id === card.id ? null : current));
+      if (approvalMirror.current?.id === card.id) {
+        rememberApproval(null);
+      }
       setShowCommand(false);
       setStatus(choice === "deny" ? "Denied" : "Allowed once");
     } catch (error) {
@@ -489,6 +764,42 @@ export function App() {
     } catch (error) {
       setStatus(error instanceof Error ? error.message : "Autostart failed");
     }
+  }
+
+  revealRef.current = (route) => {
+    void (async () => {
+      const window = getCurrentWindow();
+      await window.show();
+      await window.unminimize();
+      await window.setFocus();
+    })();
+    if (!route) {
+      return;
+    }
+    pendingRoute.current = route;
+    if (!clientRef.current) {
+      return;
+    }
+    if (route.sessionId && liveRef.current !== route.sessionId) {
+      void openSession(route.sessionId, route.profile);
+      return;
+    }
+    const transcript = linesRef.current;
+    pendingRoute.current = null;
+    placeFocus(route, liveOpenRequests(), transcript);
+  };
+
+  function lineLanded(index: number, line: Line): boolean {
+    if (focus?.target !== "message") {
+      return false;
+    }
+    if (focus.messageIndex === index) {
+      return true;
+    }
+    if (focus.messageId && line.messageId && focus.messageId === line.messageId) {
+      return true;
+    }
+    return focus.seq !== null && line.seq === focus.seq;
   }
 
   return (
@@ -534,7 +845,13 @@ export function App() {
               ))}
             </div>
             {lines.map((line, index) => (
-              <article key={`${index}-${line.role}`}>
+              <article
+                key={`${index}-${line.role}-${line.messageId}`}
+                ref={(node) => {
+                  lineRefs.current[index] = node;
+                }}
+                className={lineLanded(index, line) ? "landed" : undefined}
+              >
                 <p className="font-[family-name:var(--font-label)] text-[12px] tracking-[0.08em] text-muted-foreground uppercase">
                   {line.role}
                 </p>
@@ -548,7 +865,15 @@ export function App() {
               </article>
             ))}
             {approval ? (
-              <section ref={approvalRef} className="border border-primary p-3">
+              <section
+                ref={approvalRef}
+                className={
+                  focus?.target === "approval" &&
+                  (!focus.requestId || focus.requestId === approval.requestId || focus.requestId === approval.id)
+                    ? "landed border border-primary p-3"
+                    : "border border-primary p-3"
+                }
+              >
                 <p className="font-[family-name:var(--font-label)] text-[12px] tracking-[0.08em] text-primary uppercase">Needs you</p>
                 <p>{approval.description}</p>
                 {approval.resolvedLabel ? (
@@ -571,6 +896,25 @@ export function App() {
                     </div>
                   </>
                 )}
+              </section>
+            ) : null}
+            {question ? (
+              <section
+                ref={questionRef}
+                className={
+                  focus?.target === "question" &&
+                  (!focus.requestId || focus.requestId === question.requestId || focus.requestId === question.id)
+                    ? "landed border border-primary p-3"
+                    : "border border-primary p-3"
+                }
+              >
+                <p className="font-[family-name:var(--font-label)] text-[12px] tracking-[0.08em] text-primary uppercase">Question</p>
+                <p>{question.text}</p>
+                {question.resolvedLabel ? (
+                  <p className="mt-2 font-[family-name:var(--font-label)] text-[12px] tracking-[0.08em] text-primary uppercase">
+                    {question.resolvedLabel}
+                  </p>
+                ) : null}
               </section>
             ) : null}
           </>

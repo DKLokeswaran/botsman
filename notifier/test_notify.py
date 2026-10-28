@@ -15,9 +15,35 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 FAKE = ROOT / "contract" / "fake" / "hermes_fake.py"
 NOTIFY = Path(__file__).resolve().parent / "hermes_notify.py"
+sys.path.insert(0, str(NOTIFY.parent))
+from hermes_notify import build_notify, notify_bytes  # noqa: E402
+
+
+def check_payload_shape() -> str | None:
+    huge = build_notify(
+        kind="reply",
+        title="Reply finished",
+        body="x" * 20000,
+        session_id="live-1",
+        profile="default",
+        message_id="42",
+        seq=7,
+    )
+    raw = notify_bytes(huge)
+    if len(raw) > 4096:
+        return f"payload is {len(raw)} bytes"
+    if huge["message_id"] != "42" or huge["seq"] != 7 or huge["session_id"] != "live-1":
+        return f"payload dropped a field: {huge}"
+    if "password" in raw.decode("utf-8"):
+        return "payload included a password field"
+    return None
 
 
 def main() -> int:
+    shape = check_payload_shape()
+    if shape:
+        print(shape, file=sys.stderr)
+        return 1
     fake = subprocess.Popen(
         [sys.executable, str(FAKE), "--port", "0"],
         stdout=subprocess.PIPE,
@@ -97,6 +123,22 @@ def main() -> int:
             err = "".join(stderr_lines)
             print("unexpected notifications", notes, err, file=sys.stderr)
             return 1
+        approval = next(item for item in notes if item["kind"] == "approval")
+        reply = next(item for item in notes if item["kind"] == "reply")
+        if approval.get("session_id") != "live-1" or approval.get("request_id") != "req-1":
+            print("approval route missing", approval, file=sys.stderr)
+            return 1
+        if reply.get("session_id") != "live-1" or not isinstance(reply.get("seq"), int):
+            print("reply route missing", reply, file=sys.stderr)
+            return 1
+        if reply.get("profile") != "default":
+            print("reply profile missing", reply, file=sys.stderr)
+            return 1
+        for item in notes:
+            encoded = json.dumps(item, separators=(",", ":")).encode("utf-8")
+            if len(encoded) > 4096:
+                print("notification exceeds 4 KB", item["kind"], file=sys.stderr)
+                return 1
         # The password must not appear in the child's output.
         blob = json.dumps(notes)
         if "tester" in blob and "password" in blob.lower():

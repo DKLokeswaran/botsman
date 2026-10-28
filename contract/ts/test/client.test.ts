@@ -7,8 +7,12 @@ import test from "node:test";
 import {
   HermesClient,
   HermesError,
+  formatPush,
   nodeHttp,
   nodeSocket,
+  openRequestIds,
+  parsePush,
+  routeFocus,
   sessionCookie,
   splitCombinedSetCookie,
   type HttpTransport,
@@ -178,6 +182,47 @@ test("two clients share one approval", async () => {
     second.close();
     fake.stop();
   }
+});
+
+test("push payload routes to a card or a message", () => {
+  const approval = parsePush(
+    formatPush({
+      kind: "approval",
+      title: "Approval waiting",
+      body: "Read the repo",
+      sessionId: "live-1",
+      profile: "default",
+      requestId: "req-1",
+      messageId: "",
+      seq: null,
+      action: null,
+    }),
+  );
+  assert.equal(approval?.sessionId, "live-1");
+  assert.equal(approval?.requestId, "req-1");
+  assert.equal(parsePush("not json"), null);
+  const open = openRequestIds([{ id: "srq-1", params: { request_id: "req-1", session_id: "live-1" } }]);
+  assert.equal(routeFocus(approval!, open, []).resolved, false);
+  assert.equal(routeFocus(approval!, new Set(), []).resolved, true);
+  assert.equal(routeFocus(approval!, new Set(), []).target, "approval");
+  const reply = parsePush(
+    '{"kind":"reply","title":"Reply finished","body":"Hi","session_id":"live-1","profile":"default","request_id":"","message_id":"9","seq":4}',
+  );
+  const landed = routeFocus(reply!, new Set(), [
+    { messageId: "1", seq: null },
+    { messageId: "9", seq: 4 },
+  ]);
+  assert.equal(landed.target, "message");
+  assert.equal(landed.messageIndex, 1);
+  const question = parsePush(
+    '{"kind":"clarify","title":"Question waiting","body":"Which?","session_id":"live-1","profile":"","request_id":"q-1","message_id":"","seq":null}',
+  );
+  const qids = openRequestIds([
+    { id: "srq-q", params: { questions: [{ qid: "q-1", question: "Which?" }] } },
+  ]);
+  assert.equal(qids.has("q-1"), true);
+  assert.equal(routeFocus(question!, qids, []).target, "question");
+  assert.equal(routeFocus(question!, new Set(), []).resolved, true);
 });
 
 test("session cookies accept host and secure prefixes", () => {

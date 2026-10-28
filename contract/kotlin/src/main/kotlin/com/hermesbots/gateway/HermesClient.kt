@@ -108,7 +108,7 @@ data class SessionRow(
     val messageCount: Int,
 )
 
-data class TranscriptMessage(val role: String, val text: String)
+data class TranscriptMessage(val role: String, val text: String, val rowId: String = "")
 
 data class ResumedSession(
     val sessionId: String,
@@ -280,14 +280,13 @@ class HermesClient(
         return result.optString("session_id")
     }
 
-    suspend fun resumeSession(sessionId: String): ResumedSession {
-        val result = rpc(
-            "session.resume",
-            JSONObject()
-                .put("session_id", sessionId)
-                .put("omit_messages", false)
-                .put("inline_images", false),
-        )
+    suspend fun resumeSession(sessionId: String, profile: String? = null): ResumedSession {
+        val params = JSONObject()
+            .put("session_id", sessionId)
+            .put("omit_messages", false)
+            .put("inline_images", false)
+        if (!profile.isNullOrEmpty()) params.put("profile", profile)
+        val result = rpc("session.resume", params)
         val openRequests = deliverOpenRequests(result.optJSONArray("open_requests"))
         val live = result.optString("session_id").ifEmpty { sessionId }
         return ResumedSession(live, messagesFrom(result.optJSONArray("messages")), openRequests)
@@ -574,7 +573,10 @@ private fun requestFromOpen(entry: JSONObject): ServerRequest? {
 }
 
 private fun messagesFrom(array: JSONArray?): List<TranscriptMessage> {
-    return jsonObjects(array).map { TranscriptMessage(it.optString("role"), it.optString("text")) }
+    return jsonObjects(array).map {
+        val rowId = if (it.has("row_id") && !it.isNull("row_id")) it.get("row_id").toString() else ""
+        TranscriptMessage(it.optString("role"), it.optString("text"), rowId)
+    }
 }
 
 private fun jsonObjects(array: JSONArray?): List<JSONObject> {

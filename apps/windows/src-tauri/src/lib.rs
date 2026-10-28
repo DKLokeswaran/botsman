@@ -2,7 +2,7 @@ use std::sync::atomic::{AtomicBool, Ordering};
 
 use tauri::menu::{Menu, MenuItem};
 use tauri::tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent};
-use tauri::{AppHandle, Manager, WindowEvent};
+use tauri::{AppHandle, Emitter, Manager, WindowEvent};
 
 static QUITTING: AtomicBool = AtomicBool::new(false);
 const SERVICE: &str = "hermes-bots";
@@ -28,6 +28,11 @@ fn show_main(app: &AppHandle) {
     }
 }
 
+fn reveal(app: &AppHandle) {
+    let _ = app.emit("tray-open", ());
+    show_main(app);
+}
+
 fn setup_tray(app: &tauri::App) -> tauri::Result<()> {
     let open = MenuItem::with_id(app, "open", "Open", true, None::<&str>)?;
     let quit = MenuItem::with_id(app, "quit", "Quit", true, None::<&str>)?;
@@ -42,7 +47,7 @@ fn setup_tray(app: &tauri::App) -> tauri::Result<()> {
         .show_menu_on_left_click(false)
         .tooltip("Hermes Bots")
         .on_menu_event(|app, event| match event.id.as_ref() {
-            "open" => show_main(app),
+            "open" => reveal(app),
             "quit" => {
                 QUITTING.store(true, Ordering::SeqCst);
                 app.exit(0);
@@ -56,7 +61,7 @@ fn setup_tray(app: &tauri::App) -> tauri::Result<()> {
                 ..
             } = event
             {
-                show_main(tray.app_handle());
+                reveal(tray.app_handle());
             }
         })
         .build(app)?;

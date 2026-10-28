@@ -38,7 +38,7 @@ class MainActivity : ComponentActivity() {
         if (Build.VERSION.SDK_INT >= 33 && !notificationPermissionGranted(this)) {
             askNotifications.launch(Manifest.permission.POST_NOTIFICATIONS)
         }
-        intent?.getStringExtra("push_body")?.let(model::notePush)
+        deliverPush(intent)
         setContent {
             val state by model.state.collectAsState()
             ZoetrikTheme {
@@ -67,7 +67,17 @@ class MainActivity : ComponentActivity() {
 
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
-        intent.getStringExtra("push_body")?.let(model::notePush)
+        setIntent(intent)
+        deliverPush(intent)
+    }
+
+    private fun deliverPush(intent: Intent?) {
+        val json = intent?.getStringExtra("push_json")
+        if (json != null) {
+            model.notePush(json, intent.getStringExtra("push_action"))
+            return
+        }
+        intent?.getStringExtra("push_body")?.let { model.notePush(it) }
     }
 
     override fun onStart() {

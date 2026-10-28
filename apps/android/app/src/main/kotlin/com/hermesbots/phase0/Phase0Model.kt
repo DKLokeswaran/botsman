@@ -14,8 +14,13 @@ import com.hermesbots.gateway.HermesException
 import com.hermesbots.gateway.HermesListener
 import com.hermesbots.gateway.LoginMaterial
 import com.hermesbots.gateway.ProfileRow
+import com.hermesbots.gateway.PushRoute
 import com.hermesbots.gateway.ServerRequest
 import com.hermesbots.gateway.SessionRow
+import com.hermesbots.gateway.TrackedMessage
+import com.hermesbots.gateway.openRequestIds
+import com.hermesbots.gateway.parsePush
+import com.hermesbots.gateway.routeFocus
 import java.util.Collections
 import java.util.concurrent.TimeUnit
 import kotlinx.coroutines.Dispatchers
@@ -29,11 +34,28 @@ import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import okhttp3.OkHttpClient
+import org.json.JSONArray
+import org.json.JSONObject
 
 private const val DEFAULT_SERVER = "http://100.113.35.96:9119"
 private const val LEGACY_SERVER = "http://devbox.tail2eeb02.ts.net:9119"
 
-data class ChatLine(val role: String, val text: String)
+data class ChatLine(val role: String, val text: String, val messageId: String = "", val seq: Int? = null)
+data class PendingQuestion(
+    val id: String,
+    val sessionId: String,
+    val requestId: String,
+    val text: String,
+    val resolvedLabel: String? = null,
+)
+data class RouteFocusState(
+    val target: String,
+    val requestId: String,
+    val messageId: String,
+    val seq: Int?,
+    val resolved: Boolean,
+    val messageIndex: Int,
+)
 data class PendingApproval(
     val id: String,
     val sessionId: String,
@@ -56,6 +78,8 @@ data class Phase0State(
     val liveSessionId: String? = null,
     val messages: List<ChatLine> = emptyList(),
     val approval: PendingApproval? = null,
+    val question: PendingQuestion? = null,
+    val focus: RouteFocusState? = null,
     val showCommand: Boolean = false,
     val draft: String = "",
     val ime: String = "",
@@ -78,6 +102,7 @@ class Phase0Model(app: Application) : AndroidViewModel(app) {
     private val seqs = mutableMapOf<String, Int>()
     private val resolvedApprovals = Collections.synchronizedSet(mutableSetOf<String>())
     private val answeredHere = Collections.synchronizedSet(mutableSetOf<String>())
+    private var pendingRoute: PushRoute? = null
     private var reconnectJob: Job? = null
     private var intentionalClose = false
 
@@ -123,20 +148,28 @@ class Phase0Model(app: Application) : AndroidViewModel(app) {
                 "message.complete" -> {
                     val text = event.payload.optString("text")
                     val failed = event.payload.optString("status") == "error"
+                    val messageId = messageIdFrom(event.payload)
                     _state.update { current ->
                         val lines = current.messages.toMutableList()
                         val body = text.ifEmpty { event.payload.optString("error", "Reply finished") }
-                        if (lines.lastOrNull()?.role == "assistant") {
-                            lines[lines.lastIndex] = ChatLine("assistant", body)
+                        val role = if (failed) "error" else "assistant"
+                        val previous = lines.lastOrNull()
+                        if (previous?.role == "assistant") {
+                            lines[lines.lastIndex] = previous.copy(
+                                role = role,
+                                text = body,
+                                messageId = messageId.ifEmpty { previous.messageId },
+                                seq = event.seq,
+                            )
                         } else {
-                            lines.add(ChatLine(if (failed) "error" else "assistant", body))
+                            lines.add(ChatLine(role, body, messageId = messageId, seq = event.seq))
                         }
                         current.copy(messages = lines, status = if (failed) "Reply failed" else "Connected")
                     }
                 }
                 "error" -> {
                     val text = event.payload.optString("message", event.payload.optString("text", "Error"))
-                    _state.update { it.copy(messages = it.messages + ChatLine("error", text), status = "Error") }
+                    _state.update { it.copy(messages = it.messages + ChatLine("error", text, seq = event.seq), status = "Error") }
                 }
             }
         }
@@ -160,6 +193,20 @@ class Phase0Model(app: Application) : AndroidViewModel(app) {
                     } catch (_: Exception) {
                         // The card is already on screen. A missed ack only delays the server timer.
                     }
+                }
+            } else if (request.method == "clarify" && holdsQuestion(request)) {
+                val first = request.params.optJSONArray("questions")?.optJSONObject(0)
+                val text = first?.optString("question").orEmpty().ifEmpty { "Question" }
+                val qid = first?.optString("qid").orEmpty().ifEmpty { request.id }
+                _state.update {
+                    it.copy(
+                        question = PendingQuestion(
+                            id = request.id,
+                            sessionId = request.params.optString("session_id"),
+                            requestId = qid,
+                            text = text,
+                        ),
+                    )
                 }
             } else {
                 client?.decline(request.id)
@@ -237,20 +284,27 @@ class Phase0Model(app: Application) : AndroidViewModel(app) {
         }
     }
 
-    fun openSession(sessionId: String) {
+    fun openSession(sessionId: String, profile: String = "") {
         viewModelScope.launch {
             val current = client ?: return@launch
+            _state.update { it.copy(question = null) }
             try {
-                val opened = withContext(Dispatchers.IO) { current.resumeSession(sessionId) }
+                val opened = withContext(Dispatchers.IO) { current.resumeSession(sessionId, profile.ifBlank { null }) }
                 val history = withContext(Dispatchers.IO) { current.history(opened.sessionId) }
+                val lines = history.map { row -> ChatLine(row.role.ifEmpty { "assistant" }, row.text, messageId = row.rowId) }
                 _state.update {
                     it.copy(
                         liveSessionId = opened.sessionId,
-                        messages = history.map { row -> ChatLine(row.role.ifEmpty { "assistant" }, row.text) },
+                        messages = lines,
                         status = "Connected",
                     )
                 }
                 syncOpenApprovals(opened.openRequests)
+                val route = pendingRoute
+                if (route != null && (route.sessionId.isEmpty() || route.sessionId == opened.sessionId)) {
+                    pendingRoute = null
+                    placeFocus(route, opened.openRequests, lines)
+                }
             } catch (error: Exception) {
                 _state.update { it.copy(status = error.message ?: "Could not open the session") }
             }
@@ -262,7 +316,7 @@ class Phase0Model(app: Application) : AndroidViewModel(app) {
             val current = client ?: return@launch
             try {
                 val id = withContext(Dispatchers.IO) { current.createSession() }
-                _state.update { it.copy(liveSessionId = id, messages = emptyList(), status = "New session") }
+                _state.update { it.copy(liveSessionId = id, messages = emptyList(), question = null, focus = null, status = "New session") }
                 refreshLists()
             } catch (error: Exception) {
                 _state.update { it.copy(status = error.message ?: "Could not create a session") }
@@ -342,8 +396,16 @@ class Phase0Model(app: Application) : AndroidViewModel(app) {
         }
     }
 
-    fun notePush(body: String) {
-        _state.update { it.copy(pushBody = body) }
+    fun notePush(raw: String, action: String? = null) {
+        val route = parsePush(raw)
+        if (route == null) {
+            _state.update { it.copy(pushBody = raw) }
+            return
+        }
+        val chosen = if (action == "once" || action == "deny") route.copy(action = action) else route
+        pendingRoute = chosen
+        _state.update { it.copy(pushBody = chosen.body.ifBlank { chosen.title }) }
+        if (_state.value.connected) followRoute()
     }
 
     private suspend fun restore(saved: SavedLogin) {
@@ -397,12 +459,20 @@ class Phase0Model(app: Application) : AndroidViewModel(app) {
             }
             refreshLists()
             val live = _state.value.liveSessionId
-            if (live != null) {
+            val route = pendingRoute
+            if (route != null && route.sessionId.isNotEmpty() && route.sessionId != live) {
+                openSession(route.sessionId, route.profile)
+            } else if (live != null) {
                 val replay = withContext(Dispatchers.IO) { next.replay(live, seqs[live] ?: 0) }
                 syncOpenApprovals(replay.openRequests)
                 if (replay.truncated) {
                     openSession(live)
+                } else if (route != null && (route.sessionId.isEmpty() || route.sessionId == live)) {
+                    pendingRoute = null
+                    placeFocus(route, replay.openRequests, _state.value.messages)
                 }
+            } else if (route != null) {
+                followRoute()
             }
         }
     }
@@ -412,6 +482,115 @@ class Phase0Model(app: Application) : AndroidViewModel(app) {
         val profiles = withContext(Dispatchers.IO) { current.listProfiles() }
         val sessions = withContext(Dispatchers.IO) { current.listSessions() }
         _state.update { it.copy(profiles = profiles, sessions = sessions) }
+    }
+
+    private fun holdsQuestion(request: ServerRequest): Boolean {
+        val route = pendingRoute ?: return false
+        if (route.kind != "clarify") return false
+        val session = request.params.optString("session_id")
+        if (route.sessionId.isNotEmpty() && session.isNotEmpty() && route.sessionId != session) return false
+        if (route.requestId.isEmpty() || route.requestId == request.id) return true
+        val questions = request.params.optJSONArray("questions") ?: return false
+        for (index in 0 until questions.length()) {
+            if (questions.optJSONObject(index)?.optString("qid") == route.requestId) return true
+        }
+        return false
+    }
+
+    private fun followRoute() {
+        val route = pendingRoute ?: return
+        if (!_state.value.connected) return
+        if (route.sessionId.isNotEmpty() && _state.value.liveSessionId != route.sessionId) {
+            openSession(route.sessionId, route.profile)
+            return
+        }
+        val lines = _state.value.messages
+        pendingRoute = null
+        placeFocus(route, liveOpenRequests(), lines)
+    }
+
+    private fun liveOpenRequests(): List<ServerRequest> {
+        val requests = mutableListOf<ServerRequest>()
+        val card = _state.value.approval
+        if (card != null && card.resolvedLabel == null) {
+            requests.add(ServerRequest(card.id, "approval", JSONObject().put("request_id", card.requestId)))
+        }
+        val question = _state.value.question
+        if (question != null && question.resolvedLabel == null) {
+            requests.add(
+                ServerRequest(
+                    question.id,
+                    "clarify",
+                    JSONObject().put("questions", JSONArray().put(JSONObject().put("qid", question.requestId))),
+                ),
+            )
+        }
+        return requests
+    }
+
+    private fun placeFocus(route: PushRoute, open: List<ServerRequest>, lines: List<ChatLine>) {
+        val focus = routeFocus(route, openRequestIds(open), lines.map { TrackedMessage(it.messageId, it.seq) })
+        _state.update { current ->
+            var next = current.copy(
+                focus = RouteFocusState(
+                    target = focus.target,
+                    requestId = focus.requestId,
+                    messageId = focus.messageId,
+                    seq = focus.seq,
+                    resolved = focus.resolved,
+                    messageIndex = focus.messageIndex,
+                ),
+            )
+            if (focus.target == "approval" && focus.resolved) {
+                val live = current.approval
+                val matches = live != null && (live.requestId == route.requestId || live.id == route.requestId)
+                if (!matches) {
+                    next = next.copy(
+                        approval = PendingApproval(
+                            id = "push-${route.requestId}",
+                            sessionId = route.sessionId,
+                            requestId = route.requestId,
+                            description = route.body.ifBlank { route.title }.ifBlank { "Approval" },
+                            command = "",
+                            resolvedLabel = "Resolved",
+                        ),
+                        showCommand = false,
+                    )
+                }
+            }
+            if (focus.target == "question") {
+                val live = current.question
+                val matches = live != null && (live.requestId == route.requestId || live.id == route.requestId)
+                if (!matches) {
+                    next = next.copy(
+                        question = PendingQuestion(
+                            id = "push-${route.requestId}",
+                            sessionId = route.sessionId,
+                            requestId = route.requestId,
+                            text = route.body.ifBlank { route.title }.ifBlank { "Question" },
+                            resolvedLabel = if (focus.resolved) "Resolved" else null,
+                        ),
+                    )
+                }
+            }
+            next
+        }
+        val choice = route.action
+        if (!focus.resolved && (choice == "once" || choice == "deny") && focus.target == "approval") {
+            val card = _state.value.approval
+            if (card != null && card.resolvedLabel == null && (card.requestId == route.requestId || card.id == route.requestId)) {
+                answer(choice)
+            }
+        }
+    }
+
+    private fun messageIdFrom(payload: JSONObject): String {
+        val turn = payload.optJSONObject("persisted_turn") ?: return ""
+        val row = turn.opt("final_assistant_row_id")
+        if (row != null && row != JSONObject.NULL) {
+            return row.toString()
+        }
+        return turn.optString("submission_id")
     }
 
     private fun forgetApproval(id: String, reason: String?) {

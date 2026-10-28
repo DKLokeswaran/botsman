@@ -36,6 +36,7 @@ import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -169,22 +170,48 @@ private fun ChatBlock(
     state.sessions.forEach { session ->
         Slab(session.title.ifEmpty { session.id }, { onOpen(session.id) })
     }
-    state.messages.forEach { line ->
-        Text(line.role.uppercase(), style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
-        when (line.role) {
-            "assistant" -> ReplyMarkdown(line.text)
-            "user" -> UserMessage(line.text)
-            else -> Text(line.text, color = if (line.role == "error") MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onBackground)
+    state.messages.forEachIndexed { index, line ->
+        key(index, line.messageId, line.role) {
+            val focus = state.focus
+            val landed = focus?.target == "message" && (
+                focus.messageIndex == index ||
+                    (focus.messageId.isNotEmpty() && line.messageId.isNotEmpty() && focus.messageId == line.messageId) ||
+                    (focus.seq != null && focus.seq == line.seq)
+                )
+            val bring = remember(index, line.messageId, line.seq) { BringIntoViewRequester() }
+            LaunchedEffect(landed) {
+                if (landed) bring.bringIntoView()
+            }
+            Column(
+                Modifier
+                    .bringIntoViewRequester(bring)
+                    .fillMaxWidth()
+                    .then(if (landed) Modifier.border(2.dp, MaterialTheme.colorScheme.primary).padding(8.dp) else Modifier),
+            ) {
+                Text(line.role.uppercase(), style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                when (line.role) {
+                    "assistant" -> ReplyMarkdown(line.text)
+                    "user" -> UserMessage(line.text)
+                    else -> Text(line.text, color = if (line.role == "error") MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onBackground)
+                }
+            }
         }
     }
     state.approval?.let { card ->
+        val focus = state.focus
+        val landed = focus?.target == "approval" && (
+            focus.requestId.isEmpty() || focus.requestId == card.requestId || focus.requestId == card.id
+            )
         val bring = remember(card.id) { BringIntoViewRequester() }
         LaunchedEffect(card.id, card.resolvedLabel) { bring.bringIntoView() }
+        LaunchedEffect(landed) {
+            if (landed) bring.bringIntoView()
+        }
         Column(
             Modifier
                 .bringIntoViewRequester(bring)
                 .fillMaxWidth()
-                .border(1.dp, MaterialTheme.colorScheme.primary)
+                .border(if (landed) 2.dp else 1.dp, MaterialTheme.colorScheme.primary)
                 .padding(12.dp),
         ) {
             Text("NEEDS YOU", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.primary)
@@ -200,6 +227,30 @@ private fun ChatBlock(
                     Slab("Deny", onDeny)
                     Slab(if (state.showCommand) "Hide command" else "Full command", onToggleCommand)
                 }
+            }
+        }
+    }
+    state.question?.let { card ->
+        val focus = state.focus
+        val landed = focus?.target == "question" && (
+            focus.requestId.isEmpty() || focus.requestId == card.requestId || focus.requestId == card.id
+            )
+        val bring = remember(card.id) { BringIntoViewRequester() }
+        LaunchedEffect(card.id, card.resolvedLabel) { bring.bringIntoView() }
+        LaunchedEffect(landed) {
+            if (landed) bring.bringIntoView()
+        }
+        Column(
+            Modifier
+                .bringIntoViewRequester(bring)
+                .fillMaxWidth()
+                .border(if (landed) 2.dp else 1.dp, MaterialTheme.colorScheme.primary)
+                .padding(12.dp),
+        ) {
+            Text("QUESTION", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.primary)
+            Text(card.text, color = MaterialTheme.colorScheme.onBackground)
+            card.resolvedLabel?.let { label ->
+                Text(label.uppercase(), style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.primary, modifier = Modifier.padding(top = 8.dp))
             }
         }
     }
