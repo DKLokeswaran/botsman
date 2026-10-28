@@ -195,6 +195,8 @@ class HermesClientTest {
                 second.connect(material.accessToken)
                 val left = firstCard.await()
                 val right = secondCard.await()
+                first.resumeSession(left.params.optString("session_id"))
+                second.resumeSession(right.params.optString("session_id"))
                 first.answerApproval(
                     left.params.optString("session_id"),
                     left.params.optString("request_id"),
@@ -208,6 +210,111 @@ class HermesClientTest {
             assertEquals("resolved", cancel.payload.optString("reason"))
             val replay = runBlocking { second.replay("live-1", 0) }
             assertTrue(replay.openRequests.none { it.id == card.id })
+        } finally {
+            first.close()
+            second.close()
+        }
+    }
+
+    @Test
+    fun test_bug_message_from_socket_a_appears_for_socket_b() = withFake { port, http ->
+        val first = HermesClient("http://127.0.0.1:$port", http)
+        val second = HermesClient("http://127.0.0.1:$port", http)
+        val third = HermesClient("http://127.0.0.1:$port", http)
+        try {
+            val material = runBlocking { first.login("tester", "tester") }
+            val history = runBlocking {
+                first.connect(material.accessToken)
+                second.connect(material.accessToken)
+                third.connect(material.accessToken)
+                first.resumeSession("sess-1")
+                second.resumeSession("sess-1")
+                val created = third.createSession()
+                assertTrue(created != "live-1")
+                third.resumeSession(created)
+                val seen = java.util.Collections.synchronizedList(mutableListOf<String>())
+                third.listener = object : HermesListener {
+                    override fun onEvent(event: GatewayEvent) {
+                        seen.add(event.type)
+                    }
+                }
+                val changed = async { third.waitForEvent("sessions.changed") }
+                val done = async { second.waitForEvent("message.complete") }
+                yield()
+                first.submit("live-1", "from the other phone")
+                changed.await()
+                done.await()
+                seen.toList() to second.history("live-1")
+            }
+            assertTrue(history.second.any { it.text == "from the other phone" })
+            assertTrue("message.complete" !in history.first)
+            assertTrue("message.delta" !in history.first)
+            assertTrue("sessions.changed" in history.first)
+        } finally {
+            first.close()
+            second.close()
+            third.close()
+        }
+    }
+
+    @Test
+    fun test_bug_deny_cancel_has_no_choice() = withFake { port, http ->
+        val first = HermesClient("http://127.0.0.1:$port", http)
+        val second = HermesClient("http://127.0.0.1:$port", http)
+        try {
+            val material = runBlocking { first.login("tester", "tester") }
+            val (cancel, tool) = runBlocking {
+                first.connect(material.accessToken)
+                second.connect(material.accessToken)
+                first.resumeSession("sess-1")
+                second.resumeSession("sess-1")
+                val cancelJob = async { second.waitForEvent("request.cancel") }
+                val toolJob = async { second.waitForEvent("tool.complete") }
+                yield()
+                first.answerApproval("live-1", "req-1", "deny")
+                cancelJob.await() to toolJob.await()
+            }
+            assertEquals("resolved", cancel.payload.optString("reason"))
+            assertEquals("approval", cancel.payload.optString("method"))
+            assertTrue(!cancel.payload.has("choice"))
+            assertTrue(tool.payload.optString("result").contains("BLOCKED:"))
+            assertTrue(tool.payload.optString("result_text").contains("denied by user"))
+            val cancelled = runBlocking {
+                val job = async { second.waitForEvent("approval.cancelled") }
+                yield()
+                first.interruptSession("live-1")
+                job.await()
+            }
+            val ids = cancelled.payload.optJSONArray("request_ids")
+            assertTrue(ids != null && ids.length() == 0)
+        } finally {
+            first.close()
+            second.close()
+        }
+    }
+
+    @Test
+    fun test_bug_approval_cancelled_names_request_ids() = withFake { port, http ->
+        val first = HermesClient("http://127.0.0.1:$port", http)
+        val second = HermesClient("http://127.0.0.1:$port", http)
+        try {
+            val material = runBlocking { first.login("tester", "tester") }
+            val event = runBlocking {
+                first.connect(material.accessToken)
+                second.connect(material.accessToken)
+                first.resumeSession("sess-1")
+                second.resumeSession("sess-1")
+                val cancelled = async { second.waitForEvent("approval.cancelled") }
+                yield()
+                first.interruptSession("live-1")
+                cancelled.await()
+            }
+            val ids = event.payload.optJSONArray("request_ids")
+            assertTrue(ids != null)
+            val values = (0 until ids!!.length()).map { ids.optString(it) }
+            assertTrue(values.contains("srq-phase0"))
+            assertTrue(values.contains("req-1"))
+            assertEquals("interrupted", event.payload.optString("reason"))
         } finally {
             first.close()
             second.close()

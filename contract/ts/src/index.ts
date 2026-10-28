@@ -489,7 +489,7 @@ export class HermesClient {
     await this.rpc("approval.received", { session_id: sessionId, request_id: requestId });
   }
 
-  /** Settle an approval so Hermes emits request.cancel to every connected client. */
+  /** Settle an approval so Hermes emits request.cancel to every socket attached to the session. */
   async answerApproval(sessionId: string, requestId: string, choice: string): Promise<void> {
     const result = asRecord(
       await this.rpc("approval.respond", {
@@ -501,6 +501,11 @@ export class HermesClient {
     if (result.resolved === 0) {
       throw new HermesError("Approval was already resolved");
     }
+  }
+
+  /** Stop the live turn. Hermes drops pending approvals and emits approval.cancelled. */
+  async interruptSession(sessionId: string): Promise<void> {
+    await this.rpc("session.interrupt", { session_id: sessionId });
   }
 
   respond(id: string, result: Record<string, unknown>): void {

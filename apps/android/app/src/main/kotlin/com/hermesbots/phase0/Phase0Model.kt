@@ -73,6 +73,7 @@ data class PendingApproval(
     val description: String,
     val command: String,
     val resolvedLabel: String? = null,
+    val awaitingTool: Boolean = false,
 )
 data class StagedFile(val name: String, val image: ImageBitmap?)
 
@@ -117,6 +118,11 @@ class Phase0Model(app: Application) : AndroidViewModel(app) {
     private val seqs = mutableMapOf<String, Int>()
     private val resolvedApprovals = Collections.synchronizedSet(mutableSetOf<String>())
     private val answeredHere = Collections.synchronizedSet(mutableSetOf<String>())
+    private val approvalLock = Any()
+    private var approvals: Map<String, PendingApproval> = emptyMap()
+    private val clearJobs = mutableMapOf<String, Job>()
+    private var replaying = false
+    private var refreshTail: Job? = null
     private var pendingRoute: PushRoute? = null
     private var pendingRelease: LatestRelease? = null
     private var reconnectJob: Job? = null
@@ -132,17 +138,45 @@ class Phase0Model(app: Application) : AndroidViewModel(app) {
                 seqs[event.sessionId] = maxOf(seqs[event.sessionId] ?: 0, seq)
             }
             if (event.type == "request.cancel") {
-                forgetApproval(event.payload.optString("id"), event.payload.optString("reason"))
+                noteResolved(event.payload.optString("id"))
+                val requestId = event.payload.optString("id")
+                val reason = event.payload.optString("reason")
+                val answered = answeredHere.toSet()
+                applyApproval(settle = true) { book -> onRequestCancel(book, requestId, reason, answered) }
                 return
             }
             if (event.type == "approval.cancelled") {
                 val ids = event.payload.optJSONArray("request_ids")
+                val requestIds = mutableListOf<String>()
                 if (ids != null) {
                     for (index in 0 until ids.length()) {
-                        forgetApproval(ids.optString(index), null)
+                        val id = ids.optString(index)
+                        if (id.isNotEmpty()) {
+                            noteResolved(id)
+                            requestIds.add(id)
+                            dismissApprovalNotification(getApplication(), id)
+                        }
                     }
                 }
+                applyApproval(settle = true) { book -> onApprovalCancelled(book, requestIds) }
                 return
+            }
+            if (event.type == "sessions.changed") {
+                if (!replaying) refreshLive(attach = true)
+                return
+            }
+            if (event.type == "tool.complete") {
+                val text = toolResultText(
+                    jsonText(event.payload.opt("result")),
+                    jsonText(event.payload.opt("result_text")),
+                    jsonText(event.payload.opt("summary")),
+                )
+                val sessionId = event.sessionId.ifEmpty { _state.value.liveSessionId.orEmpty() }
+                if (sessionId.isNotEmpty()) applyApproval { book -> onToolComplete(book, sessionId, text) }
+                return
+            }
+            if (event.type == "message.start" || event.type == "message.delta" || event.type == "message.complete" || event.type == "error") {
+                if (event.sessionId.isNotEmpty()) applyApproval { book -> onNewerMessage(book, event.sessionId) }
             }
             val live = _state.value.liveSessionId
             if (event.sessionId.isNotEmpty() && live != null && event.sessionId != live) return
@@ -193,16 +227,16 @@ class Phase0Model(app: Application) : AndroidViewModel(app) {
         override fun onServerRequest(request: ServerRequest) {
             if (request.method == "approval") {
                 if (resolvedApprovals.contains(request.id) || answeredHere.contains(request.id)) return
+                val sessionId = request.params.optString("session_id").ifEmpty { _state.value.liveSessionId.orEmpty() }
                 val card = PendingApproval(
                     id = request.id,
-                    sessionId = request.params.optString("session_id"),
+                    sessionId = sessionId,
                     requestId = request.params.optString("request_id"),
                     description = request.params.optString("description").ifEmpty { "Approval needed" },
                     command = request.params.optString("command"),
                 )
-                _state.update { current ->
-                    if (current.approval?.id == card.id) current else current.copy(approval = card, showCommand = false)
-                }
+                val resolved = resolvedApprovals.toSet()
+                applyApproval { book -> rememberOpen(book, card, resolved) }
                 viewModelScope.launch {
                     try {
                         client?.noteApprovalVisible(card.sessionId, card.requestId)
@@ -323,19 +357,30 @@ class Phase0Model(app: Application) : AndroidViewModel(app) {
             try {
                 val opened = withContext(Dispatchers.IO) { current.resumeSession(sessionId, profile.ifBlank { null }) }
                 val history = withContext(Dispatchers.IO) { current.history(opened.sessionId) }
-                val lines = history.map { row -> ChatLine(row.role.ifEmpty { "assistant" }, row.text, messageId = row.rowId) }
-                _state.update {
-                    it.copy(
+                val rows = history.map { row -> HistoryEntry(row.role, row.text, row.rowId) }
+                var shown = emptyList<ChatLine>()
+                _state.update { currentState ->
+                    val switching = currentState.liveSessionId != opened.sessionId
+                    val lines = if (switching) {
+                        rows.map { row -> ChatLine(row.role.ifEmpty { "assistant" }, row.text, messageId = row.rowId) }
+                    } else {
+                        mergeHistory(currentState.messages, rows)
+                    }
+                    shown = lines
+                    val card = approvalFor(opened.sessionId)
+                    currentState.copy(
                         liveSessionId = opened.sessionId,
                         messages = lines,
+                        approval = card,
+                        showCommand = if (card?.id != currentState.approval?.id || card?.resolvedLabel != null) false else currentState.showCommand,
                         status = "Connected",
                     )
                 }
-                syncOpenApprovals(opened.openRequests)
+                syncOpenApprovals(opened.sessionId, opened.openRequests)
                 val route = pendingRoute
                 if (route != null && (route.sessionId.isEmpty() || route.sessionId == opened.sessionId)) {
                     pendingRoute = null
-                    placeFocus(route, opened.openRequests, lines)
+                    placeFocus(route, opened.openRequests, shown)
                 }
             } catch (error: Exception) {
                 _state.update { it.copy(status = error.message ?: "Could not open the session") }
@@ -343,12 +388,27 @@ class Phase0Model(app: Application) : AndroidViewModel(app) {
         }
     }
 
+    fun onForeground() {
+        refreshLive(attach = true)
+    }
+
     fun newSession() {
         viewModelScope.launch {
             val current = client ?: return@launch
             try {
                 val id = withContext(Dispatchers.IO) { current.createSession() }
-                _state.update { it.copy(liveSessionId = id, messages = emptyList(), question = null, focus = null, status = "New session") }
+                withContext(Dispatchers.IO) { current.resumeSession(id) }
+                _state.update {
+                    it.copy(
+                        liveSessionId = id,
+                        messages = emptyList(),
+                        approval = approvalFor(id),
+                        question = null,
+                        focus = null,
+                        showCommand = false,
+                        status = "New session",
+                    )
+                }
                 refreshLists()
             } catch (error: Exception) {
                 _state.update { it.copy(status = error.message ?: "Could not create a session") }
@@ -363,6 +423,7 @@ class Phase0Model(app: Application) : AndroidViewModel(app) {
         if (text.isEmpty()) return
         val current = client ?: return
         _state.update { it.copy(draft = "", messages = it.messages + ChatLine("user", text), status = "Sending") }
+        applyApproval { book -> onNewerMessage(book, session) }
         viewModelScope.launch {
             try {
                 withContext(Dispatchers.IO) { current.submit(session, text) }
@@ -378,19 +439,15 @@ class Phase0Model(app: Application) : AndroidViewModel(app) {
         val current = client ?: return
         answeredHere.add(card.id)
         resolvedApprovals.add(card.id)
+        applyApproval(settle = true) { book -> noteLocalChoice(book, card, choice) }
         viewModelScope.launch {
             try {
                 withContext(Dispatchers.IO) { current.answerApproval(card.sessionId, card.requestId, choice) }
-                _state.update {
-                    it.copy(
-                        approval = if (it.approval?.id == card.id) null else it.approval,
-                        showCommand = false,
-                        status = if (choice == "deny") "Denied" else "Allowed once",
-                    )
-                }
+                _state.update { it.copy(status = choiceLabel(choice)) }
             } catch (error: Exception) {
                 answeredHere.remove(card.id)
                 resolvedApprovals.remove(card.id)
+                applyApproval { book -> restoreOpen(book, card) }
                 _state.update { it.copy(status = error.message ?: "Approval failed") }
             }
         }
@@ -495,8 +552,16 @@ class Phase0Model(app: Application) : AndroidViewModel(app) {
             if (route != null && route.sessionId.isNotEmpty() && route.sessionId != live) {
                 openSession(route.sessionId, route.profile)
             } else if (live != null) {
-                val replay = withContext(Dispatchers.IO) { next.replay(live, seqs[live] ?: 0) }
-                syncOpenApprovals(replay.openRequests)
+                withContext(Dispatchers.IO) { next.resumeSession(live) }
+                mergeOpenHistory(next, live)
+                replaying = true
+                val replay = try {
+                    withContext(Dispatchers.IO) { next.replay(live, seqs[live] ?: 0) }
+                } finally {
+                    replaying = false
+                }
+                syncOpenApprovals(live, replay.openRequests)
+                mergeOpenHistory(next, live)
                 if (replay.truncated) {
                     openSession(live)
                 } else if (route != null && (route.sessionId.isEmpty() || route.sessionId == live)) {
@@ -562,6 +627,26 @@ class Phase0Model(app: Application) : AndroidViewModel(app) {
 
     private fun placeFocus(route: PushRoute, open: List<ServerRequest>, lines: List<ChatLine>) {
         val focus = routeFocus(route, openRequestIds(open), lines.map { TrackedMessage(it.messageId, it.seq) })
+        val resolvedSession = route.sessionId.ifEmpty { _state.value.liveSessionId.orEmpty() }
+        if (focus.target == "approval" && focus.resolved && resolvedSession.isNotEmpty()) {
+            synchronized(approvalLock) {
+                val live = approvals[resolvedSession]
+                val matches = live != null && (live.requestId == route.requestId || live.id == route.requestId)
+                if (!matches) {
+                    approvals = approvals + (
+                        resolvedSession to PendingApproval(
+                            id = "push-${route.requestId}",
+                            sessionId = resolvedSession,
+                            requestId = route.requestId,
+                            description = route.body.ifBlank { route.title }.ifBlank { "Approval" },
+                            command = "",
+                            resolvedLabel = "Resolved",
+                        )
+                        )
+                }
+            }
+        }
+        val resolvedCard = if (focus.target == "approval" && focus.resolved) approvalFor(resolvedSession) else null
         _state.update { current ->
             var next = current.copy(
                 focus = RouteFocusState(
@@ -573,22 +658,8 @@ class Phase0Model(app: Application) : AndroidViewModel(app) {
                     messageIndex = focus.messageIndex,
                 ),
             )
-            if (focus.target == "approval" && focus.resolved) {
-                val live = current.approval
-                val matches = live != null && (live.requestId == route.requestId || live.id == route.requestId)
-                if (!matches) {
-                    next = next.copy(
-                        approval = PendingApproval(
-                            id = "push-${route.requestId}",
-                            sessionId = route.sessionId,
-                            requestId = route.requestId,
-                            description = route.body.ifBlank { route.title }.ifBlank { "Approval" },
-                            command = "",
-                            resolvedLabel = "Resolved",
-                        ),
-                        showCommand = false,
-                    )
-                }
+            if (resolvedCard != null && current.liveSessionId == resolvedSession) {
+                next = next.copy(approval = resolvedCard, showCommand = false)
             }
             if (focus.target == "question") {
                 val live = current.question
@@ -608,6 +679,9 @@ class Phase0Model(app: Application) : AndroidViewModel(app) {
             next
         }
         val choice = route.action
+        if (focus.target == "approval" && focus.resolved && route.requestId.isNotEmpty()) {
+            dismissApprovalNotification(getApplication(), route.requestId)
+        }
         if (!focus.resolved && (choice == "once" || choice == "deny") && focus.target == "approval") {
             val card = _state.value.approval
             if (card != null && card.resolvedLabel == null && (card.requestId == route.requestId || card.id == route.requestId)) {
@@ -625,28 +699,108 @@ class Phase0Model(app: Application) : AndroidViewModel(app) {
         return turn.optString("submission_id")
     }
 
-    private fun forgetApproval(id: String, reason: String?) {
+    private fun noteResolved(id: String) {
         if (id.isEmpty()) return
         resolvedApprovals.add(id)
+    }
+
+    private fun jsonText(value: Any?): String {
+        if (value == null || value == JSONObject.NULL) return ""
+        return value.toString()
+    }
+
+    private fun approvalFor(sessionId: String): PendingApproval? = synchronized(approvalLock) { approvals[sessionId] }
+
+    private fun applyApproval(settle: Boolean = false, transform: (Map<String, PendingApproval>) -> ApprovalResult) {
+        val published: PendingApproval?
+        val effects: List<ApprovalEffect>
+        var leaving = emptyList<String>()
+        synchronized(approvalLock) {
+            val result = transform(approvals)
+            for (effect in result.effects) {
+                if (effect.type == "disarm") clearJobs.remove(effect.sessionId)?.cancel()
+            }
+            val previous = approvals
+            approvals = result.book
+            leaving = idsLeavingOpen(previous, approvals)
+            if (settle) {
+                for ((sessionId, card) in previous) {
+                    val now = approvals[sessionId]
+                    if (now == null || now.id != card.id || (now.resolvedLabel != null && card.resolvedLabel == null)) {
+                        noteResolved(card.id)
+                        if (card.requestId.isNotEmpty()) noteResolved(card.requestId)
+                    }
+                }
+            }
+            published = _state.value.liveSessionId?.let { approvals[it] }
+            effects = result.effects
+        }
+        for (id in leaving) dismissApprovalNotification(getApplication(), id)
         _state.update { current ->
-            val card = current.approval ?: return@update current
-            if (card.id != id && card.requestId != id) return@update current
-            resolvedApprovals.add(card.id)
-            if (answeredHere.contains(card.id) || reason != "resolved") {
-                current.copy(approval = null, showCommand = false)
-            } else {
-                current.copy(approval = card.copy(resolvedLabel = "Approved on another device"), showCommand = false)
+            val sameCard = published?.id == current.approval?.id
+            current.copy(
+                approval = published,
+                showCommand = if (!sameCard || published?.resolvedLabel != null) false else current.showCommand,
+            )
+        }
+        for (effect in effects) {
+            if (effect.type == "arm") armClear(effect.sessionId)
+        }
+    }
+
+    private fun armClear(sessionId: String) {
+        val job = viewModelScope.launch {
+            delay(RESOLVED_CARD_MS)
+            applyApproval { book -> expireResolved(book, sessionId) }
+        }
+        val previous = synchronized(approvalLock) {
+            val replaced = clearJobs.remove(sessionId)
+            clearJobs[sessionId] = job
+            replaced
+        }
+        previous?.cancel()
+    }
+
+    private fun syncOpenApprovals(sessionId: String, open: List<ServerRequest>) {
+        val ids = open.filter { it.method == "approval" }.map { it.id }.toSet()
+        applyApproval { book -> syncOpen(book, sessionId, ids) }
+    }
+
+    private fun refreshLive(attach: Boolean) {
+        val earlier = refreshTail
+        refreshTail = viewModelScope.launch {
+            earlier?.join()
+            val current = client ?: return@launch
+            if (!_state.value.connected) return@launch
+            try {
+                val sessions = withContext(Dispatchers.IO) { current.listSessions() }
+                _state.update { it.copy(sessions = sessions) }
+                val live = _state.value.liveSessionId ?: return@launch
+                if (attach) {
+                    try {
+                        withContext(Dispatchers.IO) { current.resumeSession(live) }
+                    } catch (_: Exception) {
+                        // History can still move if this socket was already attached.
+                    }
+                }
+                mergeOpenHistory(current, live)
+            } catch (_: Exception) {
+                // A missed refresh is retried on the next sessions.changed or foreground.
             }
         }
     }
 
-    private fun syncOpenApprovals(open: List<ServerRequest>) {
-        val ids = open.filter { it.method == "approval" }.map { it.id }.toSet()
-        _state.update { current ->
-            val card = current.approval ?: return@update current
-            if (card.resolvedLabel != null || resolvedApprovals.contains(card.id)) return@update current
-            if (card.id !in ids) current.copy(approval = null, showCommand = false) else current
+    private suspend fun mergeOpenHistory(current: HermesClient, live: String) {
+        val history = withContext(Dispatchers.IO) { current.history(live) }
+        val rows = history.map { row -> HistoryEntry(row.role, row.text, row.rowId) }
+        var grew = false
+        _state.update { state ->
+            if (state.liveSessionId != live) return@update state
+            val merged = mergeHistory(state.messages, rows)
+            grew = transcriptGrew(state.messages, merged)
+            if (sameTranscript(state.messages, merged)) state else state.copy(messages = merged)
         }
+        if (grew) applyApproval { book -> onNewerMessage(book, live) }
     }
 
     private fun scheduleReconnect() {

@@ -21,7 +21,7 @@ The first real answer wins. A JSON-RPC error `4404` is a "not shown here" declin
 ## How this process behaves
 
 - One socket. After `gateway.ready` it sends `client.capabilities` with `server_requests: true`, so a question is not thrown away when this is the only peer.
-- Every few seconds it calls `session.active_list` and `session.activate` (with `omit_messages: true`) for each live id it has not joined. It does not resume idle stored sessions.
+- Every few seconds it calls `session.active_list` and `session.resume` (with `omit_messages: true`) for each live id it has not joined. It does not attach idle stored sessions.
 - It does not answer approvals, questions, or any other server request. Answering would steal the prompt from the Windows or Android app. A real Allow or Deny on those apps still settles the question at once.
 - It notifies on `approval`, `clarify`, a finished `message.complete`, and an error event.
 - A reply that starts and finishes in the gap before the next poll can be missed. Five seconds is the default. The phone and the Windows app still have `session.events.since` for themselves.

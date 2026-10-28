@@ -326,7 +326,7 @@ class HermesClient(
         )
     }
 
-    /** Settle an approval so Hermes emits request.cancel to every connected client. */
+    /** Settle an approval so Hermes emits request.cancel to every socket attached to the session. */
     suspend fun answerApproval(sessionId: String, requestId: String, choice: String) {
         val result = rpc(
             "approval.respond",
@@ -338,6 +338,11 @@ class HermesClient(
         if (result.optInt("resolved") == 0) {
             throw HermesException("Approval was already resolved")
         }
+    }
+
+    /** Stop the live turn. Hermes drops pending approvals and emits approval.cancelled. */
+    suspend fun interruptSession(sessionId: String) {
+        rpc("session.interrupt", JSONObject().put("session_id", sessionId))
     }
 
     fun respond(id: String, result: JSONObject) {

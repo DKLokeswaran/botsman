@@ -81,7 +81,19 @@ fun showHermesNotification(context: Context, text: String) {
         builder.addAction(0, "Allow once", actionIntent(context, text, "once"))
         builder.addAction(0, "Deny", actionIntent(context, text, "deny"))
     }
-    manager.notify((text.hashCode() and 0x7fffffff), builder.build())
+    val noticeId = if (route?.kind == "approval" && route.requestId.isNotEmpty()) {
+        approvalNotificationId(route.requestId)
+    } else {
+        text.hashCode() and 0x7fffffff
+    }
+    manager.notify(noticeId, builder.build())
+}
+
+fun approvalNotificationId(requestId: String): Int = ("approval:$requestId").hashCode() and 0x7fffffff
+
+fun dismissApprovalNotification(context: Context, requestId: String) {
+    if (requestId.isEmpty()) return
+    context.getSystemService(NotificationManager::class.java).cancel(approvalNotificationId(requestId))
 }
 
 private fun ensureChannels(manager: NotificationManager) {

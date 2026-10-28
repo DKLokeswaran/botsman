@@ -24,6 +24,7 @@ REQUIRED_METHODS = [
     "session.activate",
     "session.events.since",
     "session.history",
+    "session.interrupt",
     "session.list",
     "session.resume",
 ]

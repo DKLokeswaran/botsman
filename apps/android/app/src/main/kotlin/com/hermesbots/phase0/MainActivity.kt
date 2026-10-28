@@ -88,5 +88,6 @@ class MainActivity : ComponentActivity() {
         if (notificationPermissionGranted(this)) {
             registerUnifiedPush(this)
         }
+        model.onForeground()
     }
 }

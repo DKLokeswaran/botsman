@@ -18,7 +18,7 @@ Both clients take an HTTP stack and a socket from the outside.
 
 ## One socket and many sessions
 
-A session event reaches only the sockets attached to that session. `session.activate` adds a socket. It does not remove the others. Session-less events reach every connected socket. The notifier in `../notifier` is built around that. The test apps attach by resuming the session the user opened.
+A session event reaches only the sockets attached to that session. `session.resume` and `session.activate` add this socket and do not detach the others. Session-less events reach every connected socket. The notifier resumes each live session it watches. The test apps resume the session the user opened.
 
 ## Fake server
 
