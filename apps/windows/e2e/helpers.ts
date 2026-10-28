@@ -163,14 +163,16 @@ export async function readState(page: Page): Promise<UiState> {
         landed: article.classList.contains("landed"),
       };
     });
-    const cards = [...document.querySelectorAll("main section")].filter((section) => section.textContent?.includes("Needs you"));
+    const sections = [...document.querySelectorAll("main section")].filter((section) => !section.textContent?.includes("Question"));
+    const openCards = sections.filter((section) => section.textContent?.includes("Needs you"));
+    const approvalCard = openCards[0] ?? sections[0];
     return {
       status: headerText[0] ?? "",
       versions,
       buttons: [...document.querySelectorAll("button")].map((button) => (button.textContent ?? "").trim()),
       lines,
-      approval: cards[0]?.textContent?.trim() ?? null,
-      needsYou: cards.length,
+      approval: approvalCard?.textContent?.trim() ?? null,
+      needsYou: openCards.length,
     };
   });
 }

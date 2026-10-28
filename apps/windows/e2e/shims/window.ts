@@ -15,5 +15,8 @@ export function getCurrentWindow() {
     async setFocus(): Promise<void> {
       return undefined;
     },
+    async onFocusChanged(_handler: (event: { payload: boolean }) => void): Promise<() => void> {
+      return () => undefined;
+    },
   };
 }

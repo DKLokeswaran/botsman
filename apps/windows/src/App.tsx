@@ -1219,7 +1219,7 @@ export function App() {
             </div>
             {lines.map((line, index) => (
               <article
-                key={`${index}-${line.role}-${line.messageId}`}
+                key={`${liveId}-${index}-${line.role}`}
                 ref={(node) => {
                   lineRefs.current[index] = node;
                 }}
