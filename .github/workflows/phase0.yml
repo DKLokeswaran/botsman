@@ -52,6 +52,20 @@ jobs:
           npm ci --prefix apps/windows
           npm run check --prefix apps/windows
           npm test --prefix apps/windows
+      - name: Windows browser end-to-end
+        working-directory: apps/windows
+        run: |
+          npx playwright install --with-deps chromium
+          npm run e2e
+      - name: Upload Playwright report
+        if: always() && !cancelled()
+        uses: actions/upload-artifact@v7
+        with:
+          name: hermes-bots-e2e
+          path: |
+            apps/windows/e2e/playwright-report/
+            apps/windows/e2e/test-results/
+          if-no-files-found: error
       - name: Kotlin client tests and debug APK
         working-directory: apps/android
         run: chmod +x ./gradlew && ./gradlew :hermes-client:test :app:testDebugUnitTest assembleDebug --no-daemon

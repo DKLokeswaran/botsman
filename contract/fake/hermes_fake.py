@@ -13,6 +13,11 @@ Shapes follow the pinned contract and the v0.22.5 handlers:
 - ``GET /api/ws?ticket=`` speaks JSON-RPC. ``gateway.ready`` is the first frame.
   ``gateway.ping`` is answered even though it is not an OpenRPC method.
 - ``session.events.since`` returns event ``params`` objects plus ``open_requests``.
+
+``HERMES_FAKE_TEST_HOOKS=1`` exposes loopback controls for the Windows browser
+suite (reset, a scripted reply, an extra session, and a state readout). It also
+repeats ``Set-Cookie`` in ``X-E2E-Set-Cookie`` and answers CORS preflight.
+Leave the variable unset and those paths 404; login and JSON-RPC stay as below.
 """
 
 from __future__ import annotations
@@ -21,6 +26,7 @@ import argparse
 import base64
 import hashlib
 import json
+import os
 import secrets
 import struct
 import threading
@@ -52,14 +58,26 @@ class State:
         self.attached: dict = {}
         self.next_row = 2
         self.next_session = 2
-        self.sessions: dict[str, dict] = {
-            SESSION_LIVE: {
-                "stored": SESSION_STORED,
-                "live": SESSION_LIVE,
-                "title": "Hello",
-                "messages": [{"role": "user", "text": "Say hello", "row_id": 1}],
-            }
-        }
+        self.scripted_reply: str | None = None
+        self.sessions: dict[str, dict] = _hello_sessions()
+
+    def reset(self) -> None:
+        with self.lock:
+            self.access.clear()
+            self.refresh.clear()
+            self.tickets.clear()
+            self.events.clear()
+            self.next_seq = 0
+            self.open_requests.clear()
+            self.approval_sent = False
+            self.activated = False
+            self.answers.clear()
+            self.sockets.clear()
+            self.attached.clear()
+            self.next_row = 2
+            self.next_session = 2
+            self.scripted_reply = None
+            self.sessions = _hello_sessions()
 
     def lookup(self, session_id: str | None) -> dict:
         if session_id and session_id in self.sessions:
@@ -129,8 +147,20 @@ class State:
         }
 
 
+def _hello_sessions() -> dict[str, dict]:
+    return {
+        SESSION_LIVE: {
+            "stored": SESSION_STORED,
+            "live": SESSION_LIVE,
+            "title": "Hello",
+            "messages": [{"role": "user", "text": "Say hello", "row_id": 1}],
+        }
+    }
+
+
 STATE = State()
 WRITE_LOCK = threading.Lock()
+TEST_HOOKS = os.environ.get("HERMES_FAKE_TEST_HOOKS") == "1"
 
 
 def _json_bytes(payload: dict) -> bytes:
@@ -432,6 +462,90 @@ def _cancel_session_approvals(session_id: str) -> None:
     )
 
 
+def _test_state() -> dict:
+    with STATE.lock:
+        open_requests = [dict(item) for item in STATE.open_requests.values()]
+        sessions = []
+        extras = []
+        history: list[dict] = []
+        for record in STATE.sessions.values():
+            messages = [dict(item) for item in record["messages"]]
+            if record["live"] == SESSION_LIVE:
+                history = messages
+            sessions.append(
+                {
+                    "id": record["stored"],
+                    "live_id": record["live"],
+                    "title": record["title"],
+                    "preview": messages[-1]["text"] if messages else "",
+                    "started_at": 1,
+                    "message_count": len(messages),
+                    "source": "phase0",
+                }
+            )
+            if record["stored"] != SESSION_STORED:
+                extras.append(
+                    {
+                        "id": record["stored"],
+                        "title": record["title"],
+                        "marker": messages[0]["text"] if messages else "",
+                    }
+                )
+    return {
+        "open_requests": open_requests,
+        "history": history,
+        "profiles": [dict(item) for item in PROFILES["profiles"]],
+        "sessions": sessions,
+        "extras": extras,
+    }
+
+
+def _install_scripted_session(session_id: str, title: str, marker: str) -> None:
+    """Store an extra session the stock list does not have. Resume attaches it like any other."""
+    with STATE.lock:
+        for key, record in list(STATE.sessions.items()):
+            if key == session_id or record["stored"] == session_id or record["live"] == session_id:
+                STATE.sessions.pop(key, None)
+        number = STATE.next_session
+        STATE.next_session += 1
+        live = f"live-{number}"
+        STATE.sessions[live] = {
+            "stored": session_id,
+            "live": live,
+            "title": title,
+            "messages": [{"role": "user", "text": marker, "row_id": STATE.next_row}],
+        }
+        STATE.next_row += 1
+    _emit_changed()
+
+
+def _handle_test_hook(handler: "Handler", path: str, incoming: dict) -> None:
+    if path == "/__test__/reset":
+        STATE.reset()
+        handler._json_response(200, {"ok": True})
+        return
+    if path == "/__test__/reply":
+        text = incoming.get("text")
+        if not isinstance(text, str):
+            handler._json_response(400, {"error": "text must be a string"})
+            return
+        with STATE.lock:
+            STATE.scripted_reply = text
+        handler._json_response(200, {"ok": True})
+        return
+    if path == "/__test__/session":
+        session_id = str(incoming.get("id") or "")
+        title = str(incoming.get("title") or session_id)
+        marker = str(incoming.get("marker") or title)
+        if not session_id:
+            handler._json_response(400, {"error": "id is required"})
+            return
+        _install_scripted_session(session_id, title, marker)
+        handler._json_response(200, {"ok": True})
+        return
+    handler._json_response(404, {"error": "not found"})
+
+
 def _dispatch(wfile, req: dict) -> None:
     rid = req.get("id")
     method = req.get("method")
@@ -567,13 +681,19 @@ def _dispatch(wfile, req: dict) -> None:
         _emit_changed()
         with STATE.lock:
             live = STATE.lookup(session_id)["live"]
+            delta = "Hello"
+            done = "Hello from Hermes"
+            if TEST_HOOKS and STATE.scripted_reply is not None:
+                delta = STATE.scripted_reply
+                done = STATE.scripted_reply
+                STATE.scripted_reply = None
         for event_type, payload in (
             ("message.start", {}),
-            ("message.delta", {"text": "Hello"}),
-            ("message.complete", {"text": "Hello from Hermes", "status": "complete"}),
+            ("message.delta", {"text": delta}),
+            ("message.complete", {"text": done, "status": "complete"}),
         ):
             _broadcast(STATE.stamp(event_type, payload, live), live)
-        _append_message(live, "assistant", "Hello from Hermes")
+        _append_message(live, "assistant", done)
         _emit_changed()
         return
     if method == "approval.received":
@@ -685,11 +805,36 @@ class Handler(BaseHTTPRequestHandler):
         self.send_header("Content-Length", str(len(raw)))
         for cookie in cookies or []:
             self.send_header("Set-Cookie", cookie)
+        if TEST_HOOKS:
+            self.send_header("Access-Control-Allow-Origin", "*")
+            self.send_header("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
+            self.send_header("Access-Control-Allow-Headers", "content-type, authorization, accept")
+            self.send_header("Access-Control-Expose-Headers", "X-E2E-Set-Cookie")
+            self.send_header("Access-Control-Allow-Private-Network", "true")
+            if cookies:
+                encoded = base64.b64encode(json.dumps(cookies).encode("utf-8")).decode("ascii")
+                self.send_header("X-E2E-Set-Cookie", encoded)
         self.end_headers()
         self.wfile.write(raw)
 
+    def do_OPTIONS(self) -> None:  # noqa: N802
+        if not TEST_HOOKS:
+            self.send_error(501, "Unsupported method ('OPTIONS')")
+            return
+        self.send_response(204)
+        self.send_header("Access-Control-Allow-Origin", "*")
+        self.send_header("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
+        self.send_header("Access-Control-Allow-Headers", "content-type, authorization, accept")
+        self.send_header("Access-Control-Expose-Headers", "X-E2E-Set-Cookie")
+        self.send_header("Access-Control-Allow-Private-Network", "true")
+        self.send_header("Content-Length", "0")
+        self.end_headers()
+
     def do_GET(self) -> None:  # noqa: N802
         parsed = urlparse(self.path)
+        if TEST_HOOKS and parsed.path == "/__test__/state":
+            self._json_response(200, _test_state())
+            return
         if parsed.path == "/api/health":
             self._json_response(200, {"ok": True})
             return
@@ -705,6 +850,9 @@ class Handler(BaseHTTPRequestHandler):
             incoming = json.loads(self._body().decode("utf-8") or "{}")
         except json.JSONDecodeError:
             self._json_response(400, {"error": "bad json"})
+            return
+        if TEST_HOOKS and parsed.path.startswith("/__test__/"):
+            _handle_test_hook(self, parsed.path, incoming if isinstance(incoming, dict) else {})
             return
         if parsed.path == "/auth/password-login":
             username = str(incoming.get("username") or "")
