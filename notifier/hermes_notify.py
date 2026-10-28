@@ -211,6 +211,7 @@ class Gateway:
         self.once = 0
         self.resume_retry_after: dict[str, float] = {}
         self.active_list_key: tuple[str, ...] = ()
+        self.notified_request_ids: set[str] = set()
 
     def login(self, username: str, password: str, provider: str) -> None:
         status, _payload, cookies, resp_headers = request_json(
@@ -299,6 +300,7 @@ class Gateway:
         raw.settimeout(20)
         self.sock = raw
         self.attached.clear()
+        self.notified_request_ids.clear()
         self.pending = b""
         split = header.split(b"\r\n\r\n", 1)
         if len(split) == 2:
@@ -425,6 +427,57 @@ class Gateway:
             return named
         return self.profiles.get(session_id, "")
 
+    def notify_approval_if_new(
+        self,
+        *,
+        session_id: str,
+        request_id: str,
+        description: str,
+        command: str,
+        profile: str = "",
+    ) -> None:
+        if not request_id or request_id in self.notified_request_ids:
+            return
+        self.notified_request_ids.add(request_id)
+        self.emit_record(
+            build_notify(
+                kind="approval",
+                title="Approval waiting",
+                body=description or command or "Approval",
+                session_id=session_id,
+                profile=profile or self.profiles.get(session_id, ""),
+                request_id=request_id,
+            )
+        )
+
+    def consume_attach_snapshot(self, result: dict, default_session: str) -> None:
+        session_id = str(result.get("session_id") or default_session)
+        pending = result.get("pending_approval")
+        if isinstance(pending, dict):
+            sid = str(pending.get("session_id") or session_id)
+            self.notify_approval_if_new(
+                session_id=sid,
+                request_id=str(pending.get("request_id") or ""),
+                description=str(pending.get("description") or ""),
+                command=str(pending.get("command") or ""),
+                profile=self.profile_for(sid, pending),
+            )
+        open_requests = result.get("open_requests")
+        if not isinstance(open_requests, list):
+            return
+        for entry in open_requests:
+            if not isinstance(entry, dict) or str(entry.get("method") or "") != "approval":
+                continue
+            params = entry.get("params") if isinstance(entry.get("params"), dict) else {}
+            sid = str(params.get("session_id") or session_id)
+            self.notify_approval_if_new(
+                session_id=sid,
+                request_id=str(params.get("request_id") or ""),
+                description=str(params.get("description") or ""),
+                command=str(params.get("command") or ""),
+                profile=self.profile_for(sid, params),
+            )
+
     def handle(self, frame: dict) -> None:
         method = frame.get("method")
         if method == "event":
@@ -435,15 +488,12 @@ class Gateway:
             params = frame.get("params") if isinstance(frame.get("params"), dict) else {}
             session_id = str(params.get("session_id") or "")
             if method == "approval":
-                self.emit_record(
-                    build_notify(
-                        kind="approval",
-                        title="Approval waiting",
-                        body=str(params.get("description") or params.get("command") or "Approval"),
-                        session_id=session_id,
-                        profile=self.profile_for(session_id, params),
-                        request_id=str(params.get("request_id") or ""),
-                    )
+                self.notify_approval_if_new(
+                    session_id=session_id,
+                    request_id=str(params.get("request_id") or ""),
+                    description=str(params.get("description") or ""),
+                    command=str(params.get("command") or ""),
+                    profile=self.profile_for(session_id, params),
                 )
             elif method == "clarify":
                 questions = params.get("questions") if isinstance(params.get("questions"), list) else []
@@ -561,13 +611,17 @@ class Gateway:
             if retry_after > now:
                 continue
             try:
-                self.call("session.resume", {"session_id": sid, "omit_messages": True})
+                result = self.call(
+                    "session.activate",
+                    {"session_id": sid, "omit_messages": True},
+                )
             except RuntimeError as exc:
-                print(f"session.resume skipped for {sid} ({exc})", file=sys.stderr, flush=True)
+                print(f"session.activate skipped for {sid} ({exc})", file=sys.stderr, flush=True)
                 self.resume_retry_after[sid] = now + RESUME_RETRY_SECONDS
                 continue
             self.attached.add(sid)
             self.resume_retry_after.pop(sid, None)
+            self.consume_attach_snapshot(result, sid)
 
     def close(self) -> None:
         if self.sock is not None:

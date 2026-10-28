@@ -698,7 +698,7 @@ export function App() {
       return null;
     }
     try {
-      return await client.resumeSession(sessionId, profile);
+      return await client.activateSession(sessionId, profile);
     } catch (error) {
       if (!isSessionAttachFailure(error)) {
         throw error;
@@ -719,7 +719,7 @@ export function App() {
       if (!live) return;
       if (attach) {
         try {
-          await client.resumeSession(live);
+          await client.activateSession(live);
         } catch (error) {
           if (isSessionAttachFailure(error)) {
             markResumeBlocked(live);
@@ -1026,7 +1026,7 @@ export function App() {
       syncOpenApprovals(resumed.sessionId, replay.openRequests);
       await mergeOpenHistory(client, resumed.sessionId);
       if (replay.truncated) {
-        await openSession(resumed.sessionId);
+        await openSession(resumed.sessionId, "", { liveAttach: true });
       } else if (route && (!route.sessionId || route.sessionId === live)) {
         pendingRoute.current = null;
         placeFocus(route, replay.openRequests, linesRef.current);
@@ -1117,7 +1117,7 @@ export function App() {
     }
   }
 
-  async function openSession(sessionId: string, profile = "") {
+  async function openSession(sessionId: string, profile = "", options?: { liveAttach?: boolean }) {
     const client = clientRef.current;
     if (!client) {
       return;
@@ -1127,7 +1127,11 @@ export function App() {
     }
     rememberQuestion(null);
     try {
-      const opened = await client.resumeSession(sessionId, profile || undefined);
+      const useActivate =
+        options?.liveAttach ?? !sessions.some((row) => row.id === sessionId);
+      const opened = useActivate
+        ? await client.activateSession(sessionId, profile || undefined)
+        : await client.resumeSession(sessionId, profile || undefined);
       const history = await client.history(opened.sessionId);
       const rows: HistoryEntry[] = history.map((row) => ({ role: row.role, text: row.text, rowId: row.rowId }));
       const switching = liveRef.current !== opened.sessionId;
@@ -1163,7 +1167,7 @@ export function App() {
     }
     try {
       const id = await client.createSession();
-      await client.resumeSession(id);
+      await client.activateSession(id);
       liveRef.current = id;
       setLiveId(id);
       linesRef.current = [];

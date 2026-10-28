@@ -197,8 +197,8 @@ class HermesClientTest {
                 second.connect(material.accessToken)
                 val left = firstCard.await()
                 val right = secondCard.await()
-                first.resumeSession(left.params.optString("session_id"))
-                second.resumeSession(right.params.optString("session_id"))
+                first.activateSession(left.params.optString("session_id"))
+                second.activateSession(right.params.optString("session_id"))
                 first.answerApproval(
                     left.params.optString("session_id"),
                     left.params.optString("request_id"),
@@ -233,7 +233,7 @@ class HermesClientTest {
                 second.resumeSession("sess-1")
                 val created = third.createSession()
                 assertTrue(created != "live-1")
-                third.resumeSession(created)
+                third.activateSession(created)
                 val seen = java.util.Collections.synchronizedList(mutableListOf<String>())
                 third.listener = object : HermesListener {
                     override fun onEvent(event: GatewayEvent) {
@@ -342,7 +342,7 @@ class HermesClientTest {
             val sessions = runBlocking { gateway.listSessions() }
             assertTrue(sessions.isNotEmpty())
             val created = runBlocking { gateway.createSession() }
-            val opened = runBlocking { gateway.resumeSession(created) }
+            val opened = runBlocking { gateway.activateSession(created) }
             assertTrue(opened.sessionId.isNotEmpty())
         } finally {
             gateway.close()

@@ -499,6 +499,26 @@ export class HermesClient {
     };
   }
 
+  async activateSession(
+    sessionId: string,
+    profile?: string,
+  ): Promise<{ sessionId: string; messages: TranscriptMessage[]; openRequests: ServerRequest[] }> {
+    const result = asRecord(
+      await this.rpc("session.activate", {
+        session_id: sessionId,
+        omit_messages: false,
+        inline_images: false,
+        ...(profile ? { profile } : {}),
+      }),
+    );
+    const openRequests = this.deliverOpenRequests(result.open_requests);
+    return {
+      sessionId: String(result.session_id || sessionId),
+      messages: messagesFrom(result.messages),
+      openRequests,
+    };
+  }
+
   async history(sessionId: string): Promise<TranscriptMessage[]> {
     const result = asRecord(await this.rpc("session.history", { session_id: sessionId }));
     return messagesFrom(result.messages);
