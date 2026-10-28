@@ -4,7 +4,13 @@ import { getCurrentWindow } from "@tauri-apps/api/window";
 import { disable, enable, isEnabled } from "@tauri-apps/plugin-autostart";
 import { fetch as nativeFetch } from "@tauri-apps/plugin-http";
 import { isPermissionGranted, onAction, requestPermission, sendNotification } from "@tauri-apps/plugin-notification";
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
+import {
+  type ChatScrollEvent,
+  distanceFromBottom as scrollDistanceFromBottom,
+  shouldFollow,
+  shouldShowJumpToLatest,
+} from "./chat-scroll";
 import {
   HermesClient,
   HermesError,
@@ -225,10 +231,74 @@ export function App() {
   const revealRef = useRef<(route: PushRoute | null) => void>(() => undefined);
   const resolvedIds = useRef<Set<string>>(new Set());
   const answeredHere = useRef<Set<string>>(new Set());
+  const mainRef = useRef<HTMLElement>(null);
+  const [showJumpToLatest, setShowJumpToLatest] = useState(false);
+  const linesScrollMeta = useRef({ count: 0, lastText: "", lastRole: "" });
+  const openedSessionRef = useRef<string | null>(null);
+
+  const scrollToBottom = useCallback((behavior: ScrollBehavior = "smooth") => {
+    const el = mainRef.current;
+    if (!el) {
+      return;
+    }
+    el.scrollTo({ top: el.scrollHeight, behavior });
+    setShowJumpToLatest(false);
+  }, []);
+
+  const refreshScrollMetrics = useCallback(() => {
+    const el = mainRef.current;
+    if (!el) {
+      return;
+    }
+    const dist = scrollDistanceFromBottom(el.scrollTop, el.scrollHeight, el.clientHeight);
+    if (!shouldShowJumpToLatest(dist)) {
+      setShowJumpToLatest(false);
+    }
+  }, []);
 
   useEffect(() => {
     liveRef.current = liveId;
   }, [liveId]);
+
+  useEffect(() => {
+    if (!liveId) {
+      openedSessionRef.current = null;
+      return;
+    }
+    if (openedSessionRef.current === liveId) {
+      return;
+    }
+    openedSessionRef.current = liveId;
+    const target = focus?.target;
+    if (target === "message" || target === "approval" || target === "question") {
+      return;
+    }
+    requestAnimationFrame(() => scrollToBottom("auto"));
+  }, [liveId, focus?.target, scrollToBottom]);
+
+  useEffect(() => {
+    const el = mainRef.current;
+    const dist = el ? scrollDistanceFromBottom(el.scrollTop, el.scrollHeight, el.clientHeight) : 0;
+    const prev = linesScrollMeta.current;
+    const last = lines[lines.length - 1];
+    const lastRole = last?.role ?? "";
+    const lastText = last?.text ?? "";
+    let event: ChatScrollEvent | null = null;
+    if (lines.length > prev.count && lastRole === "user") {
+      event = "user_send";
+    } else if (lastRole === "assistant" && (lines.length > prev.count || lastText !== prev.lastText)) {
+      event = "reply_stream";
+    }
+    linesScrollMeta.current = { count: lines.length, lastText, lastRole };
+    if (!event) {
+      return;
+    }
+    if (shouldFollow(dist, event)) {
+      requestAnimationFrame(() => scrollToBottom(event === "user_send" ? "smooth" : "auto"));
+    } else if (event === "reply_stream") {
+      setShowJumpToLatest(shouldShowJumpToLatest(dist));
+    }
+  }, [lines, scrollToBottom]);
 
   useEffect(() => {
     if (!approval) {
@@ -921,7 +991,17 @@ export function App() {
           Reconnecting
         </div>
       ) : null}
-      <main className="flex-1 space-y-3 overflow-y-auto px-4 py-3">
+      <div className="relative min-h-0 flex-1">
+        {showJumpToLatest ? (
+          <Button
+            type="button"
+            className="absolute bottom-3 left-1/2 z-10 -translate-x-1/2 shadow-md"
+            onClick={() => scrollToBottom()}
+          >
+            Jump to latest
+          </Button>
+        ) : null}
+        <main ref={mainRef} className="h-full space-y-3 overflow-y-auto px-4 py-3" onScroll={refreshScrollMetrics}>
         {connected ? (
           <>
             <p className="font-[family-name:var(--font-label)] text-[12px] tracking-[0.08em] text-primary uppercase">Profiles</p>
@@ -1052,7 +1132,8 @@ export function App() {
             </p>
           </form>
         )}
-      </main>
+        </main>
+      </div>
       {connected ? (
         <form
           className="space-y-2 border-t border-[var(--line)] px-4 py-3"

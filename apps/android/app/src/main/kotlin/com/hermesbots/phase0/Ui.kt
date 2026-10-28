@@ -38,7 +38,10 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.snapshotFlow
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -62,6 +65,18 @@ import com.mikepenz.markdown.compose.elements.MarkdownListItems
 import com.mikepenz.markdown.compose.elements.listDepth
 import com.mikepenz.markdown.m3.Markdown
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.filter
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.launch
+
+private suspend fun androidx.compose.foundation.ScrollState.scrollToBottomWhenReady() {
+    if (maxValue > 0) {
+        scrollTo(maxValue)
+        return
+    }
+    snapshotFlow { maxValue }.filter { it > 0 }.first()
+    scrollTo(maxValue)
+}
 
 @Composable
 fun Phase0Screen(
@@ -87,6 +102,67 @@ fun Phase0Screen(
     onApplyUpdate: () -> Unit = {},
 ) {
     val scheme = MaterialTheme.colorScheme
+    val scrollState = rememberScrollState()
+    var showJumpToLatest by remember { mutableStateOf(false) }
+    var distanceFromBottom by remember { mutableIntStateOf(0) }
+    val scope = rememberCoroutineScope()
+    val messages = state.messages
+    val focusTarget = state.focus?.target
+
+    LaunchedEffect(scrollState) {
+        snapshotFlow { scrollState.value to scrollState.maxValue }.collect { (value, max) ->
+            val dist = (max - value).coerceAtLeast(0)
+            distanceFromBottom = dist
+            if (!shouldShowJumpToLatest(dist)) {
+                showJumpToLatest = false
+            }
+        }
+    }
+
+    var prevMessageCount by remember { mutableIntStateOf(0) }
+    var prevLastText by remember { mutableStateOf("") }
+
+    LaunchedEffect(messages.size, messages.lastOrNull()?.text, messages.lastOrNull()?.role) {
+        val last = messages.lastOrNull()
+        val lastRole = last?.role.orEmpty()
+        val lastText = last?.text.orEmpty()
+        val event = when {
+            messages.size > prevMessageCount && lastRole == "user" -> ChatScrollEvent.USER_SEND
+            lastRole == "assistant" && (messages.size > prevMessageCount || lastText != prevLastText) -> {
+                ChatScrollEvent.REPLY_STREAM
+            }
+            else -> null
+        }
+        prevMessageCount = messages.size
+        prevLastText = lastText
+        if (event == null) {
+            return@LaunchedEffect
+        }
+        if (shouldFollow(distanceFromBottom, event)) {
+            scrollState.scrollToBottomWhenReady()
+            showJumpToLatest = false
+        } else if (event == ChatScrollEvent.REPLY_STREAM) {
+            showJumpToLatest = shouldShowJumpToLatest(distanceFromBottom)
+        }
+    }
+
+    var openedSession by remember { mutableStateOf<String?>(null) }
+    LaunchedEffect(state.liveSessionId, messages.size, scrollState.maxValue, focusTarget) {
+        val session = state.liveSessionId ?: return@LaunchedEffect
+        if (openedSession == session) {
+            return@LaunchedEffect
+        }
+        if (focusTarget == "message" || focusTarget == "approval" || focusTarget == "question") {
+            openedSession = session
+            return@LaunchedEffect
+        }
+        if (scrollState.maxValue <= 0) {
+            return@LaunchedEffect
+        }
+        scrollState.scrollTo(scrollState.maxValue)
+        openedSession = session
+    }
+
     Column(
         modifier = Modifier
             .fillMaxSize()
@@ -105,11 +181,29 @@ fun Phase0Screen(
                 style = MaterialTheme.typography.labelMedium,
             )
         }
-        Column(Modifier.weight(1f).verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            if (!state.connected) {
-                LoginBlock(state, onServer, onUpdateBase, onUsername, onPassword, onLogin, onRegisterPush)
-            } else {
-                ChatBlock(state, onOpen, onNew, onAllow, onDeny, onToggleCommand)
+        Box(Modifier.weight(1f).fillMaxWidth()) {
+            Column(
+                Modifier
+                    .fillMaxSize()
+                    .verticalScroll(scrollState),
+                verticalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                if (!state.connected) {
+                    LoginBlock(state, onServer, onUpdateBase, onUsername, onPassword, onLogin, onRegisterPush)
+                } else {
+                    ChatBlock(state, onOpen, onNew, onAllow, onDeny, onToggleCommand)
+                }
+            }
+            if (showJumpToLatest) {
+                TextButton(
+                    onClick = {
+                        showJumpToLatest = false
+                        scope.launch { scrollState.scrollToBottomWhenReady() }
+                    },
+                    modifier = Modifier.align(Alignment.BottomCenter).padding(bottom = 8.dp),
+                ) {
+                    Text("Jump to latest", style = MaterialTheme.typography.labelMedium)
+                }
             }
         }
         if (state.connected) {

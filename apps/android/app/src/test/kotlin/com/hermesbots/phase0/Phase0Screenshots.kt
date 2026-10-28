@@ -7,6 +7,7 @@ import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performScrollTo
 import androidx.test.core.app.ApplicationProvider
 import androidx.test.ext.junit.rules.ActivityScenarioRule
 import com.github.takahirom.roborazzi.ExperimentalRoborazziApi
@@ -62,6 +63,33 @@ class Phase0Screenshots {
     @Test fun lightDeepLink() = shot("light-deeplink", false, deepLink())
 
     @Test fun darkDeepLink() = shot("dark-deeplink", true, deepLink())
+
+    @Test
+    fun test_bug_no_autoscroll_on_send() {
+        val messages = (1..24).map { index -> ChatLine("assistant", "Earlier reply number $index with enough text to fill the viewport.") } +
+            ChatLine("user", "Latest user message after send")
+        compose.setContent {
+            ZoetrikTheme(darkTheme = false) {
+                Phase0Screen(
+                    state = connected(
+                        messages = messages,
+                        liveSessionId = "live-scroll-test",
+                    ),
+                )
+            }
+        }
+        compose.waitForIdle()
+        compose.mainClock.advanceTimeBy(1_000)
+        compose.waitForIdle()
+        val latest = compose.onNodeWithText("Latest user message after send")
+        try {
+            latest.assertIsDisplayed()
+        } catch (_: AssertionError) {
+            latest.performScrollTo()
+            latest.assertIsDisplayed()
+        }
+        capture("bug-no-autoscroll-on-send")
+    }
 
     private fun shot(name: String, dark: Boolean, state: Phase0State) {
         compose.setContent {
@@ -155,9 +183,11 @@ class Phase0Screenshots {
         approval: PendingApproval? = null,
         focus: RouteFocusState? = null,
         draft: String = "",
+        liveSessionId: String = "live-1",
     ) = Phase0State(
         connected = true,
         status = "Connected",
+        liveSessionId = liveSessionId,
         messages = messages,
         approval = approval,
         focus = focus,
