@@ -90,7 +90,7 @@ export function Reply({ text }: { text: string }) {
             if (!isValidElement<{ className?: string; children?: unknown }>(child)) {
               return <pre>{children}</pre>;
             }
-            const raw = String(child.props.children).replace(/\n$/, "");
+            const raw = String(child.props.children ?? "").replace(/\n$/, "");
             const language =
               /language-([\w#+.-]+)/.exec(child.props.className ?? "")?.[1] || "text";
             return <CodeFence language={language} text={raw} />;

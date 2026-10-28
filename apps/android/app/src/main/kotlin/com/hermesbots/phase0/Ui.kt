@@ -57,7 +57,6 @@ import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
 import com.mikepenz.markdown.compose.components.markdownComponents
 import com.mikepenz.markdown.compose.elements.MarkdownCodeBlock
-import com.mikepenz.markdown.compose.elements.MarkdownCodeFence
 import com.mikepenz.markdown.compose.elements.MarkdownListItems
 import com.mikepenz.markdown.compose.elements.listDepth
 import com.mikepenz.markdown.m3.Markdown
@@ -323,9 +322,8 @@ private fun ReplyMarkdown(text: String) {
             }
         },
         codeFence = { model ->
-            MarkdownCodeFence(model.content, model.node, style = model.typography.code) { code, language, style ->
-                CodeCard(code.trimEnd(), language?.takeIf { it.isNotBlank() } ?: "text", style)
-            }
+            val card = fenceCard(model.content, model.node)
+            CodeCard(card.text, card.label, model.typography.code)
         },
         codeBlock = { model ->
             MarkdownCodeBlock(model.content, model.node, style = model.typography.code) { code, language, style ->
@@ -358,7 +356,7 @@ private fun CodeCard(code: String, language: String, style: TextStyle) {
                 clipboard.setText(AnnotatedString(code))
                 copied = true
             }) {
-                Text(if (copied) "Copied" else "Copy", style = MaterialTheme.typography.labelMedium)
+                Text(if (copied) FENCE_COPIED_LABEL else FENCE_COPY_LABEL, style = MaterialTheme.typography.labelMedium)
             }
         }
         Text(

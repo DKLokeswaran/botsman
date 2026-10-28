@@ -31,4 +31,19 @@ describe("test_bug_windows_one_line_codeblock", () => {
     const inline = screen.getByText("npm test");
     expect(inline.tagName).toBe("CODE");
   });
+
+  it("renders an empty fence as a code card with an empty body", () => {
+    const { container } = render(<Reply text={"```\n```"} />);
+    const card = container.querySelector(".fence");
+    expect(card).not.toBeNull();
+    expect(within(card as HTMLElement).getByText("text")).toBeTruthy();
+    expect(within(card as HTMLElement).getByRole("button", { name: "Copy" })).toBeTruthy();
+    expect(card?.querySelector("code")?.textContent).toBe("");
+  });
+
+  it("keeps a trailing blank line in the fence body", () => {
+    const { container } = render(<Reply text={"```\necho hello\n\n```"} />);
+    const card = container.querySelector(".fence");
+    expect(card?.querySelector("code")?.textContent).toBe("echo hello\n");
+  });
 });
