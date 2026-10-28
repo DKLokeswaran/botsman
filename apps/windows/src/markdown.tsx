@@ -1,4 +1,4 @@
-import { useEffect, useLayoutEffect, useState } from "react";
+import { Children, isValidElement, useEffect, useLayoutEffect, useState } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import hljs from "highlight.js/lib/core";
@@ -86,15 +86,21 @@ export function Reply({ text }: { text: string }) {
         remarkPlugins={[remarkGfm]}
         components={{
           pre({ children }) {
-            return <>{children}</>;
-          },
-          code({ className, children }) {
-            const raw = String(children).replace(/\n$/, "");
-            const language = /language-([\w#+.-]+)/.exec(className ?? "")?.[1];
-            if (!language && !raw.includes("\n")) {
-              return <code>{children}</code>;
+            const child = Children.toArray(children)[0];
+            if (!isValidElement<{ className?: string; children?: unknown }>(child)) {
+              return <pre>{children}</pre>;
             }
-            return <CodeFence language={language || "text"} text={raw} />;
+            const raw = String(child.props.children).replace(/\n$/, "");
+            const language =
+              /language-([\w#+.-]+)/.exec(child.props.className ?? "")?.[1] || "text";
+            return <CodeFence language={language} text={raw} />;
+          },
+          code({ className, children, ...props }) {
+            return (
+              <code className={className} {...props}>
+                {children}
+              </code>
+            );
           },
         }}
       >
