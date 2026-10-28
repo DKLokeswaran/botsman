@@ -919,10 +919,19 @@ class Phase0Model(app: Application) : AndroidViewModel(app) {
 
     fun applyUpdate(activity: Activity) {
         val artifact = pendingRelease?.android ?: return
+        if (!UpdateDownload.tryBeginDownload()) {
+            return
+        }
         viewModelScope.launch {
-            _state.update { it.copy(updatePhase = "working", updateDetail = "Downloading the update") }
+            _state.update { it.copy(updatePhase = "working", updateDetail = UpdateDownload.formatProgress(0, artifact.size.takeIf { it > 0 })) }
             try {
-                val file = withContext(Dispatchers.IO) { downloadVerified(artifact) }
+                val file = withContext(Dispatchers.IO) {
+                    downloadVerified(artifact) { received, total ->
+                        _state.update { current ->
+                            current.copy(updateDetail = UpdateDownload.formatProgress(received, total))
+                        }
+                    }
+                }
                 val blocked = withContext(Dispatchers.Main) { installDownloadedApk(activity, file) }
                 _state.update {
                     it.copy(
@@ -932,12 +941,14 @@ class Phase0Model(app: Application) : AndroidViewModel(app) {
                 }
             } catch (error: Exception) {
                 val message = error.message?.takeIf { it.isNotBlank() } ?: error.javaClass.simpleName
-                _state.update { it.copy(updatePhase = "available", updateDetail = message) }
+                _state.update { it.copy(updatePhase = "error", updateDetail = message) }
+            } finally {
+                UpdateDownload.endDownload()
             }
         }
     }
 
-    private fun downloadVerified(file: ReleaseFile): File {
+    private fun downloadVerified(file: ReleaseFile, onProgress: (Long, Long?) -> Unit): File {
         val client = http.newBuilder().readTimeout(120, TimeUnit.SECONDS).build()
         val response = client.newCall(Request.Builder().url(file.url).build()).execute()
         response.use { resp ->
@@ -946,31 +957,48 @@ class Phase0Model(app: Application) : AndroidViewModel(app) {
                 throw IllegalStateException("Download failed (${resp.code}) from ${file.url}. $text")
             }
             val body = resp.body ?: throw IllegalStateException("Download failed from ${file.url}. The body was empty.")
+            val build = pendingRelease?.build ?: 0
             val dir = File(getApplication<Application>().cacheDir, "updates").apply { mkdirs() }
-            val out = File(dir, "hermes-bots-update.apk")
+            val stem = UpdateDownload.apkStem(build)
+            val part = File(dir, "$stem.part")
+            val out = File(dir, "$stem.apk")
+            UpdateDownload.pruneLeftovers(dir, part)
+            if (part.exists()) {
+                part.delete()
+            }
             val digest = MessageDigest.getInstance("SHA-256")
             var total = 0L
+            val expectedTotal = file.size.takeIf { it > 0 }
+            onProgress(0, expectedTotal)
             body.byteStream().use { input ->
-                out.outputStream().use { output ->
+                part.outputStream().use { output ->
                     val buffer = ByteArray(8192)
                     while (true) {
                         val read = input.read(buffer)
                         if (read < 0) break
                         total += read
                         if (file.size > 0 && total > file.size) {
+                            part.delete()
                             throw IllegalStateException("Download from ${file.url} is larger than ${file.size} bytes.")
                         }
                         digest.update(buffer, 0, read)
                         output.write(buffer, 0, read)
+                        onProgress(total, expectedTotal)
                     }
                 }
             }
             if (file.size > 0 && total != file.size) {
+                part.delete()
                 throw IllegalStateException("Download size mismatch from ${file.url}. Expected ${file.size} bytes, got $total.")
             }
             val actual = digest.digest().joinToString("") { "%02x".format(it) }
             if (!actual.equals(file.sha256.trim(), ignoreCase = true)) {
+                part.delete()
                 throw IllegalStateException("SHA-256 mismatch for ${file.url}. Expected ${file.sha256}, got $actual.")
+            }
+            if (!part.renameTo(out)) {
+                part.copyTo(out, overwrite = true)
+                part.delete()
             }
             return out
         }

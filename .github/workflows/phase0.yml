@@ -99,6 +99,9 @@ jobs:
       - name: Frontend dependencies
         working-directory: apps/windows
         run: npm ci
+      - name: Rust update regression tests
+        working-directory: apps/windows/src-tauri
+        run: cargo test
       - name: Stamp installer version
         run: node scripts/stamp_version.mjs
       - name: NSIS installer

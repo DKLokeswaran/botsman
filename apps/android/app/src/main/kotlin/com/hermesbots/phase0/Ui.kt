@@ -630,10 +630,12 @@ private fun AboutBlock(
     }
     FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
         when (state.updatePhase) {
-            "available", "working" -> Slab("Update", onApplyUpdate)
+            "available" -> Slab("Update", onApplyUpdate)
+            "working" -> Slab("Downloading…", onApplyUpdate, enabled = false)
             "current" -> Slab("Up to date") {}
+            "error" -> Slab("Retry", onApplyUpdate)
         }
-        Slab("Check for updates", onCheckUpdate)
+        Slab("Check for updates", onCheckUpdate, enabled = state.updatePhase != "working")
     }
     if (state.updatePhase == "available" && state.updateDetail.isNotEmpty()) {
         Text(state.updateDetail, color = MaterialTheme.colorScheme.error)
@@ -641,9 +643,10 @@ private fun AboutBlock(
 }
 
 @Composable
-private fun Slab(label: String, onClick: () -> Unit) {
+private fun Slab(label: String, onClick: () -> Unit, enabled: Boolean = true) {
     Button(
         onClick = onClick,
+        enabled = enabled,
         shape = MaterialTheme.shapes.extraSmall,
         colors = ButtonDefaults.buttonColors(
             containerColor = MaterialTheme.colorScheme.tertiary,

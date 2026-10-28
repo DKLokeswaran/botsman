@@ -1,12 +1,15 @@
 mod update;
 
+use std::path::PathBuf;
 use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::Mutex;
 
 use tauri::menu::{Menu, MenuItem};
 use tauri::tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent};
 use tauri::{AppHandle, Emitter, Manager, WindowEvent};
 
 static QUITTING: AtomicBool = AtomicBool::new(false);
+static UPDATE_DOWNLOAD: Mutex<bool> = Mutex::new(false);
 const SERVICE: &str = "hermes-bots";
 const ACCOUNT: &str = "login";
 
@@ -133,22 +136,52 @@ fn vault_clear_secret() -> Result<(), String> {
     }
 }
 
+fn emit_update_progress(app: &AppHandle, received: u64, total: Option<u64>) {
+    let _ = app.emit(
+        "update-download-progress",
+        serde_json::json!({ "received": received, "total": total }),
+    );
+}
+
 #[tauri::command]
-fn apply_update(app: tauri::AppHandle, url: String, sha256: String, size: u64) -> Result<(), String> {
-    let bytes = update::download(&url)?;
-    if size > 0 && bytes.len() as u64 != size {
-        return Err(format!(
-            "Download size mismatch from {url}. Expected {size} bytes, got {}.",
-            bytes.len()
-        ));
+fn apply_update(
+    app: tauri::AppHandle,
+    url: String,
+    sha256: String,
+    size: u64,
+    build: u64,
+) -> Result<(), String> {
+    {
+        let mut busy = UPDATE_DOWNLOAD
+            .lock()
+            .map_err(|_| "An update download is already in progress.".to_string())?;
+        if *busy {
+            return Err("An update download is already in progress.".into());
+        }
+        *busy = true;
     }
-    let actual = update::sha256_hex(&bytes);
-    if !actual.eq_ignore_ascii_case(sha256.trim()) {
-        return Err(format!("SHA-256 mismatch for {url}. Expected {sha256}, got {actual}."));
+    let result = apply_update_inner(&app, url, sha256, size, build);
+    if let Ok(mut busy) = UPDATE_DOWNLOAD.lock() {
+        *busy = false;
     }
-    let mut path = std::env::temp_dir();
-    path.push("hermes-bots-setup.exe");
-    std::fs::write(&path, &bytes).map_err(|error| format!("Could not write the installer to {}: {error}", path.display()))?;
+    result
+}
+
+fn apply_update_inner(
+    app: &AppHandle,
+    url: String,
+    sha256: String,
+    size: u64,
+    build: u64,
+) -> Result<(), String> {
+    let app_for_progress = app.clone();
+    let path: PathBuf = update::download_verified_installer(
+        &url,
+        build,
+        &sha256,
+        size,
+        move |received, total| emit_update_progress(&app_for_progress, received, total),
+    )?;
     #[cfg(windows)]
     {
         use std::os::windows::process::CommandExt;
