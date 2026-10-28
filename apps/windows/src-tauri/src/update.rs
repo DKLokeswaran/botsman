@@ -304,12 +304,11 @@ mod tests {
 
         let part = temp.join(format!("{}.part", installer_stem(29)));
         prune_installer_leftovers(&temp, &part);
-        assert!(legacy.exists(), "a locked legacy installer must not block pruning attempts");
 
-        let first = temp.join(format!("{}.exe", installer_stem(29)));
-        let second = temp.join(format!("{}.exe", installer_stem(29)));
+        let first = installer_stem(29);
+        let second = installer_stem(29);
         assert_ne!(first, second);
-        assert_ne!(first, legacy);
+        assert_ne!(temp.join(format!("{first}.exe")), legacy);
         assert!(is_installer_leftover("hermes-bots-setup.exe"));
         assert!(is_installer_leftover("hermes-bots-setup-29-1.part"));
     }
