@@ -1,4 +1,4 @@
-use std::fs::{self, File, OpenOptions};
+use std::fs::{self, OpenOptions};
 use std::io::{Read, Write};
 use std::net::TcpStream;
 use std::path::{Path, PathBuf};
@@ -156,8 +156,8 @@ fn fetch_to_file(
         }
     }
 
-    let header = String::from_utf8_lossy(&header_buf);
-    let mut lines = header.split("\r\n");
+    let header_text = String::from_utf8_lossy(&header_buf);
+    let mut lines = header_text.split("\r\n");
     let status_line = lines.next().unwrap_or("");
     let status = status_line
         .split_whitespace()
@@ -178,7 +178,7 @@ fn fetch_to_file(
         return Ok(FetchOutcome::Redirect(location));
     }
     if status != 200 {
-        let snippet: String = header.chars().take(180).collect();
+        let snippet: String = header_text.chars().take(180).collect();
         return Err(format!("Download failed (HTTP {status}) from {url}. {snippet}"));
     }
 
@@ -316,7 +316,7 @@ mod tests {
     #[test]
     fn test_bug_update_single_flight_and_progress() {
         let gate = Arc::new(Mutex::new(false));
-        let mut begin = || {
+        let begin = || {
             let mut busy = gate.lock().expect("lock");
             if *busy {
                 return false;
@@ -334,7 +334,7 @@ mod tests {
     fn test_update_progress_callback_runs() {
         let seen = Arc::new(Mutex::new(Vec::<(u64, Option<u64>)>::new()));
         let seen_capture = Arc::clone(&seen);
-        let mut progress = move |received: u64, total: Option<u64>| {
+        let progress = move |received: u64, total: Option<u64>| {
             seen_capture
                 .lock()
                 .expect("lock")
