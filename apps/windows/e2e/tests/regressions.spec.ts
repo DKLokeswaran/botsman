@@ -346,4 +346,39 @@ test.describe("windows ui regressions", () => {
       await second.context.close();
     }
   });
+
+  test("test_bug_open_chat_survives_session_update", async ({ page }) => {
+    await login(page);
+    await openSession(page);
+    const mount = page.locator("[data-chat-mount]");
+    await expect(mount).toHaveCount(1);
+    const session = await mount.getAttribute("data-chat-session");
+    const token = await mount.getAttribute("data-chat-mount");
+    expect(session).toBeTruthy();
+    expect(token).toBeTruthy();
+    await sendMessage(page, "stay on this chat");
+    await expect(page.getByText("Hello from Hermes", { exact: true })).toBeVisible();
+    await expect(page.getByText("stay on this chat", { exact: true })).toBeVisible();
+    await expect.poll(async () => {
+      const node = page.locator("[data-chat-mount]");
+      const count = await node.count();
+      const current = count === 1 ? await node.getAttribute("data-chat-mount") : "";
+      const sessionNow = count === 1 ? await node.getAttribute("data-chat-session") : "";
+      const status = await page.locator("header p").first().innerText();
+      return { count, current, sessionNow, gone: /no longer available/i.test(status) };
+    }).toEqual({ count: 1, current: token, sessionNow: session, gone: false });
+  });
+
+  test("test_bug_notification_click_opens_approval_chat", async ({ page }) => {
+    await openApp(page);
+    await page.evaluate(() => window.__hermesE2e?.setHidden(true));
+    await login(page);
+    await expect.poll(async () => page.evaluate(() => window.__hermesE2e?.lastNotificationRoute() ?? "")).toContain("live-1");
+    const before = await page.evaluate(() => window.__hermesE2e?.foregrounds() ?? 0);
+    await page.evaluate(() => window.__hermesE2e?.clickNotification());
+    await expect(page.getByText("Read the repo status", { exact: true })).toBeVisible();
+    await expect(page.getByText("Needs you", { exact: true })).toBeVisible();
+    await expect(page.locator("header p").first()).not.toHaveText(/no longer available/);
+    await expect.poll(async () => page.evaluate(() => window.__hermesE2e?.foregrounds() ?? 0)).toBeGreaterThan(before);
+  });
 });

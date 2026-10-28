@@ -1,6 +1,9 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
+import { formatPush } from "@hermes-bots/gateway-client";
+import { chatLineKey } from "../src/chat-line-key.ts";
+import { routeFromNotificationAction } from "../src/notification-route.ts";
 import {
   LABEL_ANSWERED_ELSEWHERE,
   LABEL_APPROVED_ELSEWHERE,
@@ -10,6 +13,7 @@ import {
   RESOLVED_CARD_MS,
   SESSION_UNAVAILABLE_NOTICE,
   afterStaleSessionDropped,
+  chatAfterAttach,
   choiceLabel,
   expireResolved,
   mergeHistory,
@@ -18,7 +22,11 @@ import {
   onNewerMessage,
   onRequestCancel,
   onToolComplete,
+  openCallForRoute,
+  openChatAfterListUpdate,
+  reattachCall,
   rememberOpen,
+  shouldDropOpenChat,
   syncOpen,
   visibleApproval,
   type ApprovalCard,
@@ -194,4 +202,51 @@ test("test_bug_stale_session_resume_shows_list", () => {
   assert.equal(dropped.question, null);
   assert.equal(dropped.focus, null);
   assert.equal(dropped.showCommand, false);
+});
+
+test("test_bug_open_chat_survives_session_update", () => {
+  const chat = chatAfterAttach("sess-1", {
+    sessionId: "a1b2c3d4",
+    storedSessionId: "sess-1",
+    sessionKey: "sess-1",
+  });
+  assert.deepEqual(chat, { runtimeId: "a1b2c3d4", resumeId: "sess-1" });
+  assert.deepEqual(reattachCall(chat), { method: "activate", sessionId: "a1b2c3d4" });
+  assert.equal(reattachCall(chat).method === "resume" && reattachCall(chat).sessionId === "a1b2c3d4", false);
+  assert.equal(shouldDropOpenChat(chat, "a1b2c3d4", "resume"), false);
+  assert.equal(shouldDropOpenChat(chat, "a1b2c3d4", "activate"), false);
+  assert.equal(shouldDropOpenChat(chat, "sess-1", "resume"), true);
+  const kept = openChatAfterListUpdate(chat, ["sess-1", "sess-2"]);
+  assert.equal(kept, chat);
+  assert.equal(chatLineKey(kept.runtimeId, 0, "user", "row-9"), "a1b2c3d4-0-user");
+  assert.equal(chatLineKey(kept.runtimeId, 0, "user", "row-9"), chatLineKey("a1b2c3d4", 0, "user", "other-row"));
+});
+
+test("test_bug_notification_click_opens_approval_chat", () => {
+  const encoded = formatPush({
+    kind: "approval",
+    title: "Approval waiting",
+    body: "Say hello",
+    sessionId: "a1b2c3d4",
+    profile: "",
+    requestId: "req-1",
+    messageId: "",
+    seq: null,
+    action: null,
+  });
+  const parsed = routeFromNotificationAction({
+    actionId: "tap",
+    inputValue: null,
+    notification: { title: "Approval waiting", extra: { route: encoded } },
+  });
+  assert.equal(parsed?.kind, "approval");
+  assert.equal(parsed?.sessionId, "a1b2c3d4");
+  const topLevel = routeFromNotificationAction({ extra: { route: encoded } });
+  assert.equal(topLevel?.sessionId, "a1b2c3d4");
+  const opened = openCallForRoute("a1b2c3d4", ["sess-1"], null);
+  assert.deepEqual(opened, { method: "activate", sessionId: "a1b2c3d4" });
+  assert.deepEqual(openCallForRoute("sess-1", ["sess-1"], null), { method: "resume", sessionId: "sess-1" });
+  assert.deepEqual(openCallForRoute("a1b2c3d4", ["sess-1"], { runtimeId: "a1b2c3d4", resumeId: "sess-1" }), {
+    method: "focus",
+  });
 });

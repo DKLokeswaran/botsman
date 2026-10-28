@@ -250,6 +250,58 @@ fun idsLeavingOpen(previous: Map<String, PendingApproval>, next: Map<String, Pen
     return ids
 }
 
+data class OpenChat(val runtimeId: String, val resumeId: String)
+
+data class AttachCall(val method: String, val sessionId: String)
+
+/** Runtime id for events, plus the stored id that session.resume accepts. */
+fun chatAfterAttach(requestedId: String, sessionId: String, storedSessionId: String, sessionKey: String): OpenChat {
+    val runtimeId = sessionId.ifEmpty { requestedId }
+    val stored = storedSessionId.ifBlank { sessionKey }.trim()
+    var resumeId = stored
+    if (resumeId.isEmpty() && requestedId.isNotEmpty() && requestedId != runtimeId) resumeId = requestedId
+    if (resumeId.isEmpty()) resumeId = requestedId.ifEmpty { runtimeId }
+    return OpenChat(runtimeId, resumeId)
+}
+
+/** Re-attach an open chat. A distinct runtime id uses session.activate, never session.resume. */
+fun reattachCall(chat: OpenChat): AttachCall {
+    if (chat.runtimeId.isNotEmpty() && chat.resumeId.isNotEmpty() && chat.runtimeId != chat.resumeId) {
+        return AttachCall("activate", chat.runtimeId)
+    }
+    return AttachCall("resume", chat.resumeId.ifEmpty { chat.runtimeId })
+}
+
+/**
+ * A 4007 for the runtime id keeps the chat while a stored resume id remains.
+ * A 4007 for that stored id drops the chat.
+ */
+fun shouldDropOpenChat(chat: OpenChat?, failedId: String, failedMethod: String): Boolean {
+    if (chat == null) return false
+    if (failedId == chat.runtimeId && chat.resumeId.isNotEmpty() && chat.resumeId != chat.runtimeId) return false
+    if (failedMethod == "resume" && failedId == chat.resumeId) return true
+    if (failedMethod == "activate" && failedId == chat.runtimeId && (chat.resumeId.isEmpty() || chat.resumeId == chat.runtimeId)) {
+        return true
+    }
+    return failedId == chat.resumeId
+}
+
+/** Notification and push ids are often runtime ids. Those attach with session.activate. */
+fun openCallForRoute(routeSessionId: String, knownStoredIds: List<String>, current: OpenChat?): AttachCall {
+    if (routeSessionId.isEmpty()) return AttachCall("focus", "")
+    if (current != null && (routeSessionId == current.runtimeId || routeSessionId == current.resumeId)) {
+        return AttachCall("focus", "")
+    }
+    if (routeSessionId in knownStoredIds) return AttachCall("resume", routeSessionId)
+    return AttachCall("activate", routeSessionId)
+}
+
+/** A sessions list refresh does not retarget or clear the open chat. */
+fun openChatAfterListUpdate(chat: OpenChat, sessionIds: List<String>): OpenChat {
+    if (sessionIds.isEmpty()) return chat
+    return chat
+}
+
 fun syncOpen(book: Map<String, PendingApproval>, sessionId: String, openIds: Set<String>): ApprovalResult {
     val card = book[sessionId] ?: return unchanged(book)
     if (card.resolvedLabel != null) return unchanged(book)

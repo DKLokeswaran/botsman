@@ -3,6 +3,7 @@ package com.hermesbots.phase0
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
+import org.junit.Assert.assertTrue
 import org.junit.Test
 
 /**
@@ -196,5 +197,35 @@ class Phase0ModelSyncTest {
         assertNull(dropped.question)
         assertNull(dropped.focus)
         assertFalse(dropped.showCommand)
+    }
+
+    @Test
+    fun test_bug_open_chat_survives_session_update() {
+        val chat = chatAfterAttach("sess-1", "a1b2c3d4", "sess-1", "sess-1")
+        assertEquals("a1b2c3d4", chat.runtimeId)
+        assertEquals("sess-1", chat.resumeId)
+        val again = reattachCall(chat)
+        assertEquals("activate", again.method)
+        assertEquals("a1b2c3d4", again.sessionId)
+        assertFalse(again.method == "resume" && again.sessionId == "a1b2c3d4")
+        assertFalse(shouldDropOpenChat(chat, "a1b2c3d4", "resume"))
+        assertFalse(shouldDropOpenChat(chat, "a1b2c3d4", "activate"))
+        assertTrue(shouldDropOpenChat(chat, "sess-1", "resume"))
+        val kept = openChatAfterListUpdate(chat, listOf("sess-1", "sess-2"))
+        assertEquals(chat, kept)
+        assertEquals("a1b2c3d4-0-user", chatLineKey(kept.runtimeId, 0, "user", "row-9"))
+        assertEquals(chatLineKey(kept.runtimeId, 0, "user", "row-9"), chatLineKey("a1b2c3d4", 0, "user", "other-row"))
+    }
+
+    @Test
+    fun test_bug_notification_click_opens_approval_chat() {
+        val opened = openCallForRoute("a1b2c3d4", listOf("sess-1"), null)
+        assertEquals("activate", opened.method)
+        assertEquals("a1b2c3d4", opened.sessionId)
+        val stored = openCallForRoute("sess-1", listOf("sess-1"), null)
+        assertEquals("resume", stored.method)
+        assertEquals("sess-1", stored.sessionId)
+        val focused = openCallForRoute("a1b2c3d4", listOf("sess-1"), OpenChat("a1b2c3d4", "sess-1"))
+        assertEquals("focus", focused.method)
     }
 }

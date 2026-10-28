@@ -723,6 +723,8 @@ def _dispatch(wfile, req: dict) -> None:
                     {
                         "current": False,
                         "id": record["live"],
+                        # Real active_list rows: short runtime id, plus the stored session_key.
+                        "session_key": record["stored"],
                         "last_active": 1,
                         "message_count": len(messages),
                         "model": "fake-model",
@@ -792,6 +794,8 @@ def _dispatch(wfile, req: dict) -> None:
                 rid,
                 {
                     "session_id": live,
+                    "stored_session_id": record["stored"],
+                    "session_key": record["stored"],
                     "messages": messages,
                     "info": {"title": title, "model": "fake-model", "running": False},
                     "open_requests": open_requests,
@@ -834,6 +838,8 @@ def _dispatch(wfile, req: dict) -> None:
                 rid,
                 {
                     "session_id": live,
+                    "stored_session_id": record["stored"],
+                    "session_key": record["stored"],
                     "messages": messages,
                     "info": {"title": title, "model": "fake-model", "running": False},
                     "open_requests": open_requests,

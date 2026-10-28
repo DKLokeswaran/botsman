@@ -203,6 +203,13 @@ export async function newDevice(browser: Browser): Promise<{ context: BrowserCon
 
 declare global {
   interface Window {
-    __hermesE2e?: { marker: string; tapNotification: (route: string) => void };
+    __hermesE2e?: {
+      marker: string;
+      tapNotification: (route: string) => void;
+      setHidden: (hidden: boolean) => void;
+      foregrounds: () => number;
+      lastNotificationRoute: () => string;
+      clickNotification: () => void;
+    };
   }
 }

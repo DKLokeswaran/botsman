@@ -324,6 +324,30 @@ class HermesClientTest {
     }
 
     @Test
+    fun test_bug_runtime_resume_returns_4007() = withFake { port, http ->
+        val gateway = HermesClient("http://127.0.0.1:$port", http)
+        try {
+            val material = runBlocking { gateway.login("tester", "tester") }
+            runBlocking { gateway.connect(material.accessToken) }
+            val opened = runBlocking { gateway.resumeSession("sess-1") }
+            assertEquals("live-1", opened.sessionId)
+            assertEquals("sess-1", opened.storedSessionId)
+            assertEquals("sess-1", opened.sessionKey)
+            val rejected = assertThrows<HermesException> {
+                runBlocking { gateway.resumeSession("live-1") }
+            }
+            assertEquals(SESSION_UNAVAILABLE_CODE, rejected.code)
+            val activated = runBlocking { gateway.activateSession("live-1") }
+            assertEquals("live-1", activated.sessionId)
+            assertEquals("sess-1", activated.storedSessionId)
+            val sessions = runBlocking { gateway.listSessions() }
+            assertTrue(sessions.isNotEmpty())
+        } finally {
+            gateway.close()
+        }
+    }
+
+    @Test
     fun test_bug_stale_session_resume_keeps_socket() = withFake(testHooks = true) { port, http ->
         val gateway = HermesClient("http://127.0.0.1:$port", http)
         try {
