@@ -324,6 +324,18 @@ class HermesClient(
         return ResumedSession(live, messagesFrom(result.optJSONArray("messages")), openRequests)
     }
 
+    suspend fun activateSession(sessionId: String, profile: String? = null): ResumedSession {
+        val params = JSONObject()
+            .put("session_id", sessionId)
+            .put("omit_messages", false)
+            .put("inline_images", false)
+        if (!profile.isNullOrEmpty()) params.put("profile", profile)
+        val result = rpc("session.activate", params)
+        val openRequests = deliverOpenRequests(result.optJSONArray("open_requests"))
+        val live = result.optString("session_id").ifEmpty { sessionId }
+        return ResumedSession(live, messagesFrom(result.optJSONArray("messages")), openRequests)
+    }
+
     suspend fun history(sessionId: String): List<TranscriptMessage> {
         val result = rpc("session.history", JSONObject().put("session_id", sessionId))
         return messagesFrom(result.optJSONArray("messages"))

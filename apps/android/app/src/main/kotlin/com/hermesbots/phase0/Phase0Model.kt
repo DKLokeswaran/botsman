@@ -362,13 +362,21 @@ class Phase0Model(app: Application) : AndroidViewModel(app) {
         }
     }
 
-    fun openSession(sessionId: String, profile: String = "") {
+    fun openSession(sessionId: String, profile: String = "", liveAttach: Boolean = false) {
         viewModelScope.launch {
             val current = client ?: return@launch
             if (resumeBlocked(sessionId)) return@launch
             _state.update { it.copy(question = null) }
             try {
-                val opened = withContext(Dispatchers.IO) { current.resumeSession(sessionId, profile.ifBlank { null }) }
+                val storedIds = _state.value.sessions.map { it.id }.toSet()
+                val useActivate = liveAttach || sessionId !in storedIds
+                val opened = withContext(Dispatchers.IO) {
+                    if (useActivate) {
+                        current.activateSession(sessionId, profile.ifBlank { null })
+                    } else {
+                        current.resumeSession(sessionId, profile.ifBlank { null })
+                    }
+                }
                 val history = withContext(Dispatchers.IO) { current.history(opened.sessionId) }
                 val rows = history.map { row -> HistoryEntry(row.role, row.text, row.rowId) }
                 var shown = emptyList<ChatLine>()
@@ -415,7 +423,7 @@ class Phase0Model(app: Application) : AndroidViewModel(app) {
             val current = client ?: return@launch
             try {
                 val id = withContext(Dispatchers.IO) { current.createSession() }
-                withContext(Dispatchers.IO) { current.resumeSession(id) }
+                withContext(Dispatchers.IO) { current.activateSession(id) }
                 _state.update {
                     it.copy(
                         liveSessionId = id,
@@ -583,7 +591,7 @@ class Phase0Model(app: Application) : AndroidViewModel(app) {
                 syncOpenApprovals(resumed.sessionId, replay.openRequests)
                 mergeOpenHistory(next, resumed.sessionId)
                 if (replay.truncated) {
-                    openSession(resumed.sessionId)
+                    openSession(resumed.sessionId, liveAttach = true)
                 } else if (route != null && (route.sessionId.isEmpty() || route.sessionId == live)) {
                     pendingRoute = null
                     placeFocus(route, replay.openRequests, _state.value.messages)
@@ -798,7 +806,7 @@ class Phase0Model(app: Application) : AndroidViewModel(app) {
                 val live = _state.value.liveSessionId ?: return@launch
                 if (attach) {
                     try {
-                        withContext(Dispatchers.IO) { current.resumeSession(live) }
+                        withContext(Dispatchers.IO) { current.activateSession(live) }
                     } catch (error: Exception) {
                         if (isSessionAttachFailure(error)) {
                             markResumeBlocked(live)
@@ -865,7 +873,7 @@ class Phase0Model(app: Application) : AndroidViewModel(app) {
             return null
         }
         try {
-            return withContext(Dispatchers.IO) { client.resumeSession(sessionId, profile) }
+            return withContext(Dispatchers.IO) { client.activateSession(sessionId, profile) }
         } catch (error: Exception) {
             if (!isSessionAttachFailure(error)) throw error
             markResumeBlocked(sessionId)

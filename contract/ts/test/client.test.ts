@@ -237,8 +237,8 @@ test("two clients share one approval", async () => {
     const left = await firstCard;
     const right = await secondCard;
     assert.equal(left.id, right.id);
-    await first.resumeSession(String(left.params.session_id));
-    await second.resumeSession(String(right.params.session_id));
+    await first.activateSession(String(left.params.session_id));
+    await second.activateSession(String(right.params.session_id));
     await first.answerApproval(String(left.params.session_id), String(left.params.request_id), "once");
     const gone = await cancel;
     assert.equal(gone.payload.id, left.id);
@@ -270,7 +270,7 @@ test("test_bug_message_from_socket_a_appears_for_socket_b", async () => {
     await second.resumeSession("sess-1");
     const created = await third.createSession();
     assert.notEqual(created, "live-1");
-    await third.resumeSession(created);
+    await third.activateSession(created);
     const seen: string[] = [];
     third.onEvent = (event) => {
       seen.push(event.type);
@@ -502,7 +502,7 @@ test("test_bug_stale_session_resume_keeps_socket", async () => {
     });
     assert.ok((await gateway.listSessions()).length >= 1);
     const created = await gateway.createSession();
-    const opened = await gateway.resumeSession(created);
+    const opened = await gateway.activateSession(created);
     assert.ok(opened.sessionId.length > 0);
   } finally {
     fake.stop();

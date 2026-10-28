@@ -16,10 +16,12 @@ Shapes follow the pinned contract and the v0.22.5 handlers:
 
 ``HERMES_FAKE_TEST_HOOKS=1`` exposes loopback controls for the Windows browser
 suite (reset, a scripted reply, an extra session, and a state readout). With the
-same flag, ``/__test__/resume_reject`` makes ``session.resume`` fail for one id,
+same flag, ``/__test__/resume_reject`` makes ``session.resume`` or ``session.activate`` fail for one id,
 and ``/__test__/login_429`` makes password login return HTTP 429 with
-``Retry-After``. It also repeats ``Set-Cookie`` in ``X-E2E-Set-Cookie`` and
-answers CORS preflight.
+``Retry-After``. ``/__test__/ensure_approval`` seeds an open approval without
+pushing it. ``/__test__/approval_request`` adds another approval and fans it out
+to attached clients that declared ``server_requests``. It also repeats
+``Set-Cookie`` in ``X-E2E-Set-Cookie`` and answers CORS preflight.
 Leave the variable unset and those paths 404; login and JSON-RPC stay as below.
 """
 
@@ -43,6 +45,7 @@ FAKE_PASSWORD = "tester"
 EPOCH = "epoch-phase0"
 SESSION_STORED = "sess-1"
 SESSION_LIVE = "live-1"
+SESSION_NOT_FOUND = 4007
 
 
 class State:
@@ -59,6 +62,7 @@ class State:
         self.answers: list[dict] = []
         self.sockets: list = []
         self.attached: dict = {}
+        self.server_request_sockets: set = set()
         self.next_row = 2
         self.next_session = 2
         self.scripted_reply: str | None = None
@@ -81,6 +85,7 @@ class State:
             self.answers.clear()
             self.sockets.clear()
             self.attached.clear()
+            self.server_request_sockets.clear()
             self.next_row = 2
             self.next_session = 2
             self.scripted_reply = None
@@ -339,6 +344,7 @@ def _append_message(session_id: str, role: str, text: str) -> None:
 def _detach(wfile) -> None:
     with STATE.lock:
         STATE.attached.pop(wfile, None)
+        STATE.server_request_sockets.discard(wfile)
         try:
             STATE.sockets.remove(wfile)
         except ValueError:
@@ -367,6 +373,82 @@ def _ensure_approval() -> None:
             "params": _approval_params(),
         }
         STATE.open_requests[frame["id"]] = frame
+
+
+def _fanout_server_requests(session_id: str) -> None:
+    with STATE.lock:
+        frames = [dict(item) for item in STATE.open_requests.values()]
+        targets = [
+            sock
+            for sock, sessions in STATE.attached.items()
+            if session_id in sessions and sock in STATE.server_request_sockets
+        ]
+    for sock in targets:
+        for approval in frames:
+            params = approval.get("params") if isinstance(approval.get("params"), dict) else {}
+            sid = str(params.get("session_id") or session_id)
+            if sid not in (session_id, SESSION_LIVE, SESSION_STORED):
+                continue
+            _send_json(
+                sock,
+                {
+                    "jsonrpc": "2.0",
+                    "id": approval["id"],
+                    "method": approval["method"],
+                    "params": params,
+                },
+            )
+
+
+def _inject_approval(*, request_id: str, description: str) -> None:
+    rpc_id = f"srq-{request_id}"
+    frame = {
+        "id": rpc_id,
+        "method": "approval",
+        "params": {
+            "session_id": SESSION_LIVE,
+            "request_id": request_id,
+            "command": "echo test",
+            "description": description,
+            "choices": ["once", "deny"],
+            "tool_name": "terminal",
+        },
+    }
+    with STATE.lock:
+        STATE.open_requests[rpc_id] = frame
+    _fanout_server_requests(SESSION_LIVE)
+
+
+def _attach_snapshot(record: dict) -> tuple[list[dict], dict | None]:
+    with STATE.lock:
+        live = record["live"]
+        open_requests = [
+            {
+                "id": item["id"],
+                "method": item["method"],
+                "params": dict(item["params"]),
+            }
+            for item in STATE.open_requests.values()
+            if str(item["params"].get("session_id") or live) in (live, record["stored"])
+        ]
+        pending_approval = None
+        for item in STATE.open_requests.values():
+            if item["method"] != "approval":
+                continue
+            sid = str(item["params"].get("session_id") or live)
+            if sid in (live, record["stored"]):
+                pending_approval = dict(item["params"])
+                break
+    return open_requests, pending_approval
+
+
+def _attach_reject(requested: str) -> tuple[int, str] | None:
+    with STATE.lock:
+        reject = STATE.resume_reject.get(requested)
+        if reject is None:
+            record = STATE.lookup(requested or None)
+            reject = STATE.resume_reject.get(record["live"]) or STATE.resume_reject.get(record["stored"])
+    return reject
 
 
 def _push_open_requests(wfile) -> None:
@@ -575,6 +657,16 @@ def _handle_test_hook(handler: "Handler", path: str, incoming: dict) -> None:
             STATE.resume_reject[session_id] = (code, message)
         handler._json_response(200, {"ok": True})
         return
+    if path == "/__test__/ensure_approval":
+        _ensure_approval()
+        handler._json_response(200, {"ok": True})
+        return
+    if path == "/__test__/approval_request":
+        request_id = str(incoming.get("request_id") or "req-extra")
+        description = str(incoming.get("description") or "Extra approval")
+        _inject_approval(request_id=request_id, description=description)
+        handler._json_response(200, {"ok": True})
+        return
     if path == "/__test__/login_429":
         try:
             count = int(incoming.get("count", 1))
@@ -605,13 +697,15 @@ def _dispatch(wfile, req: dict) -> None:
         _send_json(wfile, _ok(rid, {"pong": True}))
         return
     if method == "client.capabilities":
+        if params.get("server_requests"):
+            with STATE.lock:
+                STATE.server_request_sockets.add(wfile)
+            _ensure_approval()
+            _push_open_requests(wfile)
         _send_json(
             wfile,
             _ok(rid, {"server_requests": ["approval", "clarify"], "declines_not_shown": True}),
         )
-        if params.get("server_requests"):
-            _ensure_approval()
-            _push_open_requests(wfile)
         return
     if method == "profiles.list":
         _send_json(wfile, _ok(rid, PROFILES))
@@ -669,13 +763,12 @@ def _dispatch(wfile, req: dict) -> None:
         _cancel_session_approvals(str(params.get("session_id") or SESSION_LIVE))
         _send_json(wfile, _ok(rid, {"interrupted": True}))
         return
-    if method in ("session.resume", "session.activate"):
+    if method == "session.resume":
         requested = str(params.get("session_id") or "")
-        with STATE.lock:
-            reject = STATE.resume_reject.get(requested)
-            if reject is None:
-                record = STATE.lookup(requested or None)
-                reject = STATE.resume_reject.get(record["live"]) or STATE.resume_reject.get(record["stored"])
+        if requested in STATE.sessions:
+            _send_json(wfile, _err(rid, SESSION_NOT_FOUND, "session not found"))
+            return
+        reject = _attach_reject(requested)
         if reject is not None:
             code, message = reject
             _send_json(wfile, _err(rid, code, message))
@@ -685,17 +778,12 @@ def _dispatch(wfile, req: dict) -> None:
             live = record["live"]
             messages = [dict(item) for item in record["messages"]]
             title = record["title"]
-            open_requests = [
-                dict(item)
-                for item in STATE.open_requests.values()
-                if str(item["params"].get("session_id") or live) in (live, record["stored"])
-            ]
-            # The notifier resumes with omit_messages and does not render a transcript.
-            # The first such attach, like the first session.activate, still delivers one
-            # finished reply so a watcher can see a session event. App resumes do not.
-            watching = method == "session.activate" or bool(params.get("omit_messages"))
-            first_activate = watching and not STATE.activated
-            if watching:
+        open_requests, pending_approval = _attach_snapshot(record)
+        watching = bool(params.get("omit_messages"))
+        first_watcher = False
+        if watching:
+            with STATE.lock:
+                first_watcher = not STATE.activated
                 STATE.activated = True
         _attach(wfile, live)
         _send_json(
@@ -707,10 +795,53 @@ def _dispatch(wfile, req: dict) -> None:
                     "messages": messages,
                     "info": {"title": title, "model": "fake-model", "running": False},
                     "open_requests": open_requests,
+                    "pending_approval": pending_approval,
                 },
             ),
         )
-        if first_activate:
+        if first_watcher:
+            params_done = STATE.stamp(
+                "message.complete",
+                {"text": "Finished while you were away", "status": "complete"},
+                live,
+            )
+            _broadcast(params_done, live)
+        return
+    if method == "session.activate":
+        requested = str(params.get("session_id") or "")
+        reject = _attach_reject(requested)
+        if reject is not None:
+            code, message = reject
+            _send_json(wfile, _err(rid, code, message))
+            return
+        with STATE.lock:
+            record = STATE.lookup(requested or None)
+            live = record["live"]
+            messages = [dict(item) for item in record["messages"]]
+            title = record["title"]
+        open_requests, pending_approval = _attach_snapshot(record)
+        watching = bool(params.get("omit_messages"))
+        first_watcher = False
+        if watching:
+            with STATE.lock:
+                first_watcher = not STATE.activated
+                STATE.activated = True
+        _attach(wfile, live)
+        _fanout_server_requests(live)
+        _send_json(
+            wfile,
+            _ok(
+                rid,
+                {
+                    "session_id": live,
+                    "messages": messages,
+                    "info": {"title": title, "model": "fake-model", "running": False},
+                    "open_requests": open_requests,
+                    "pending_approval": pending_approval,
+                },
+            ),
+        )
+        if first_watcher:
             params_done = STATE.stamp(
                 "message.complete",
                 {"text": "Finished while you were away", "status": "complete"},

@@ -101,7 +101,12 @@ def run_notifier(env_path: Path, *, once_events: int = 2) -> subprocess.Popen:
     )
 
 
-def collect_notifier_output(proc: subprocess.Popen, deadline: float) -> tuple[list[str], list[str], list[dict]]:
+def collect_notifier_output(
+    proc: subprocess.Popen,
+    deadline: float,
+    *,
+    min_notes: int = 2,
+) -> tuple[list[str], list[str], list[dict]]:
     assert proc.stdout is not None
     assert proc.stderr is not None
     stdout_lines: list[str] = []
@@ -115,7 +120,7 @@ def collect_notifier_output(proc: subprocess.Popen, deadline: float) -> tuple[li
     threading.Thread(target=_collect, args=(proc.stderr, stderr_lines), daemon=True).start()
     notes: list[dict] = []
     seen = 0
-    while time.time() < deadline and len(notes) < 2:
+    while time.time() < deadline and len(notes) < min_notes:
         while seen < len(stdout_lines):
             line = stdout_lines[seen]
             seen += 1
@@ -170,10 +175,10 @@ def test_bug_notifier_resume_error_does_not_block_other_sessions() -> str | None
             kinds = {item["kind"] for item in notes}
             if kinds != {"approval", "reply"}:
                 return f"expected approval and reply, got {kinds} notes={notes} stderr={''.join(stderr_lines)}"
-            if not any("session.resume skipped" in line and "live-2" in line for line in stderr_lines):
-                return "missing resume failure log for bad session"
+            if not any("session.activate skipped" in line and "live-2" in line for line in stderr_lines):
+                return "missing activate failure log for bad session"
             if not any("code=-32042" in line and "stored session unavailable" in line for line in stderr_lines):
-                return "resume failure log missing JSON-RPC details"
+                return "activate failure log missing JSON-RPC details"
             return None
         finally:
             proc.kill()
@@ -216,6 +221,44 @@ def test_bug_notifier_login_429_backoff() -> str | None:
             pass
 
 
+def test_bug_notifier_activate_attach_and_pending_approval() -> str | None:
+    fake, port = start_fake(test_hooks=True)
+    base = f"http://127.0.0.1:{port}"
+    env_dir = Path(tempfile.mkdtemp(prefix="hermes-notify-activate-"))
+    try:
+        post_json(f"{base}/__test__/reset", {})
+        post_json(f"{base}/__test__/ensure_approval", {})
+        env_path = write_env(port, env_dir)
+        proc = run_notifier(env_path, once_events=3)
+
+        def inject_second() -> None:
+            time.sleep(2)
+            post_json(
+                f"{base}/__test__/approval_request",
+                {"request_id": "req-2", "description": "Second approval"},
+            )
+
+        threading.Thread(target=inject_second, daemon=True).start()
+        try:
+            _stdout, _stderr, notes = collect_notifier_output(proc, time.time() + 30, min_notes=3)
+            req1 = [item for item in notes if item.get("request_id") == "req-1"]
+            req2 = [item for item in notes if item.get("request_id") == "req-2"]
+            if len(req1) != 1:
+                return f"expected one req-1 notification, got {req1}"
+            if len(req2) != 1:
+                return f"expected one req-2 notification from fan-out, got {req2} all={notes}"
+            return None
+        finally:
+            if proc.poll() is None:
+                proc.kill()
+    finally:
+        fake.kill()
+        try:
+            os.remove(env_path)
+        except OSError:
+            pass
+
+
 def check_payload_shape() -> str | None:
     huge = build_notify(
         kind="reply",
@@ -244,6 +287,10 @@ def main() -> int:
             test_bug_notifier_resume_error_does_not_block_other_sessions,
         ),
         ("test_bug_notifier_login_429_backoff", test_bug_notifier_login_429_backoff),
+        (
+            "test_bug_notifier_activate_attach_and_pending_approval",
+            test_bug_notifier_activate_attach_and_pending_approval,
+        ),
     ):
         failure = check()
         if failure:
