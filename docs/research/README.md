@@ -10,4 +10,4 @@ The original investigation done before building Hermes Bots, plus findings from 
 - [FLUTTER-WINDOWS-SENTIMENT.md](FLUTTER-WINDOWS-SENTIMENT.md): developer sentiment on Flutter for Windows.
 - [FLUTTER-FUTURE-FEATURES.md](FLUTTER-FUTURE-FEATURES.md): how Flutter handles the features planned after v1.
 - [planning-answers.md](planning-answers.md): answers to the planning questionnaire.
-- [themes/](themes/): the two candidate theme designs, Honest Terminal and Zoetrik (saved gallery pages, DESIGN.md, theme.css, preview.png).
+- [themes/](themes/): the Zoetrik theme design (saved gallery page, DESIGN.md, theme.css, preview.png).
