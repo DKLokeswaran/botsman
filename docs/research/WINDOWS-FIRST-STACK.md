@@ -60,4 +60,3 @@ Every feature gets built twice, and the apps drift apart. Ways to keep them in s
 - UnifiedPush connector releases: https://codeberg.org/UnifiedPush/android-connector/releases
 - Compose edge-to-edge/IME: https://developer.android.com/develop/ui/compose/system/setup-e2e
 - Markdown renderer: https://github.com/mikepenz/multiplatform-markdown-renderer/releases ; Markwon unmaintained: https://github.com/noties/Markwon/issues/460
-- Earlier reports: FLUTTER-WINDOWS-SENTIMENT.md, TAURI-ANDROID-SENTIMENT.md
