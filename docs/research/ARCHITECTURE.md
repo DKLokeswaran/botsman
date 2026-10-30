@@ -6,7 +6,7 @@ Hermes Bots is a Windows and Android client for a self-hosted Hermes Agent, plus
 
 | Part | Stack |
 |---|---|
-| Windows app | Tauri, with the UI in HTML, CSS and JavaScript |
+| Windows app | Tauri, with the UI in React and TypeScript (Vite, Tailwind CSS, shadcn/ui) |
 | Android app | Kotlin with Jetpack Compose |
 | Companion plugin | Python, as a Hermes plugin |
 
