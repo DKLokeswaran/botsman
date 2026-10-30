@@ -9,14 +9,17 @@ Hermes Bots is a Windows and Android client for a self-hosted Hermes Agent, plus
               │  HTTPS/WS over      ┌──────────────────────────────────────────┐
  Android app ─┼─ Tailscale ───────► │ hermes dashboard  :9119                  │
  (foreground  │                     │   /api/ws (JSON-RPC), REST               │
-  service)    │                     │   hermes-bots plugin                     │
-              │                     │     /api/plugins/hermes-bots/…           │
-              │                     │       bridge, alert stream               │
-              │                     │          │ gateway.sock + loopback /api/ws│
-              │                     │          ▼                               │
+  service)    │                     │   runs every chat turn                   │
+              │                     │   hermes-bots plugin                     │
+              │                     │     push hooks, alert stream route       │
+              │                     │                                          │
               │                     │ hermes gateway                           │
-              │                     │   Bot Chat sessions, cron, Discord       │
-              │                     │   hermes-bots plugin (push hooks)        │
+              │                     │   cron (routine runs)                    │
+              │                     │   hermes-bots plugin                     │
+              │                     │     hbapp delivery platform, push hooks  │
+              │                     │          │ routine output                │
+              │                     │          ▼                               │
+              │                     │ state.db (chats, shared by both)         │
               │                     └──────────────┬───────────────────────────┘
               │                                    │ HTTPS POST (optional)
               │   optional push        ┌───────────▼──────┐
@@ -25,9 +28,9 @@ Hermes Bots is a Windows and Android client for a self-hosted Hermes Agent, plus
 ```
 
 - **Clients.** Native networking only (B10). They talk to the dashboard on port 9119 and never to the gateway directly.
-- **Dashboard (`hermes dashboard`).** Login, REST, and the JSON-RPC socket `/api/ws`. It runs side chats and every other non-Bot-Chat session.
-- **Gateway (`hermes gateway`).** Owns each profile's Bot Chat, runs cron, and delivers routine output into Bot Chat.
-- **`hermes-bots` plugin.** Installed in the Hermes home and enabled in `plugins.enabled`. It loads in both processes and has two jobs: the Bot Chat bridge (dashboard side) and push alerts (both sides).
+- **Dashboard (`hermes dashboard`).** Login, REST, and the JSON-RPC socket `/api/ws`. Every chat, and every turn in it, runs here.
+- **Gateway (`hermes gateway`).** Runs cron. Routine output leaves the gateway through the plugin's delivery platform.
+- **`hermes-bots` plugin.** Installed in the Hermes home and enabled in `plugins.enabled`. It loads in both processes. In the gateway it registers the `hbapp` delivery platform that writes routine output into chats. In both processes it runs the push hooks, and in the dashboard it serves the alert stream.
 - **ntfy.sh (optional).** Alternative Android push transport, received through the ntfy app. The default needs no push service (see Push).
 
 ## Bots and chats
@@ -35,56 +38,46 @@ Hermes Bots is a Windows and Android client for a self-hosted Hermes Agent, plus
 | Concept | Hermes object | Notes |
 |---|---|---|
 | Bot | Profile | `profiles.list` is the roster. One machine-level dashboard serves every profile |
-| Main chat | The profile's Bot Chat | The `canonical_session` in `profiles.list`, owned by the gateway |
-| Side chat | Ordinary session | `session.create` on the dashboard, owned by the dashboard |
+| Main chat | Ordinary dashboard session | Created with `session.create`. Its stored id is kept in the profile's `ui_meta` |
+| Side chat | Ordinary dashboard session | Created with `session.create` |
 | Bot metadata the app adds | `ui_meta` on the profile | Free-form JSON with per-key compare-and-swap (`profiles.configure` with `ui_meta_expected_revisions`) |
+
+The profile's Bot Chat is not used. Its routine delivery always starts an agent turn (B15).
 
 ## Routines
 
-- A routine is a cron job with `deliver: "bot-chat"` (own profile) or `"bot-chat:<profile>"`, combinable with other targets.
-- Create, edit, pause, resume, run now, run history and delete use the dashboard REST routes under `/api/cron/jobs`.
-- The routine's output enters Bot Chat as a turn with the prefix `[Cronjob "<name>" output ...]`. The bot then runs a full turn on it, which costs one agent turn per run.
-- The routine run itself can never ask for approval (cron mode deny). The Bot Chat follow-up turn can, and those approvals reach the app through the bridge.
-- The bot acts on whatever the routine outputs. Routine prompts should say plainly what the bot is expected to do with the result.
+A routine is a cron job that posts its output into an existing chat without starting a turn.
 
-## Main chat through the bridge
+- Create it with one `POST /api/cron/jobs` and `deliver: "hbapp:session-<stored session id>"`. It can be combined with other delivery targets. Edit, pause, resume, run now, run history and delete use the other routes under `/api/cron/jobs`.
+- Each run is a separate cron session with its own small context. The run can never ask for approval (B4).
+- The gateway hands the output to the plugin's `hbapp` adapter. The adapter:
+  1. removes the Hermes header (`Cronjob Response: <name>`, the job id and the separator line) and the "To stop…" footer;
+  2. waits until no reply is running in the target chat (B16);
+  3. appends the text to the chat as a user-role message prefixed `[Routine: <name>]`, using `gateway.mirror.mirror_to_session(..., role="user", session_id=<stored id>)`;
+  4. raises the routine alert (see Push).
+- No turn starts. The next reply in that chat sees every routine output that fits in its context, together with the user's own messages.
+- Several related routines can post into the same chat. From that chat the user can ask the bot to change a routine, and the bot edits it with its cron tool.
+- Anything risky happens when the user replies, in an ordinary dashboard turn with normal approvals.
+- The app shows messages with the `[Routine: …]` prefix as routine output.
 
-The plugin's dashboard routes hold one gateway connection per attached Bot Chat:
+The plugin registers the platform with `ctx.register_platform(name="hbapp", ..., cron_deliver_env_var=...)`. Without `cron_deliver_env_var`, cron refuses `hbapp` as an unknown delivery target.
 
-1. Connect with `hermes_cli.gateway_client.connect_gateway()`. The plugin runs as the same OS user as the gateway, which is what the gateway's control socket requires.
-2. Send `client.capabilities {server_requests: true}`.
-3. `session.resume` with the Bot Chat's stored id.
-4. Relay every gateway frame to the app, and relay the app's calls and answers back.
+## Chats on the dashboard
 
-Protocol on the gateway side:
-
-| Action | How |
-|---|---|
-| Send a message | `prompt.submit {session_id, text, submission_id, clarify_batch: true}`. The result is an admission; the turn runs in FIFO order |
-| Approval request | Event `approval.request {prompt_id, execution_generation, command, description, choices}` |
-| Answer an approval | `approval.respond {session_id, prompt_id, execution_generation, choice}` |
-| Approval finished | Event `approval.settled` |
-| Clarifying question | Server request `clarify {questions: [{qid, question, choices}]}` (with `clarify_batch: true`) |
-| Answer a question | JSON-RPC result `{answers: {qid: value}, outcome: "submitted"}` |
-| Cancel a queued message | `prompt.cancel {session_id, admission_id}` |
-
-The plugin routes sit behind the dashboard login (an unauthenticated request gets 401). The production bridge transport is open. The test used HTTP long-polling, and whether WebSocket routes in a plugin are behind the login has not been checked.
-
-## Side chats on the dashboard
-
-Side chats use the dashboard socket directly, the way Hermes Desktop does:
+Every chat uses the dashboard socket directly, the way Hermes Desktop does:
 
 - Connect with a ticket from `POST /api/auth/ws-ticket` (single use, 30 s).
 - After `gateway.ready`, send `client.capabilities {server_requests: true}` and heartbeat with `gateway.ping`.
+- Send messages with `prompt.submit`. Streaming text, reasoning and tool events arrive as events.
 - Approvals and clarifying questions arrive as server requests and are answered with a JSON-RPC result.
 - Resume by stored id. Treat a new `replay_epoch` or a truncated replay as a reset and refetch with `session.history`.
+- Messages written into a chat from outside (routine output) are added to an open chat's history before its next turn (`_adopt_out_of_band_turns` in `tui_gateway/prompt_turn.py`). Clients learn about them through `sessions.changed` and refetch.
 
 ## Model and reasoning per chat
 
 - Model: `config.set {key: "model", value: "<model> --session", session_id}`. Always include `--session`, because a bare model pick can persist globally under some configs. The pick is stored with the session and restored on resume. New chats keep the profile default.
 - Reasoning: `config.set {key: "reasoning", value: "<level>", session_id}`. It is stored in the session's `model_config.reasoning_config`.
 - Resume is lazy, so `session.info` reports `reasoning_effort: null` until the agent is rebuilt on the next turn. The app shows the stored value until then. `session.resume` has an `eager_build` option that may avoid this (untested).
-- For Bot Chat, a composer pick is restored only while the profile's model is unchanged.
 
 ## Sync across devices
 
@@ -97,16 +90,17 @@ All shared state lives in Hermes, and the clients store only the login.
 
 ## Push
 
-The plugin's hooks run in whichever process runs the turn:
+The plugin raises alerts from its hooks, in whichever process runs the turn, and from its delivery platform:
 
-| Hook | Alert |
+| Source | Alert |
 |---|---|
-| `pre_approval_request` | "<bot> needs approval" |
-| `on_human_input_request` (kind `clarify`) | "<bot> has a question" |
-| `post_approval_response`, `on_human_input_resolved` | clear the pending alert |
-| `on_session_end` | "<bot> finished" (for long turns and routine follow-ups) |
+| `pre_approval_request` hook | "<bot> needs approval" |
+| `on_human_input_request` hook (kind `clarify`) | "<bot> has a question" |
+| `post_approval_response`, `on_human_input_resolved` hooks | clear the pending alert |
+| `on_session_end` hook | "<bot> finished" (for long turns) |
+| `hbapp` adapter, after writing routine output | "<bot> has a new routine result" |
 
-Alerts carry no conversation text, only the bot and the kind of event. The app fetches details when opened, and a tap deep-links into the chat. The plugin keeps the alerts and serves them from a dashboard route, so the gateway-side hooks and the dashboard-side hooks feed one stream.
+Alerts carry no conversation text, only the bot and the kind of event. The app fetches details when opened, and a tap deep-links into the chat. The plugin keeps the alerts and serves them from a dashboard route, so alerts raised in the gateway and in the dashboard feed one stream.
 
 ### Delivery
 
@@ -126,13 +120,13 @@ Foreground-service setup on Android:
 
 ## Plugin install from the app
 
-`plugins.manage` on `/api/ws` installs, updates and removes Hermes plugins:
+`plugins.manage` on `/api/ws` installs, updates and removes Hermes plugins.
 
-- Install takes `action: "install"` with an `identifier` or `repo`, an optional `ref`, and `enable`. Every install goes through Hermes's security scan.
-- An enabled plugin is activated without a restart in the dashboard and in the running gateway (`hermes_cli/plugins_activation.py`), and its dashboard routes are mounted live (`_try_hot_mount_plugin_api` in `hermes_cli/web_server_dashboard.py`).
-- The app uses this to install and update the `hermes-bots` plugin itself and to manage other plugins. A missing or outdated `hermes-bots` plugin is detected at connect.
-
-This is based on the source and has not been tested.
+- Install: `{action: "install", identifier, enable: true}`, with an optional `ref`. The identifier is a Git URL. Every install goes through Hermes's security scan, and a source outside the Hermes catalog returns a warning.
+- The plugin is cloned, enabled, and its hooks are live in the dashboard and the running gateway at once. The result reports `restart_required: false` and `gateway_reloaded: true`.
+- The `hbapp` delivery platform connects only after a gateway restart. The app then calls `POST /api/gateway/restart`, which relies on a supervisor (the systemd service on devbox) to start the gateway again.
+- The platform needs no `platforms:` config entry and no env variables.
+- A missing or outdated `hermes-bots` plugin is detected at connect, and the app offers to install or update it.
 
 ## Login
 
@@ -151,5 +145,5 @@ This is based on the source and has not been tested.
 
 - Desktop and mobile stack.
 - Side chats or Grok-style message threads for in-context replies.
-- Bridge transport: WebSocket route or long-polling.
-- Alert stream transport: WebSocket route or long-polling, shared with the bridge.
+- Alert stream transport: WebSocket route or long-polling.
+- Messages between bots. Hermes's `message_agent` tool is available only in Bot Chat.

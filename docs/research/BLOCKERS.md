@@ -4,8 +4,8 @@ This document lists the constraints that decide whether Hermes Bots can be built
 
 Hermes Bots is a custom Windows and Android client for a self-hosted Hermes Agent **v0.22.5**. It needs:
 
-- per-profile bots, each with one main chat (Bot Chat) and side chats
-- routines (cron) that post into the bot's main chat, with replies in context
+- per-profile bots, each with a main chat and side chats
+- routines (cron) that post into an existing chat without starting a turn, with replies in context
 - streaming replies and live tool activity
 - inline approvals and clarifying questions
 - session history, synced across devices
@@ -17,7 +17,7 @@ The architecture that answers these constraints is in [ARCHITECTURE.md](ARCHITEC
 
 - **Hermes source.** `hermes-agent` at commit `bf0203a794` (tag v0.22.5, 2026-10-23), the tree the devbox instance runs. File references below are paths in that tree.
 - **Live tests on devbox, 2026-10-30.** One routine delivered into the main profile's Bot Chat, a reply sent from a dashboard client, and the logs of both Hermes processes.
-- **Test-instance runs, 2026-10-30.** A throwaway Hermes on port 9129 with its own `HERMES_HOME`, its own gateway, no messaging platforms, and a test plugin.
+- **Test-instance runs, 2026-10-30.** A throwaway Hermes on port 9129 with its own `HERMES_HOME`, its own gateway, no messaging platforms, and test plugins: hook loggers, a Bot Chat bridge, and a routine delivery platform installed through `plugins.manage`.
 - **Device tests, 2026-10-30.** Messages to an Android phone with the app in the background: three through ntfy.sh, and three through a foreground-service connection to the devbox over Tailscale.
 - **Repo docs.** `docs/research/REPORT.md`, `docs/research/LATER-FINDINGS.md`, and the phase-0 branch `cursor/phase0-integration:docs/regressions.md`.
 
@@ -40,9 +40,11 @@ Items not confirmed by source or by a test are marked **(unverified)**.
 | B11 | Everything depends on Tailscale and one devbox | Network / hosting | No | Manageable, single point of failure |
 | B12 | Testing needs a separate Hermes instance | Architecture | No | Manageable |
 | B13 | Windows notification activation and unsigned installer | Platform | No | (unverified) |
-| B14 | Bot Chat runs in the gateway process, out of the dashboard's reach | Hermes architecture | No (plugin) | Manageable |
+| B14 | Bot Chat runs in the gateway process, out of the dashboard's reach | Hermes architecture | No | Avoided (Bot Chat not used) |
+| B15 | Routine delivery into Bot Chat always starts an agent turn | Hermes | No (plugin) | Manageable |
+| B16 | Routine output written during a running reply is lost to the model | Hermes | No (plugin) | Manageable |
 
-**Bottom line.** Hermes Bots is feasible as specified with stock Hermes v0.22.5 and a companion Hermes plugin, with push through the app's own foreground service. B8 is the one serious risk left, and it is handled by pinning the Hermes version. Details are at the end.
+**Bottom line.** Hermes Bots is feasible as specified with stock Hermes v0.22.5 and a companion Hermes plugin. The plugin delivers routine output into chats and raises push alerts, and Android push goes through the app's own foreground service. B8 is the one serious risk left, and it is handled by pinning the Hermes version. Details are at the end.
 
 ---
 
@@ -99,7 +101,7 @@ Long-term behaviour of the foreground service (several days, reboots, app update
 
 **Constraint.** Approval and clarify requests go only to the owning session's transport (`tui_gateway/server.py` `write_json`, lines 697-714). The global broadcast (`_broadcast_global_event`, line 762) covers skin and display events, connection and onboarding events, `session.reclaimed`, `approval.cancelled` and the change-watcher events. `sessions.changed` has an empty payload. The watcher polls every 0.5 s and broadcasts at most once per 2 s (`tui_gateway/change_watcher.py` lines 381-419). `session.active_list` shows `waiting` for a pending request (`tui_gateway/session_registry.py` lines 648-650), but only for sessions in that process.
 
-**Workaround.** The plugin hooks in B1 are the global signal for notifications. Answering a request still needs a connection that owns the session: the dashboard socket for dashboard sessions, and the bridge in B14 for Bot Chat.
+**Workaround.** The plugin hooks in B1 are the global signal for notifications. Answering a request still needs the connection that owns the session. Every chat turn runs in the dashboard, so that is the dashboard socket.
 
 **Verdict: manageable.**
 
@@ -107,14 +109,9 @@ Long-term behaviour of the foreground service (several days, reboots, app update
 
 **Constraint.** The cron run uses `approvals.cron_mode`, a binary deny/approve setting that defaults to deny (`tools/approval_context.py` lines 346-359). Webhook and API-server platforms use `approvals.unattended_mode` in the same way (lines 175-190 and 366-371).
 
-**What still works.** With `deliver: bot-chat`, the routine's output enters the profile's Bot Chat as a normal turn (`cron/scheduler_delivery.py` lines 694-713). That follow-up turn is interactive. It runs in the gateway with platform `cli`, outside both cron mode and unattended mode, and it raises real approvals. On the test instance, a routine's follow-up turn raised an approval and the request reached a client through the bridge (B14).
+**What still works.** Routine output lands in a chat without starting a turn (B15). The user acts on it by replying in that chat. The reply is an ordinary dashboard turn, and its approvals reach the app as usual. So "a routine found something risky to do, and I approve it from my phone" works when the risky step happens in the reply.
 
-So "a routine wants to do something risky, and I approve it from my phone" works when the risky step happens in the Bot Chat follow-up turn.
-
-Two side effects:
-
-- Hermes's cron injection scanner flags destructive commands written into a job prompt (observed: `destructive_root_rm`).
-- The bot treats routine output as something to act on. A vague routine output can send it off investigating with tools, so routine prompts need to be specific.
+Hermes's cron injection scanner also flags destructive commands written into a job prompt (observed: `destructive_root_rm`).
 
 **Verdict: manageable.**
 
@@ -221,7 +218,7 @@ Cost: about 400 MB of disk for the environment, about 500 MB RAM per running pro
 - For the forwarded prompt, only `message.start`, `message.complete` and pending-list `session.info` are relayed (`tui_gateway/owner_forward.py`). The client gets no streaming text, no tool events, and no approval or clarify requests.
 - `approval.respond` and `session.interrupt` sent to the dashboard cannot reach the gateway's turn. In the live test the gateway's approvals each timed out after 300 s while a dashboard client was attached.
 
-**Workaround.** A dashboard plugin bridges to the gateway. It runs inside the dashboard process as the same OS user, so it can connect with `hermes_cli.gateway_client.connect_gateway()`. It then declares `client.capabilities {server_requests: true}`, resumes the Bot Chat by stored id, and relays frames both ways. Tested on the test instance:
+**Workaround tested: a bridge.** A dashboard plugin bridges to the gateway. It runs inside the dashboard process as the same OS user, so it can connect with `hermes_cli.gateway_client.connect_gateway()`. It then declares `client.capabilities {server_requests: true}`, resumes the Bot Chat by stored id, and relays frames both ways. Tested on the test instance:
 
 | Check | Result |
 |---|---|
@@ -231,7 +228,41 @@ Cost: about 400 MB of disk for the environment, about 500 MB RAM per running pro
 | Approval raised by a routine's follow-up turn | reached the bridge |
 | Plugin routes without login | 401 |
 
-**Verdict: manageable**, with a companion plugin and no Hermes code change.
+**Chosen: avoid Bot Chat.** Bot Chat's routine delivery always starts a turn (B15). Main chats are ordinary dashboard sessions, and routines deliver into them through the plugin's delivery platform, so no bridge is needed.
+
+**Verdict: avoided.**
+
+## B15. Routine delivery into Bot Chat always starts a turn
+
+**Constraint.** With `deliver: bot-chat`, the routine's output enters Bot Chat as an inbound message prefixed `[Cronjob "<name>" output — scheduled job, not the user. Review it, act on anything that needs action, and summarize for the chat.]`, and the bot runs a full turn on it (`cron/scheduler_delivery.py` lines 694-713). The message is admitted as internal automation (`gateway/session_bot.py` `_admit`), so it skips `pre_gateway_dispatch`, which runs only for messages from messaging platforms (`gateway/run_inbound.py`). `pre_llm_call` can add context but cannot cancel the call. On the test instance, a plugin asking `pre_gateway_dispatch` to skip routine messages did not stop the turn. No config setting turns the turn off.
+
+**Workaround.** The plugin registers its own delivery platform, `hbapp`, with `ctx.register_platform(name, label, adapter_factory, check_fn, cron_deliver_env_var=...)` (`hermes_cli/plugins.py` line 787). Without `cron_deliver_env_var`, cron blocks the job with "delivery platform 'hbapp' is not a known cron delivery target" (`cron/scheduler_preflight.py`). A routine targets `hbapp:session-<stored session id>`. The adapter's `send()` receives the output and appends it to that chat with `gateway.mirror.mirror_to_session(..., role="user", session_id=...)`. Tested on the test instance:
+
+| Check | Result |
+|---|---|
+| Routine created with one `POST /api/cron/jobs`, delivering into a chat created with `session.create` | output appended to the chat, no turn |
+| Reply in the same open chat | the bot saw the output |
+| The chat opened fresh on a second connection | the bot saw the output |
+| Several runs into one chat | each appended in order |
+| Asking the bot in a routine's chat to change its schedule (chat owned by the platform) | the bot edited the job with its cron tool |
+| Model calls | one per routine run and one per user reply, none per delivery |
+| Plugin installed with `plugins.manage`, then a gateway restart | platform connected with no `platforms:` config or env variables |
+
+The output arrives wrapped in a header (`Cronjob Response: <name>`, the job id, a separator) and a "To stop…" footer, which the adapter removes.
+
+Hermes's own mirror (`attach_to_session: true`, with `origin` set to the chat) also appends without a turn, but only into chats owned by the platform, and `POST /api/cron/jobs` ignores both fields, so each job needs a follow-up `PUT`.
+
+**Verdict: manageable**, with the companion plugin.
+
+## B16. Output written during a running reply is lost to the model
+
+**Constraint.** Hermes rebuilds the model's view of a chat from the database with alternation repair (`hermes_state_messages.py` `_rows_to_conversation`, `repair_message_sequence`). On the test instance, a routine delivered while a reply was running a 75 s tool call. Its row was saved between the user's message and the reply's tool call. The repair dropped it from the model's view: the following replies, and a fresh resume on a second connection, counted 1 routine output of 2. The row still shows in the chat history. Hermes's own mirror writes the same way **(unverified)**.
+
+Rows written between turns are fine. An open chat adds them to its history before the next turn (`tui_gateway/prompt_turn.py` `_adopt_out_of_band_turns`).
+
+**Workaround.** The adapter waits until the chat's last row is a finished assistant reply (checked every 2 s, for up to 15 minutes) and then writes. Tested: the routine waited 70 s, then landed, and both the open chat and a second connection counted 2 of 2. A routine written in the few milliseconds after the user sends a message can still land mid-reply.
+
+**Verdict: manageable.**
 
 ---
 
@@ -250,7 +281,7 @@ The notifier to ntfy leg worked. The loss happened between the self-hosted ntfy 
 
 **Yes**, with stock Hermes v0.22.5 and these conditions:
 
-1. A companion Hermes plugin provides the Bot Chat bridge (B14) and the push hooks (B1).
+1. A companion Hermes plugin provides the routine delivery platform (B15, B16) and the push hooks (B1). Bot Chat is not used (B14).
 2. Android push uses the app's own foreground service over Tailscale, with battery exemption and always-on VPN; ntfy is an optional alternative (B2).
 3. Hermes is pinned, and every upgrade passes the contract and plugin checks (B8).
 4. Clients use native networking, resume by stored id, and treat a new replay epoch as a reset (B6, B7, B10).
@@ -262,5 +293,6 @@ Open items:
 - Windows toast activation and installer signing (B13).
 - How outbound webhooks behave in the standalone dashboard (B1).
 - Long-term foreground-service delivery and other phone makers (B2).
-- Installing plugins from the app. `plugins.manage` supports it, but it has not been tested (see ARCHITECTURE.md).
-- A production design for the bridge transport. The test used HTTP long-polling. Whether WebSocket routes in plugins sit behind the dashboard login is unverified.
+- The gateway restart after installing the plugin relies on a supervisor to start the gateway again. Setups without one are unverified.
+- A transport for the alert stream. Whether WebSocket routes in plugins sit behind the dashboard login is unverified.
+- Messages between bots outside Bot Chat (`message_agent` is available only there).
