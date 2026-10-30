@@ -29,15 +29,6 @@
 
   const bots = HB.bots.map(function (b) { return Object.assign({}, b, { queue: (b.queue || []).slice() }); });
   const rooms = HB.rooms.map(function (r) { return Object.assign({}, r); });
-  const sessions = {};
-  Object.keys(HB.sessions).forEach(function (k) {
-    sessions[k] = HB.sessions[k].map(function (s) { return Object.assign({}, s); });
-  });
-  bots.forEach(function (b) {
-    if (!sessions[b.id]) {
-      sessions[b.id] = [{ id: "main", title: "Main", main: true, pinned: true, auto: false, when: "Today", preview: b.preview, sort: 1 }];
-    }
-  });
   const routines = HB.routines.map(function (r) {
     return Object.assign({}, r, { days: (r.days || []).slice(), runs: r.runs.map(function (x) { return Object.assign({}, x); }) });
   });
@@ -52,7 +43,6 @@
 
   const state = {
     faces: {},
-    session: {},
     overrides: {},
     modelScope: "chat",
     modelOpen: false,
@@ -71,19 +61,16 @@
     approvalLeft: 4 * 60 + 47,
     clarify: {},
     clarifySent: false,
-    histQ: "",
-    showArchived: false,
-    rowMenu: null,
-    renaming: null,
-    renameValue: "",
     confirmDelete: null,
     form: null,
     toast: null,
     view: "",
     reconnect: null,
     menu: false,
-    ntfyUrl: "http://100.101.102.10:8091",
-    ntfyTopic: "hermes",
+    pushMode: "service",
+    ntfyUrl: "https://ntfy.sh",
+    ntfyTopic: "hermes-bots-7f3k2q",
+    ntfyToken: "",
     notif: {},
     loginUser: HB.user,
     loginPass: "",
@@ -100,7 +87,6 @@
     servers: HB.servers.map(function (s) { return Object.assign({}, s); })
   };
   HB.notifications.forEach(function (n) { state.notif[n.id] = true; });
-  bots.forEach(function (b) { state.session[b.id] = "main"; });
 
   let route = { parts: [], q: new URLSearchParams() };
   let ready = false;
@@ -138,7 +124,7 @@
     return state.servers.filter(function (s) { return s.id === state.serverId; })[0] || state.servers[0];
   }
   function version() { return state.installed ? HB.nextVersion : HB.version; }
-  function chatKey(botId) { return botId + ":" + (state.session[botId] || "main"); }
+  function chatKey(botId) { return botId + ":main"; }
   function effective(bot) {
     const o = state.overrides[chatKey(bot.id)] || {};
     return {
@@ -146,11 +132,6 @@
       effort: o.effort || bot.effort,
       custom: !!(o.model || o.effort)
     };
-  }
-  function sessionOf(botId) {
-    const sid = state.session[botId] || "main";
-    const list = sessions[botId] || [];
-    return list.filter(function (s) { return s.id === sid; })[0] || list[0];
   }
   function currentThread(botId) {
     if (state.view === "attach" && botId === "junior" && threads["junior:attach"]) return threads["junior:attach"];
@@ -281,7 +262,6 @@
     state.view = view;
     state.modelOpen = view === "model";
     state.menu = false;
-    state.rowMenu = null;
     state.reconnect = view === "reconnect" ? "down" : null;
     state.composer = "";
     state.slashIndex = 0;
@@ -321,7 +301,7 @@
     const home = homeHash();
     if (!a || a === "bots" || a === "login" || a === "update") return null;
     if (a === "chat" || a === "room") return phone ? "#/bots" : null;
-    if (a === "history" || a === "bot") return "#/chat/" + b;
+    if (a === "bot") return "#/chat/" + b;
     if (a === "routines" && b) return "#/chat/" + b;
     if (a === "routines") return home;
     if (a === "routine" && b === "new") {
@@ -358,7 +338,7 @@
   }
 
   function botRow(b) {
-    const on = (route.parts[0] === "chat" && route.parts[1] === b.id) || (route.parts[0] === "history" && route.parts[1] === b.id) || (route.parts[0] === "bot" && route.parts[1] === b.id);
+    const on = (route.parts[0] === "chat" && route.parts[1] === b.id) || (route.parts[0] === "bot" && route.parts[1] === b.id);
     return '<button type="button" class="bot-row' + (on ? " on" : "") + '" data-act="open-bot" data-id="' + b.id + '">' +
       avatar(b.id) +
       '<span class="bot-mid"><span class="bot-line"><span class="bot-name">' + esc(b.name) + "</span>" +
@@ -646,25 +626,21 @@
   function chatActions(bot) {
     if (device() === "phone") {
       return '<button type="button" class="text-btn" data-act="menu">More</button>' +
-        (state.menu ? '<div class="sheet"><button type="button" data-act="nav" data-to="#/history/' + bot.id + '">Chats</button>' +
-          '<button type="button" data-act="summarize" data-id="' + bot.id + '">Summarize</button>' +
+        (state.menu ? '<div class="sheet"><button type="button" data-act="summarize" data-id="' + bot.id + '">Summarize</button>' +
           '<button type="button" data-act="nav" data-to="#/bot/' + bot.id + '">Bot info</button>' +
           '<button type="button" data-act="nav" data-to="#/routines/' + bot.id + '">Routines</button>' +
           '<button type="button" data-act="nav" data-to="#/usage">Usage</button>' +
           '<button type="button" data-act="nav" data-to="#/settings">Settings</button></div>' : "");
     }
-    return '<div class="topbar-actions"><button type="button" class="text-btn" data-act="nav" data-to="#/history/' + bot.id + '">Chats</button>' +
-      '<button type="button" class="text-btn" data-act="summarize" data-id="' + bot.id + '">Summarize</button>' +
+    return '<div class="topbar-actions"><button type="button" class="text-btn" data-act="summarize" data-id="' + bot.id + '">Summarize</button>' +
       '<button type="button" class="text-btn" data-act="nav" data-to="#/bot/' + bot.id + '">Info</button></div>';
   }
   function chatColumn(botId) {
     const bot = botBy(botId) || bots[0];
     const list = currentThread(bot.id);
-    const sess = sessionOf(bot.id);
     const eff = effective(bot);
     const bits = [];
     if (state.view === "attach") bits.push("Attachments");
-    else bits.push(sess && sess.main ? "Main chat" : (sess ? sess.title : "Chat"));
     bits.push(eff.model, eff.effort);
     if (eff.custom) bits.push("this chat");
     const cost = chatCost(list);
@@ -673,11 +649,10 @@
     let cards = "";
     if (bot.id === "ledger") cards += approvalCard();
     if (bot.id === "atlas") cards += clarifyCard();
-    const empty = !list.length ? '<div class="empty">This side chat is empty.<br>Routines stay in the main chat.</div>' : "";
     return '<div class="column"><div class="topbar">' + backBtn() + avatar(bot.id) +
       '<div class="topbar-text"><strong>' + esc(bot.name) + "</strong><span>" + esc(bits.join(" · ")) + "</span></div>" +
       chatActions(bot) + "</div>" + bannerHtml() +
-      '<div class="pane"><div class="thread">' + empty + list.map(function (m) { return renderMessage(m, list); }).join("") +
+      '<div class="pane"><div class="thread">' + list.map(function (m) { return renderMessage(m, list); }).join("") +
       (cards ? '<div class="msg">' + cards + "</div>" : "") + "</div></div>" + dock(bot, null) + "</div>";
   }
   function roomColumn(roomId) {
@@ -689,69 +664,6 @@
       '<div class="topbar-text"><strong>' + esc(room.name) + "</strong><span>" + esc(names) + "</span></div></div>" +
       '<div class="pane"><div class="thread">' + list.map(function (m) { return renderMessage(m, list); }).join("") + "</div></div>" +
       dock(null, room) + "</div>";
-  }
-
-  function histRow(botId, s) {
-    const title = state.renaming === s.id
-      ? '<input id="rename" class="rename" value="' + esc(state.renameValue) + '" aria-label="Chat name">'
-      : '<button type="button" class="title" data-act="open-session" data-bot="' + botId + '" data-id="' + s.id + '"><span class="t">' + esc(s.title) + "</span>" +
-        (s.main ? ' <span class="tag">Main chat</span>' : "") +
-        (s.auto ? ' <span class="tag">Auto title</span>' : "") +
-        '<span class="m">' + esc(s.when) + " · " + esc(s.preview || "") + "</span></button>";
-    let menu;
-    if (state.confirmDelete === s.id) {
-      menu = '<div class="confirm">Delete?<button type="button" class="text-btn" data-act="delete-yes" data-bot="' + botId + '" data-id="' + s.id + '">Delete</button><button type="button" class="text-btn" data-act="delete-no">Cancel</button></div>';
-    } else {
-      const open = state.rowMenu === s.id;
-      menu = '<button type="button" class="text-btn" data-act="row-menu" data-id="' + s.id + '" aria-label="Chat actions">···</button>' +
-        (open ? '<div class="pop-menu">' +
-          (s.main ? "" : '<button type="button" data-act="pin" data-bot="' + botId + '" data-id="' + s.id + '">' + (s.pinned ? "Unpin" : "Pin") + "</button>") +
-          '<button type="button" data-act="rename" data-bot="' + botId + '" data-id="' + s.id + '">Rename</button>' +
-          (s.main ? "" : '<button type="button" data-act="archive" data-bot="' + botId + '" data-id="' + s.id + '">' + (s.archived ? "Unarchive" : "Archive") + "</button>") +
-          (s.main ? "" : '<button type="button" data-act="delete-ask" data-id="' + s.id + '">Delete</button>') +
-          "</div>" : "");
-    }
-    return '<div class="hist-row">' + title + '<div class="menu">' + menu + "</div></div>";
-  }
-  function historyView(botId) {
-    const bot = botBy(botId) || bots[0];
-    const q = state.histQ.trim().toLowerCase();
-    let list = (sessions[bot.id] || []).slice();
-    if (q) list = list.filter(function (s) { return (s.title + " " + (s.preview || "")).toLowerCase().indexOf(q) >= 0; });
-    const pinned = list.filter(function (s) { return s.pinned && !s.archived; }).sort(function (a, b) {
-      if (a.main !== b.main) return a.main ? -1 : 1;
-      return b.sort - a.sort;
-    });
-    const rest = list.filter(function (s) { return !s.pinned && !s.archived; });
-    const archAll = (sessions[bot.id] || []).filter(function (s) { return s.archived; });
-    const arch = list.filter(function (s) { return s.archived && (q || state.showArchived); });
-    function byWhen(arr) {
-      const order = ["Today", "Yesterday", "Last week"];
-      const groups = [];
-      order.forEach(function (w) {
-        const items = arr.filter(function (s) { return s.when === w; }).sort(function (a, b) { return b.sort - a.sort; });
-        if (items.length) groups.push([w, items]);
-      });
-      const other = arr.filter(function (s) { return order.indexOf(s.when) < 0; });
-      if (other.length) groups.push(["Earlier", other]);
-      return groups;
-    }
-    let html = "";
-    if (pinned.length) html += '<div class="group-label">Pinned</div>' + pinned.map(function (s) { return histRow(bot.id, s); }).join("");
-    byWhen(rest).forEach(function (g) {
-      html += '<div class="group-label">' + g[0] + "</div>" + g[1].map(function (s) { return histRow(bot.id, s); }).join("");
-    });
-    if (arch.length) html += '<div class="group-label">Archived</div>' + arch.map(function (s) { return histRow(bot.id, s); }).join("");
-    if (!html) html = '<div class="empty">No chats match.</div>';
-    const archBtn = archAll.length && !q
-      ? '<button type="button" class="text-btn" data-act="toggle-arch">' + (state.showArchived ? "Hide archived" : "Show archived (" + archAll.length + ")") + "</button>"
-      : "";
-    const body = '<div class="pane"><div class="page"><div style="display:flex;justify-content:space-between;gap:8px;align-items:center"><h2>Chats</h2>' +
-      '<button type="button" class="primary" data-act="new-side" data-id="' + bot.id + '">New side chat</button></div>' +
-      '<p class="lede">Search, pin, rename, archive, or delete. Auto titles stick until you rename them. Routines stay in Main.</p>' +
-      '<input id="hist-q" class="search" placeholder="Search this bot" value="' + esc(state.histQ) + '">' +
-      html + '<div style="margin-top:12px">' + archBtn + "</div></div></div>";
-    return column(bot.name, "Side chats and history", body);
   }
 
   function routineCard(job) {
@@ -773,7 +685,7 @@
       body = '<div class="pane"><div class="page">' + toast +
         '<div style="display:flex;justify-content:space-between;gap:8px;align-items:center"><h2>' + esc(botName(botId)) + '</h2>' +
         '<button type="button" class="primary" data-act="nav" data-to="#/routine/new?bot=' + botId + '">New routine</button></div>' +
-        '<p class="lede">Results post into this bot\'s main chat.</p>' +
+        '<p class="lede">Results post into this bot\'s chat.</p>' +
         (mine.length ? mine.map(routineCard).join("") : '<div class="empty">No routines yet.</div>') +
         "</div></div>";
       return column("Routines", botName(botId), body);
@@ -784,7 +696,7 @@
     body = '<div class="pane"><div class="page">' + toast +
       '<div style="display:flex;justify-content:space-between;gap:8px;align-items:center"><h2>All routines</h2>' +
       '<button type="button" class="primary" data-act="nav" data-to="#/routine/new?bot=junior">New routine</button></div>' +
-      '<p class="lede">Every bot. A run posts into that bot\'s one main chat, and can also raise an alert.</p>' +
+      '<p class="lede">Every bot. A run posts into that bot\'s chat, and can also raise an alert.</p>' +
       groups.map(function (g) {
         return '<div class="group-label">' + esc(g[0].name) + "</div>" + g[1].map(routineCard).join("");
       }).join("") + "</div></div>";
@@ -828,7 +740,7 @@
       '<div class="field" style="margin-top:12px"><div class="lbl">Deliver to</div><div class="checks">' +
       '<button type="button" class="check" data-act="deliver" data-id="chat"><span class="toggle' + (f.chat ? " on" : "") + '"><i></i></span> This bot\'s chat</button>' +
       '<button type="button" class="check" data-act="deliver" data-id="ntfy"><span class="toggle' + (f.ntfy ? " on" : "") + '"><i></i></span> Alert</button></div>' +
-      '<p class="need-k">An alert is a Hermes Bots notification. On the phone it arrives through UnifiedPush. On Windows it is a tray notification.</p></div>' +
+      '<p class="need-k">An alert is a Hermes Bots notification. On the phone it comes from the app\'s own background connection, or from ntfy if you chose it. On Windows it is a tray notification.</p></div>' +
       (f.error ? '<div class="err">' + esc(f.error) + "</div>" : "") +
       '<div class="choices"><button type="button" class="primary" data-act="save-routine">Save</button>' +
       '<button type="button" class="ghost" data-act="nav" data-to="' + (backTarget() || "#/routines") + '">Cancel</button></div>' +
@@ -844,7 +756,7 @@
         : "";
       return '<div class="set-row"><div><b>' + esc(r.status) + "</b> · " + esc(r.when) + '<div class="sub">' + esc(r.detail) + "</div></div>" + open + "</div>";
     }).join("") : '<p class="lede">No runs yet.</p>';
-    return column(job.name, schedLabel(job), '<div class="pane"><div class="page"><p class="lede">Every run posts into this bot\'s one main chat. Open jumps to that message.</p>' + rows + "</div></div>");
+    return column(job.name, schedLabel(job), '<div class="pane"><div class="page"><p class="lede">Every run posts into this bot\'s chat. Open jumps to that message.</p>' + rows + "</div></div>");
   }
 
   function usageView() {
@@ -856,13 +768,9 @@
     const byBot = HB.usageByBot.map(function (pair) {
       return '<div class="u-row"><div>' + esc(botName(pair[0])) + '<div class="meter"><i style="width:' + Math.round(pair[1] / maxBot * 100) + '%"></i></div></div><span>' + money(pair[1]) + "</span></div>";
     }).join("");
-    const chats = HB.usageChats.map(function (c) {
-      return '<div class="u-row"><div>' + esc(c.title) + " · " + esc(botName(c.bot)) + "</div><span>" + money(c.cost) + "</span></div>";
-    }).join("");
     const body = '<div class="pane"><div class="page"><h2>October</h2><p class="lede">$18.40 across the last 14 days, ending 27 Oct.</p>' +
       '<div class="bars">' + bars + '</div><div class="bar-labels"><span>14 Oct</span><span>27 Oct</span></div>' +
       '<div class="group-label">By bot</div>' + byBot +
-      '<div class="group-label">By chat</div>' + chats +
       '<p class="need-k" style="margin-top:12px">Each finished reply also shows its own tokens and cost.</p></div></div>';
     return column("Usage", "Last 14 days", body);
   }
@@ -903,7 +811,7 @@
       (add.error ? '<div class="err">' + esc(add.error) + "</div>" : "") +
       '<button type="button" class="primary" data-act="add-server">Add server</button>' +
       '<div class="group-label">Mode</div><div class="seg" style="margin-bottom:12px">' + seg + "</div>" +
-      '<div class="set-row"><div><b>Notifications</b><div class="sub">Phone: UnifiedPush via ntfy on devbox. Windows: this app\'s tray.</div></div><button type="button" class="text-btn" data-act="nav" data-to="#/notifications">Open</button></div>' +
+      '<div class="set-row"><div><b>Notifications</b><div class="sub">Phone: this app\'s background connection, or ntfy. Windows: this app\'s tray.</div></div><button type="button" class="text-btn" data-act="nav" data-to="#/notifications">Open</button></div>' +
       '<div class="set-row"><div><b>Hermes Bots ' + esc(version()) + '</b><div class="sub">' + (state.installed ? "Up to date" : "Update available · " + HB.nextVersion) + "</div></div>" +
       (state.installed ? "" : '<button type="button" class="ghost" data-act="nav" data-to="#/update">View</button>') + "</div>" +
       '<p class="need-k">API keys stay on the server. This app does not show them.</p></div></div>';
@@ -915,19 +823,33 @@
       const on = !!state.notif[n.id];
       return '<button type="button" class="set-row" data-act="notif" data-id="' + n.id + '"><span>' + esc(n.label) + '</span><span class="toggle' + (on ? " on" : "") + '"><i></i></span></button>';
     }).join("");
-    const lede = phone
-      ? "On Android, alerts come from the ntfy server on devbox through UnifiedPush. They show under Hermes Bots, with this app's icon. A tap opens the chat."
-      : "On Windows, Hermes Bots posts its own tray notifications. The phone uses UnifiedPush against the same ntfy server, so a tap there opens the same chat.";
-    const status = phone ? "UnifiedPush · registered with ntfy on devbox" : "Windows tray · posted by Hermes Bots";
-    const sample = '<button type="button" class="note-card" data-act="open-run" data-bot="junior" data-msg="j-brief"><b>Hermes Bots</b>Morning briefing finished<span>' +
-      (phone ? "Tap opens Junior's main chat" : "Tray notification · opens Junior's main chat") + "</span></button>";
-    const body = '<div class="pane"><div class="page"><h2>' + (phone ? "UnifiedPush" : "Tray") + "</h2><p class=\"lede\">" + lede + "</p>" +
-      '<div class="set-row"><div><b>Status</b><div class="sub">' + status + "</div></div></div>" +
-      '<div class="field"><label for="ntfy-url">Notification server</label><input id="ntfy-url" data-field="ntfy-url" value="' + esc(state.ntfyUrl) + '" spellcheck="false"></div>' +
+    const sample = '<button type="button" class="note-card" data-act="open-run" data-bot="junior" data-msg="j-brief"><b>Hermes Bots</b>Junior has a new routine result<span>' +
+      (phone ? "Tap opens Junior's chat" : "Tray notification · opens Junior's chat") + "</span></button>";
+    const body = '<div class="pane"><div class="page">' + (phone ? phonePush() : desktopPush()) + sample + toggles + "</div></div>";
+    return column("Notifications", phone ? (state.pushMode === "ntfy" ? "ntfy" : "Background connection") : "Windows tray", body);
+  }
+  function desktopPush() {
+    return "<h2>Tray</h2><p class=\"lede\">Hermes Bots stays in the tray, keeps its connection to the server, and posts its own notifications. A click opens the chat.</p>" +
+      '<div class="set-row"><div><b>Status</b><div class="sub">Windows tray · connected to ' + esc(currentServer().name) + "</div></div></div>";
+  }
+  function phonePush() {
+    const ntfy = state.pushMode === "ntfy";
+    const seg = [["service", "Background connection"], ["ntfy", "ntfy"]].map(function (m) {
+      return '<button type="button" class="' + (state.pushMode === m[0] ? "on" : "") + '" data-act="push-mode" data-id="' + m[0] + '">' + m[1] + "</button>";
+    }).join("");
+    const head = '<h2>Alerts when the app is closed</h2><div class="seg" style="margin-bottom:12px">' + seg + "</div>";
+    if (!ntfy) {
+      return head + '<p class="lede">Hermes Bots keeps its own connection to ' + esc(currentServer().name) + " over Tailscale and posts notifications itself. Nothing else to install.</p>" +
+        '<div class="set-row"><div><b>Status</b><div class="sub">Connected to ' + esc(currentServer().name) + " · ongoing notification shown</div></div></div>" +
+        '<div class="set-row"><div><b>Battery</b><div class="sub">Unrestricted</div></div><span class="tag">Done</span></div>' +
+        '<div class="set-row"><div><b>Tailscale always-on VPN</b><div class="sub">Set it in Android settings, under VPN</div></div><button type="button" class="text-btn">Open</button></div>' +
+        '<div class="set-row"><div><b>Phone maker</b><div class="sub">Samsung can stop background apps. See its guide on dontkillmyapp.com</div></div><button type="button" class="text-btn">Guide</button></div>';
+    }
+    return head + '<p class="lede">Alerts go through an ntfy server and the ntfy app. They carry no message text, only the bot and what happened.</p>' +
+      '<div class="field"><label for="ntfy-url">Server</label><input id="ntfy-url" data-field="ntfy-url" value="' + esc(state.ntfyUrl) + '" spellcheck="false"></div>' +
       '<div class="field"><label for="ntfy-topic">Topic</label><input id="ntfy-topic" data-field="ntfy-topic" value="' + esc(state.ntfyTopic) + '" spellcheck="false"></div>' +
-      '<p class="need-k">The server is the self-hosted ntfy on devbox. The topic is what UnifiedPush subscribes to. Windows does not use that socket; it shows the same events in the tray.</p>' +
-      sample + toggles + "</div></div>";
-    return column("Notifications", phone ? "UnifiedPush" : "Windows tray", body);
+      '<div class="field"><label for="ntfy-token">Access token</label><input id="ntfy-token" data-field="ntfy-token" type="password" value="' + esc(state.ntfyToken) + '" placeholder="tk_…" spellcheck="false"></div>' +
+      '<p class="need-k">Reserve the topic on the server so only this token can read it.</p>';
   }
   function loginView() {
     const server = state.pendingServer
@@ -958,7 +880,6 @@
 
   function mainView() {
     const a = route.parts[0], b = route.parts[1], c = route.parts[2];
-    if (a === "history") return historyView(b || "junior");
     if (a === "routines" && b) return routinesView(b);
     if (a === "routines") return routinesView(null);
     if (a === "routine" && (b === "new" || b === "edit")) return formView();
@@ -1129,22 +1050,11 @@
     const file = fileAtt();
     const list = currentThread(bot.id);
     state.minute += 1;
-    const sess = sessionOf(bot.id);
     list.push({
       id: uid(), role: "user", time: nowTime(), text: text, replyTo: state.replyTo,
       image: img && img.src, imageName: img && img.name,
       file: file ? { name: file.name, size: file.size || "" } : null
     });
-    if (sess && !sess.main && sess.title === "New chat") {
-      const t = text || "Attachment";
-      sess.title = t.length > 42 ? t.slice(0, 42) + "…" : t;
-      sess.auto = true;
-    }
-    if (sess) {
-      sess.preview = (text || "Attachment").slice(0, 80);
-      sess.sort = Date.now();
-      sess.when = "Today";
-    }
     list.push({
       id: uid(), role: "assistant", who: bot.id, time: nowTime(),
       thinking: { seconds: 1, open: false, text: "Short enough to answer directly." },
@@ -1180,20 +1090,6 @@
     currentThread(bot.id).push({ id: uid(), role: "system", text: "Earlier messages were summarized." });
     state.menu = false;
     render({ scroll: "bottom" });
-  }
-  function createSide(botId) {
-    const id = uid();
-    sessions[botId].push({
-      id: id, title: "New chat", main: false, pinned: false, auto: false, when: "Today", preview: "Empty", sort: Date.now()
-    });
-    threads[botId + ":" + id] = [];
-    state.session[botId] = id;
-    const next = "#/chat/" + botId;
-    if (location.hash === next) {
-      route = parse();
-      onRoute();
-      render({ scroll: "top" });
-    } else location.hash = next;
   }
   function activeLog() {
     const bot = activeBot();
@@ -1252,7 +1148,7 @@
     if (!job) return;
     const name = botName(job.bot);
     const mid = uid();
-    job.runs.unshift({ when: "Just now", status: "Succeeded", detail: "Posted into the main chat.", msg: mid });
+    job.runs.unshift({ when: "Just now", status: "Succeeded", detail: "Posted into the chat.", msg: mid });
     const key = job.bot + ":main";
     if (!threads[key]) threads[key] = [];
     state.minute += 1;
@@ -1263,7 +1159,7 @@
       b.time = nowTime();
       b.activity = 1000 + state.minute;
     }
-    state.toast = { text: "Posted into " + name + "'s main chat.", to: "#/chat/" + job.bot, bot: job.bot, msg: mid };
+    state.toast = { text: "Posted into " + name + "'s chat.", to: "#/chat/" + job.bot, bot: job.bot, msg: mid };
     render({ preserve: true });
     setTimeout(function () {
       state.toast = null;
@@ -1332,14 +1228,12 @@
       if (b) b.unread = 0;
       state.highlight = null;
       state.highlightBot = null;
-      state.session[el.dataset.id] = "main";
       location.hash = "#/chat/" + el.dataset.id;
     },
     "open-run": function (el) {
       const bot = el.dataset.bot;
       const msg = el.dataset.msg;
       if (!bot || !msg) return;
-      state.session[bot] = "main";
       state.highlight = msg;
       state.highlightBot = bot;
       const next = "#/chat/" + bot;
@@ -1452,47 +1346,8 @@
       if (b) { b.needs = null; b.unread = 0; }
       render({ preserve: true });
     },
-    "open-session": function (el) {
-      state.session[el.dataset.bot] = el.dataset.id;
-      location.hash = "#/chat/" + el.dataset.bot;
-    },
-    "row-menu": function (el) {
-      state.rowMenu = state.rowMenu === el.dataset.id ? null : el.dataset.id;
-      state.confirmDelete = null;
-      render({ preserve: true });
-    },
-    pin: function (el) {
-      const s = (sessions[el.dataset.bot] || []).filter(function (x) { return x.id === el.dataset.id; })[0];
-      if (s && !s.main) s.pinned = !s.pinned;
-      state.rowMenu = null;
-      render({ preserve: true });
-    },
-    rename: function (el) {
-      const s = (sessions[el.dataset.bot] || []).filter(function (x) { return x.id === el.dataset.id; })[0];
-      if (!s) return;
-      state.renaming = s.id;
-      state.renameValue = s.title;
-      state.rowMenu = null;
-      state.focusId = "rename";
-      render({ preserve: true });
-    },
-    archive: function (el) {
-      const s = (sessions[el.dataset.bot] || []).filter(function (x) { return x.id === el.dataset.id; })[0];
-      if (s && !s.main) s.archived = !s.archived;
-      state.rowMenu = null;
-      render({ preserve: true });
-    },
-    "delete-ask": function (el) { state.confirmDelete = el.dataset.id; state.rowMenu = null; render({ preserve: true }); },
+    "delete-ask": function (el) { state.confirmDelete = el.dataset.id; render({ preserve: true }); },
     "delete-no": function () { state.confirmDelete = null; render({ preserve: true }); },
-    "delete-yes": function (el) {
-      const botId = el.dataset.bot;
-      sessions[botId] = (sessions[botId] || []).filter(function (s) { return s.id !== el.dataset.id; });
-      if (state.session[botId] === el.dataset.id) state.session[botId] = "main";
-      state.confirmDelete = null;
-      render({ preserve: true });
-    },
-    "toggle-arch": function () { state.showArchived = !state.showArchived; render({ preserve: true }); },
-    "new-side": function (el) { createSide(el.dataset.id); },
     pause: function (el) {
       const j = routines.filter(function (r) { return r.id === el.dataset.id; })[0];
       if (j) j.paused = !j.paused;
@@ -1566,6 +1421,7 @@
       state.addServer = { name: "", host: "", port: "9119", error: "" };
       render({ preserve: true });
     },
+    "push-mode": function (el) { state.pushMode = el.dataset.id; render({ preserve: true }); },
     notif: function (el) { state.notif[el.dataset.id] = !state.notif[el.dataset.id]; render({ preserve: true }); },
     login: function () {
       if (!state.loginPass) { state.loginError = "Enter your password."; render({ preserve: true, focus: "password" }); return; }
@@ -1585,22 +1441,6 @@
     }
   };
 
-  function commitRename() {
-    if (!state.renaming) return;
-    const id = state.renaming;
-    let found = null;
-    Object.keys(sessions).forEach(function (k) {
-      const s = sessions[k].filter(function (x) { return x.id === id; })[0];
-      if (s) found = s;
-    });
-    if (found) {
-      const next = (state.renameValue || "").trim();
-      if (next) { found.title = next; found.auto = false; }
-    }
-    state.renaming = null;
-    render({ preserve: true });
-  }
-
   function bind() {
     const app = document.getElementById("app");
     app.addEventListener("mousedown", function (e) {
@@ -1616,19 +1456,11 @@
       let changed = false;
       if (state.modelOpen && !e.target.closest(".pop") && !e.target.closest(".composer-box") && !e.target.closest(".model-chip")) { state.modelOpen = false; changed = true; }
       if (state.menu && !e.target.closest(".sheet")) { state.menu = false; changed = true; }
-      if (state.rowMenu && !e.target.closest(".menu")) { state.rowMenu = null; changed = true; }
       if (changed) render({ preserve: true });
     });
     app.addEventListener("input", function (e) {
       const t = e.target;
       if (t.id === "composer") { onComposer(t); return; }
-      if (t.id === "hist-q") {
-        state.histQ = t.value;
-        state.focusId = "hist-q";
-        state.focusAt = t.selectionStart;
-        render({ preserve: true });
-        return;
-      }
       if (t.id === "steer") {
         state.steer = t.value;
         const b = document.getElementById("steer-btn");
@@ -1637,7 +1469,6 @@
       }
       if (t.id === "password") { state.loginPass = t.value; return; }
       if (t.id === "username") { state.loginUser = t.value; return; }
-      if (t.id === "rename") { state.renameValue = t.value; return; }
       if (t.id === "form-bot") { if (state.form) state.form.bot = t.value; return; }
       const f = t.dataset.field || "";
       if (f.indexOf("clarify:") === 0) {
@@ -1662,6 +1493,7 @@
       if (f.indexOf("add:") === 0) { state.addServer[f.slice(4)] = t.value; return; }
       if (f === "ntfy-url") state.ntfyUrl = t.value;
       if (f === "ntfy-topic") state.ntfyTopic = t.value;
+      if (f === "ntfy-token") state.ntfyToken = t.value;
     });
     app.addEventListener("change", function (e) {
       if (e.target.id === "file-in") { addFiles(e.target.files); e.target.value = ""; }
@@ -1701,10 +1533,6 @@
         return;
       }
       if (t.id === "password" && e.key === "Enter") ACT.login();
-      if (t.id === "rename" && e.key === "Enter") { e.preventDefault(); commitRename(); }
-    });
-    app.addEventListener("focusout", function (e) {
-      if (e.target.id === "rename") setTimeout(commitRename, 0);
     });
     document.addEventListener("paste", function (e) {
       if (!e.clipboardData) return;

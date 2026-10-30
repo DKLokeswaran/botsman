@@ -17,8 +17,7 @@ Research only. Reddit points come from search excerpts (direct fetches are block
 
 ## 2. Native Kotlin + Compose on Android
 First-class, with no band-aids.
-- **Background:** don't keep a WebSocket open; Android 15 caps `dataSync` services at 6 hours a day. Let UnifiedPush wake the app, and connect only while it's open. For an always-on link, use the `specialUse` or `connectedDevice` service types.
-- **UnifiedPush:** the connector is at 3.3.5 (Aug 2026), regular releases.
+- **Background:** the app keeps its own connection in a foreground service. Android 15 caps `dataSync` services at 6 hours a day, so the service uses the `specialUse` type. ntfy is an optional alternative.
 - **Keyboard with a bottom composer:** one `imePadding` under edge-to-edge.
 - **Markdown:** mikepenz renderer 0.46.0 (Oct 2026), streaming-capable. Markwon is dead.
 - Pickers, pasted images, notifications and Keystore are standard platform APIs.
@@ -42,7 +41,7 @@ Every feature gets built twice, and the apps drift apart. Ways to keep them in s
 **Top 3 risks:**
 1. The two apps drifting apart.
 2. Windows signing and toast registration.
-3. Android background delivery depends entirely on UnifiedPush/ntfy.
+3. Android background delivery depends on the foreground service staying alive, which some phone makers' app killers interfere with.
 
 ## Links
 - Tauri signing / Smart App Control: https://v2.tauri.app/distribute/sign/windows/
@@ -57,6 +56,5 @@ Every feature gets built twice, and the apps drift apart. Ways to keep them in s
 - Fluxzy Electron→Tauri (2026): https://www.fluxzy.io/resources/blogs/electron-to-tauri-migration-fluxzy-desktop
 - X (public search): @meowybnuuy on Epic launcher using Tauri+WebView2 (14 Oct 2026, 284 likes); @Yay_Yow "WebView2 … the only competent one" (23 Oct 2026); @Aduneer SmartScreen on unsigned Tauri app (20 Oct 2026)
 - Android 15 FGS timeout: https://developer.android.com/about/versions/15/behavior-changes-15 ; OpenClaw fix: https://github.com/openclaw/openclaw/pull/80082
-- UnifiedPush connector releases: https://codeberg.org/UnifiedPush/android-connector/releases
 - Compose edge-to-edge/IME: https://developer.android.com/develop/ui/compose/system/setup-e2e
 - Markdown renderer: https://github.com/mikepenz/multiplatform-markdown-renderer/releases ; Markwon unmaintained: https://github.com/noties/Markwon/issues/460

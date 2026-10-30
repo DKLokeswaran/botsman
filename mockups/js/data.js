@@ -149,13 +149,6 @@ const HB = {
     ["quartermaster", 0.15],
     ["scribe", 0.1]
   ],
-  usageChats: [
-    { bot: "junior", title: "Main", cost: 4.8 },
-    { bot: "atlas", title: "Migration memo", cost: 3.1 },
-    { bot: "nightwatch", title: "Deploy watch", cost: 1.2 },
-    { bot: "junior", title: "Tuesday plan", cost: 0.05 },
-    { bot: "ledger", title: "Main", cost: 0.22 }
-  ],
   templates: [
     {
       id: "t-brief",
@@ -215,8 +208,8 @@ const HB = {
       paused: false,
       result: "Ran just now. Nothing new since the 7:00 briefing.",
       runs: [
-        { when: "Today · 7:00", status: "Succeeded", detail: "Posted into the main chat.", msg: "j-brief" },
-        { when: "Yesterday · 7:00", status: "Succeeded", detail: "Posted into the main chat.", msg: "j-brief-y" },
+        { when: "Today · 7:00", status: "Succeeded", detail: "Posted into the chat.", msg: "j-brief" },
+        { when: "Yesterday · 7:00", status: "Succeeded", detail: "Posted into the chat.", msg: "j-brief-y" },
         { when: "Mon · 7:00", status: "Failed", detail: "Calendar tool timed out. Nothing was posted." }
       ]
     },
@@ -252,7 +245,7 @@ const HB = {
       paused: false,
       result: "Ran just now. The week is still open: the memo, and the dentist today.",
       runs: [
-        { when: "Last Sunday · 18:00", status: "Succeeded", detail: "Posted into the main chat.", msg: "j-sunday" }
+        { when: "Last Sunday · 18:00", status: "Succeeded", detail: "Posted into the chat.", msg: "j-sunday" }
       ]
     },
     {
@@ -270,7 +263,7 @@ const HB = {
       paused: false,
       result: "Ran just now. Run 1842 is still the latest, and it failed at migrate.",
       runs: [
-        { when: "Today · 7:00", status: "Succeeded", detail: "Posted into the main chat.", msg: "n-deploy-7" },
+        { when: "Today · 7:00", status: "Succeeded", detail: "Posted into the chat.", msg: "n-deploy-7" },
         { when: "Today · 6:00", status: "Failed", detail: "The workflow API did not answer. Nothing was posted." }
       ]
     },
@@ -289,7 +282,7 @@ const HB = {
       paused: false,
       result: "Ran just now. The electricity bill is the only one due this week.",
       runs: [
-        { when: "Yesterday · 9:00", status: "Succeeded", detail: "Posted into the main chat.", msg: "l-invoice" }
+        { when: "Yesterday · 9:00", status: "Succeeded", detail: "Posted into the chat.", msg: "l-invoice" }
       ]
     },
     {
@@ -352,17 +345,6 @@ HB.photo = "data:image/svg+xml," + encodeURIComponent(
   '<text x="52" y="190" font-family="Segoe UI, sans-serif" font-size="16" fill="#444">October statement, page 1</text>' +
   "</svg>"
 );
-
-HB.sessions = {
-  junior: [
-    { id: "main", title: "Main", main: true, pinned: true, auto: false, when: "Today", preview: "Gym is Thursday 06:30.", sort: 50 },
-    { id: "pack", title: "Packing list for Friday", main: false, pinned: true, auto: true, when: "Today", preview: "Passport, charger, the blue shirt.", sort: 30 },
-    { id: "tue", title: "Tuesday plan", main: false, pinned: false, auto: true, when: "Today", preview: "Keep Friday light.", sort: 20 },
-    { id: "inv", title: "Electricity bill", main: false, pinned: false, auto: true, when: "Yesterday", preview: "Due Friday. Matches the letter.", sort: 10 },
-    { id: "old1", title: "Grocery run", main: false, pinned: false, auto: true, archived: true, when: "Last week", preview: "Milk, rice, coffee.", sort: 2 },
-    { id: "old2", title: "Airport pickup", main: false, pinned: false, auto: true, archived: true, when: "Last week", preview: "Terminal 2, 18:10.", sort: 1 }
-  ]
-};
 
 HB.threads = {};
 
