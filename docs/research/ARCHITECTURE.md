@@ -4,27 +4,35 @@ Hermes Bots is a Windows and Android client for a self-hosted Hermes Agent, plus
 
 ## Components
 
-```text
- Windows app ─┐                        devbox (Tailscale)
-              │  HTTPS/WS over      ┌──────────────────────────────────────────┐
- Android app ─┼─ Tailscale ───────► │ hermes dashboard  :9119                  │
- (foreground  │                     │   /api/ws (JSON-RPC), REST               │
-  service)    │                     │   runs every chat turn                   │
-              │                     │   hermes-bots plugin                     │
-              │                     │     push hooks, alert stream route       │
-              │                     │                                          │
-              │                     │ hermes gateway                           │
-              │                     │   cron (routine runs)                    │
-              │                     │   hermes-bots plugin                     │
-              │                     │     hbapp delivery platform, push hooks  │
-              │                     │          │ routine output                │
-              │                     │          ▼                               │
-              │                     │ state.db (chats, shared by both)         │
-              │                     └──────────────┬───────────────────────────┘
-              │                                    │ HTTPS POST (optional)
-              │   optional push        ┌───────────▼──────┐
-              └──── ntfy app ◄──────── │ ntfy.sh          │
-                                       └──────────────────┘
+```mermaid
+flowchart LR
+    win["Windows app<br/>(tray)"]
+    android["Android app<br/>(foreground service)"]
+    ntfyapp["ntfy app"]
+    ntfysh["ntfy.sh"]
+
+    subgraph devbox["devbox (Tailscale)"]
+        subgraph dashboard["hermes dashboard :9119"]
+            api["/api/ws JSON-RPC, REST<br/>runs every chat turn"]
+            dplugin["hermes-bots plugin<br/>push hooks, alert stream route"]
+        end
+        subgraph gateway["hermes gateway"]
+            cron["cron<br/>routine runs"]
+            gplugin["hermes-bots plugin<br/>hbapp delivery platform, push hooks"]
+        end
+        db[("state.db<br/>chats")]
+    end
+
+    win -- "HTTPS/WS over Tailscale" --> api
+    android -- "HTTPS/WS over Tailscale" --> api
+    win -- "alert stream" --> dplugin
+    android -- "alert stream" --> dplugin
+    api --- db
+    cron -- "routine output" --> gplugin
+    gplugin -- "writes into chat" --> db
+    gplugin -. "alerts" .-> dplugin
+    dplugin -. "HTTPS POST (optional)" .-> ntfysh
+    ntfysh -.-> ntfyapp
 ```
 
 - **Clients.** Native networking only (B10). They talk to the dashboard on port 9119 and never to the gateway directly.
@@ -38,8 +46,7 @@ Hermes Bots is a Windows and Android client for a self-hosted Hermes Agent, plus
 | Concept | Hermes object | Notes |
 |---|---|---|
 | Bot | Profile | `profiles.list` is the roster. One machine-level dashboard serves every profile |
-| Main chat | Ordinary dashboard session | Created with `session.create`. Its stored id is kept in the profile's `ui_meta` |
-| Side chat | Ordinary dashboard session | Created with `session.create` |
+| Chat | Ordinary dashboard session | One per bot, created with `session.create`. Its stored id is kept in the profile's `ui_meta`. Routines post into it |
 | Bot metadata the app adds | `ui_meta` on the profile | Free-form JSON with per-key compare-and-swap (`profiles.configure` with `ui_meta_expected_revisions`) |
 
 The profile's Bot Chat is not used. Its routine delivery always starts an agent turn (B15).
@@ -56,7 +63,7 @@ A routine is a cron job that posts its output into an existing chat without star
   3. appends the text to the chat as a user-role message prefixed `[Routine: <name>]`, using `gateway.mirror.mirror_to_session(..., role="user", session_id=<stored id>)`;
   4. raises the routine alert (see Push).
 - No turn starts. The next reply in that chat sees every routine output that fits in its context, together with the user's own messages.
-- Several related routines can post into the same chat. From that chat the user can ask the bot to change a routine, and the bot edits it with its cron tool.
+- All of a bot's routines post into its chat. From there the user can ask the bot to change a routine, and the bot edits it with its cron tool.
 - Anything risky happens when the user replies, in an ordinary dashboard turn with normal approvals.
 - The app shows messages with the `[Routine: …]` prefix as routine output.
 
@@ -81,7 +88,7 @@ Every chat uses the dashboard socket directly, the way Hermes Desktop does:
 
 ## Sync across devices
 
-All shared state lives in Hermes, and the clients store only the login.
+All state lives in Hermes. Clients hold no state of their own: anything they keep locally, such as the login or cached chats, is a copy that Hermes can rebuild.
 
 - Pin, archive, hide and read state are session columns. Write them with `PATCH /api/sessions/{id}` and a body of `{pinned | archived | hidden | unread, request_id, expected_revision}`. `expected_revision` is the session's current `runtime_revision`. Without `request_id` and `expected_revision` the server returns 409.
 - `unread: false` sets the shared `last_read_at` watermark to now. There is no per-device read state.
@@ -144,6 +151,5 @@ Foreground-service setup on Android:
 ## Open decisions
 
 - Desktop and mobile stack.
-- Side chats or Grok-style message threads for in-context replies.
 - Alert stream transport: WebSocket route or long-polling.
 - Messages between bots. Hermes's `message_agent` tool is available only in Bot Chat.

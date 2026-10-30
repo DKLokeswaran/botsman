@@ -4,8 +4,8 @@ This document lists the constraints that decide whether Hermes Bots can be built
 
 Hermes Bots is a custom Windows and Android client for a self-hosted Hermes Agent **v0.22.5**. It needs:
 
-- per-profile bots, each with a main chat and side chats
-- routines (cron) that post into an existing chat without starting a turn, with replies in context
+- per-profile bots, each with one chat
+- routines (cron) that post into the bot's chat without starting a turn, with replies in context
 - streaming replies and live tool activity
 - inline approvals and clarifying questions
 - session history, synced across devices
@@ -228,7 +228,7 @@ Cost: about 400 MB of disk for the environment, about 500 MB RAM per running pro
 | Approval raised by a routine's follow-up turn | reached the bridge |
 | Plugin routes without login | 401 |
 
-**Chosen: avoid Bot Chat.** Bot Chat's routine delivery always starts a turn (B15). Main chats are ordinary dashboard sessions, and routines deliver into them through the plugin's delivery platform, so no bridge is needed.
+**Chosen: avoid Bot Chat.** Bot Chat's routine delivery always starts a turn (B15). Each bot's chat is an ordinary dashboard session, and routines deliver into it through the plugin's delivery platform, so no bridge is needed.
 
 **Verdict: avoided.**
 
