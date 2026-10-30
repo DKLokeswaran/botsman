@@ -18,7 +18,7 @@ The architecture that answers these constraints is in [ARCHITECTURE.md](ARCHITEC
 - **Hermes source.** `hermes-agent` at commit `bf0203a794` (tag v0.22.5, 2026-10-23), the tree the devbox instance runs. File references below are paths in that tree.
 - **Live tests on devbox, 2026-10-30.** One routine delivered into the main profile's Bot Chat, a reply sent from a dashboard client, and the logs of both Hermes processes.
 - **Test-instance runs, 2026-10-30.** A throwaway Hermes on port 9129 with its own `HERMES_HOME`, its own gateway, no messaging platforms, and a test plugin.
-- **Device test, 2026-10-30.** Three ntfy.sh messages to an Android phone with the app closed.
+- **Device tests, 2026-10-30.** Messages to an Android phone with the app in the background: three through ntfy.sh, and three through a foreground-service connection to the devbox over Tailscale.
 - **Repo docs.** `docs/research/REPORT.md`, `docs/research/LATER-FINDINGS.md`, and the phase-0 branch `cursor/phase0-integration:docs/regressions.md`.
 
 Items not confirmed by source or by a test are marked **(unverified)**.
@@ -28,7 +28,7 @@ Items not confirmed by source or by a test are marked **(unverified)**.
 | # | Constraint | Area | Needs a Hermes code change? | Verdict |
 |---|---|---|---|---|
 | B1 | Hermes has no device push channel | Hermes | No (plugin) | Manageable |
-| B2 | Android delivery from a self-hosted ntfy depends on a foreground service and Tailscale | Platform / network | No | Manageable with ntfy.sh |
+| B2 | Android stops background connections when the app is closed | Platform / network | No | Manageable |
 | B3 | No global "approval pending" event on the socket | Hermes architecture | No (plugin) | Manageable |
 | B4 | A routine's own run can never ask for approval | Hermes | No | Manageable |
 | B5 | Approvals time out and fail closed after 300 s | Hermes | No (config) | Manageable |
@@ -42,7 +42,7 @@ Items not confirmed by source or by a test are marked **(unverified)**.
 | B13 | Windows notification activation and unsigned installer | Platform | No | (unverified) |
 | B14 | Bot Chat runs in the gateway process, out of the dashboard's reach | Hermes architecture | No (plugin) | Manageable |
 
-**Bottom line.** Hermes Bots is feasible as specified with stock Hermes v0.22.5, a companion Hermes plugin, and ntfy.sh for push. B8 is the one serious risk left, and it is handled by pinning the Hermes version. Details are at the end.
+**Bottom line.** Hermes Bots is feasible as specified with stock Hermes v0.22.5 and a companion Hermes plugin, with push through the app's own foreground service. B8 is the one serious risk left, and it is handled by pinning the Hermes version. Details are at the end.
 
 ---
 
@@ -62,11 +62,21 @@ Config-only outbound webhooks (`hooks.outbound`) exist too. They are registered 
 
 **Verdict: manageable.**
 
-## B2. Android delivery from a self-hosted ntfy
+## B2. Android delivery while the app is closed
 
-**Constraint.** ntfy's Android app uses Firebase only for ntfy.sh. For a self-hosted server it always keeps its own connection open in a foreground service ([docs.ntfy.sh/subscribe/phone](https://docs.ntfy.sh/subscribe/phone/#instant-delivery)). The ntfy setting `upstream-base-url` helps iOS only.
+**Constraint.** Android stops background network connections. Doze cuts network access for apps that are not exempt from battery optimisation, and phone makers such as Samsung, Xiaomi, Huawei, OnePlus, Oppo and Vivo add their own app-killing on top ([dontkillmyapp.com](https://dontkillmyapp.com)). Firebase Cloud Messaging is the only channel that is exempt by default, and it needs a Google project and a third-party relay.
 
-The devbox ntfy (2.34.0) listens only on the Tailscale IP. Delivery to the phone therefore needs both the ntfy connection and the Tailscale VPN to stay alive. On 2026-10-30 at 03:11 IST, `tailscale status` showed the phone offline for 31 minutes. The build 39 logs (below) show the server accepting every notification and the phone showing none.
+Hermes Bots has no relay of its own, so the Android app must either keep its own connection alive or use a push service that has one. The devbox Hermes and ntfy listen only on the Tailscale IP, so a self-held connection also depends on the Tailscale VPN staying up. On 2026-10-30 at 03:11 IST, `tailscale status` showed the phone offline for 31 minutes. The build 39 logs (below) show the server accepting every notification and the phone showing none.
+
+**Device test of a foreground service over Tailscale, 2026-10-30.** The ntfy app stood in for the app's own foreground service: subscribed to the devbox ntfy over Tailscale, ntfy and Tailscale set to Unrestricted battery, Tailscale set as always-on VPN, ntfy left in the background, phone locked. Samsung Galaxy A16.
+
+| # | Sent (IST) | Phone state | Result |
+|---|---|---|---|
+| 1 | 15:15:29 | in use | arrived on time |
+| 2 | 15:30:30 | locked 15 min | arrived on time |
+| 3 | 18:28:37 | locked 60 min (Doze) | arrived on time |
+
+The phone stayed connected to the tailnet throughout (`tailscale status` checked every 5 minutes).
 
 **Device test on ntfy.sh, 2026-10-30.** Play Store build of ntfy, subscribed to a random topic on ntfy.sh, app swiped away, phone locked, no battery-optimisation exemption, Tailscale not needed.
 
@@ -76,15 +86,14 @@ The devbox ntfy (2.34.0) listens only on the Tailscale IP. Delivery to the phone
 | 2 | 05:27:11 | idle 15 min | arrived on time |
 | 3 | 06:12:12 | idle 60 min (Doze) | arrived on time |
 
-**Workaround.** Publish to ntfy.sh from the plugin (B1).
+**Workaround.** Two push modes, chosen in the app:
 
-- ntfy.sh and Google see the topic and the timing. ntfy.sh also sees the message text.
-- Content-free messages ("Junior needs you") keep conversation text off third-party servers. The app then fetches the details over Tailscale.
-- The topic name is the only secret unless the topic is reserved behind an ntfy.sh access token.
+- **Foreground service (default).** The Android app holds its own connection to Hermes over Tailscale in a foreground service. No dependency beyond Tailscale. At setup the app asks for the battery-optimisation exemption with the standard Android prompt and asks the user to make the VPN always-on. For phone makers with extra app-killing, the app links to that maker's page on dontkillmyapp.com. Swiping the app out of recents leaves the service running; Force stop ends it.
+- **ntfy (optional).** The plugin publishes to an ntfy topic, and the ntfy app delivers it. With ntfy.sh, delivery uses FCM and needs no exemptions or VPN. ntfy.sh and Google see the topic and the timing, and ntfy.sh also sees the message text. Content-free messages ("Junior needs you") keep conversation text off third-party servers, and a topic reserved behind an ntfy.sh access token keeps others from reading it.
 
-The other options are a public endpoint for the self-hosted ntfy, or the self-hosted ntfy plus per-device battery exemptions and always-on Tailscale. Both cost more than ntfy.sh and were not tested.
+Long-term behaviour of the foreground service (several days, reboots, app updates) and behaviour on other phone makers are **(unverified)**.
 
-**Verdict: manageable with ntfy.sh.**
+**Verdict: manageable.**
 
 ## B3. No global "approval pending" event on the socket
 
@@ -181,7 +190,7 @@ Two side effects:
 
 ## B11. Single network path and single host
 
-**Constraint.** Everything goes over Tailscale (PC to devbox RTT 144 ms, direct path). Devbox has 6 vCPU and about 12 GB RAM. It runs two Hermes processes at roughly 500 MB RSS each, plus Caddy, the Honcho dashboard and other agents. If Tailscale or devbox is down, every bot and routine is down. Push through ntfy.sh (B2) still reaches the phone, but the app cannot fetch the details.
+**Constraint.** Everything goes over Tailscale (PC to devbox RTT 144 ms, direct path). Devbox has 6 vCPU and about 12 GB RAM. It runs two Hermes processes at roughly 500 MB RSS each, plus Caddy, the Honcho dashboard and other agents. If Tailscale or devbox is down, every bot, every routine and the default push channel are down.
 
 **Verdict: manageable**, with one point of failure.
 
@@ -235,14 +244,14 @@ What the logs show about the missing push in build 39. They were read only; topi
 - **ntfy cache.** 17 messages on one UnifiedPush topic: 6 on 2026-10-28 and 11 on 2026-10-29 between 01:29:38 and 01:33:42 IST.
 - **Process state.** The ntfy server was stopped at 2026-10-29 01:38:27 IST.
 
-The notifier to ntfy leg worked. The loss happened between the self-hosted ntfy and the phone. Likely causes: a stale UnifiedPush registration (the same topic was reused across reinstalls), the phone being off the tailnet, or Android killing the ntfy connection. This is the failure B2 describes. The ntfy.sh device test does not depend on any of these.
+The notifier to ntfy leg worked. The loss happened between the self-hosted ntfy and the phone. Likely causes: a stale UnifiedPush registration (the same topic was reused across reinstalls), the phone being off the tailnet, or Android killing the ntfy connection. This is the failure B2 describes. The foreground-service device test removes the last two causes with an always-on VPN and battery exemptions, and the ntfy.sh device test does not depend on any of them.
 
 ## Is it feasible as specified?
 
 **Yes**, with stock Hermes v0.22.5 and these conditions:
 
 1. A companion Hermes plugin provides the Bot Chat bridge (B14) and the push hooks (B1).
-2. Push goes through ntfy.sh (B2), preferably as content-free messages on a reserved topic.
+2. Android push uses the app's own foreground service over Tailscale, with battery exemption and always-on VPN; ntfy is an optional alternative (B2).
 3. Hermes is pinned, and every upgrade passes the contract and plugin checks (B8).
 4. Clients use native networking, resume by stored id, and treat a new replay epoch as a reset (B6, B7, B10).
 5. Development runs against a separate test instance (B12).
@@ -252,4 +261,6 @@ Open items:
 
 - Windows toast activation and installer signing (B13).
 - How outbound webhooks behave in the standalone dashboard (B1).
+- Long-term foreground-service delivery and other phone makers (B2).
+- Installing plugins from the app. `plugins.manage` supports it, but it has not been tested (see ARCHITECTURE.md).
 - A production design for the bridge transport. The test used HTTP long-polling. Whether WebSocket routes in plugins sit behind the dashboard login is unverified.

@@ -8,17 +8,18 @@ Hermes Bots is a Windows and Android client for a self-hosted Hermes Agent, plus
  Windows app ─┐                        devbox (Tailscale)
               │  HTTPS/WS over      ┌──────────────────────────────────────────┐
  Android app ─┼─ Tailscale ───────► │ hermes dashboard  :9119                  │
-              │                     │   /api/ws (JSON-RPC), REST               │
-              │                     │   hermes-bots plugin                     │
-              │                     │     /api/plugins/hermes-bots/…  (bridge) │
+ (foreground  │                     │   /api/ws (JSON-RPC), REST               │
+  service)    │                     │   hermes-bots plugin                     │
+              │                     │     /api/plugins/hermes-bots/…           │
+              │                     │       bridge, alert stream               │
               │                     │          │ gateway.sock + loopback /api/ws│
               │                     │          ▼                               │
               │                     │ hermes gateway                           │
               │                     │   Bot Chat sessions, cron, Discord       │
               │                     │   hermes-bots plugin (push hooks)        │
               │                     └──────────────┬───────────────────────────┘
-              │                                    │ HTTPS POST
-              │   push (FCM wake-up)   ┌───────────▼──────┐
+              │                                    │ HTTPS POST (optional)
+              │   optional push        ┌───────────▼──────┐
               └──── ntfy app ◄──────── │ ntfy.sh          │
                                        └──────────────────┘
 ```
@@ -26,8 +27,8 @@ Hermes Bots is a Windows and Android client for a self-hosted Hermes Agent, plus
 - **Clients.** Native networking only (B10). They talk to the dashboard on port 9119 and never to the gateway directly.
 - **Dashboard (`hermes dashboard`).** Login, REST, and the JSON-RPC socket `/api/ws`. It runs side chats and every other non-Bot-Chat session.
 - **Gateway (`hermes gateway`).** Owns each profile's Bot Chat, runs cron, and delivers routine output into Bot Chat.
-- **`hermes-bots` plugin.** Installed in the Hermes home and enabled in `plugins.enabled`. It loads in both processes and has two jobs: the Bot Chat bridge (dashboard side) and push (both sides).
-- **ntfy.sh.** Push transport. The Android app receives through the ntfy app (Play Store build, which uses FCM for ntfy.sh). Windows uses the app's own tray notifications.
+- **`hermes-bots` plugin.** Installed in the Hermes home and enabled in `plugins.enabled`. It loads in both processes and has two jobs: the Bot Chat bridge (dashboard side) and push alerts (both sides).
+- **ntfy.sh (optional).** Alternative Android push transport, received through the ntfy app. The default needs no push service (see Push).
 
 ## Bots and chats
 
@@ -98,14 +99,40 @@ All shared state lives in Hermes, and the clients store only the login.
 
 The plugin's hooks run in whichever process runs the turn:
 
-| Hook | Push |
+| Hook | Alert |
 |---|---|
 | `pre_approval_request` | "<bot> needs approval" |
 | `on_human_input_request` (kind `clarify`) | "<bot> has a question" |
 | `post_approval_response`, `on_human_input_resolved` | clear the pending alert |
 | `on_session_end` | "<bot> finished" (for long turns and routine follow-ups) |
 
-The plugin POSTs to an ntfy.sh topic. Messages carry no conversation text, only the bot and the kind of event, and the app fetches details when opened. The topic should be reserved behind an ntfy.sh access token. A click action deep-links into the chat.
+Alerts carry no conversation text, only the bot and the kind of event. The app fetches details when opened, and a tap deep-links into the chat. The plugin keeps the alerts and serves them from a dashboard route, so the gateway-side hooks and the dashboard-side hooks feed one stream.
+
+### Delivery
+
+| Platform | Mode | How |
+|---|---|---|
+| Android | Foreground service (default) | The app holds a connection to the alert stream over Tailscale and posts system notifications itself |
+| Android | ntfy (optional) | The plugin also POSTs each alert to an ntfy topic; the ntfy app shows it. For ntfy.sh, the topic is reserved behind an access token |
+| Windows | Tray | The app runs in the tray, holds the same connection, and shows toast notifications |
+
+Foreground-service setup on Android:
+
+- Request the battery-optimisation exemption with the standard Android prompt.
+- Ask the user to set the VPN app (Tailscale) as always-on VPN.
+- Detect the phone maker and link to its page on dontkillmyapp.com when it is known to kill background apps.
+- Keep the service running when the app is swiped out of recents. Force stop ends it until the app is opened again.
+- Use a notification channel with sound for approvals and questions.
+
+## Plugin install from the app
+
+`plugins.manage` on `/api/ws` installs, updates and removes Hermes plugins:
+
+- Install takes `action: "install"` with an `identifier` or `repo`, an optional `ref`, and `enable`. Every install goes through Hermes's security scan.
+- An enabled plugin is activated without a restart in the dashboard and in the running gateway (`hermes_cli/plugins_activation.py`), and its dashboard routes are mounted live (`_try_hot_mount_plugin_api` in `hermes_cli/web_server_dashboard.py`).
+- The app uses this to install and update the `hermes-bots` plugin itself and to manage other plugins. A missing or outdated `hermes-bots` plugin is detected at connect.
+
+This is based on the source and has not been tested.
 
 ## Login
 
@@ -125,4 +152,4 @@ The plugin POSTs to an ntfy.sh topic. Messages carry no conversation text, only 
 - Desktop and mobile stack.
 - Side chats or Grok-style message threads for in-context replies.
 - Bridge transport: WebSocket route or long-polling.
-- Push content: content-free messages (this design) or full text through ntfy.sh.
+- Alert stream transport: WebSocket route or long-polling, shared with the bridge.
