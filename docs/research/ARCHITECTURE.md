@@ -2,6 +2,16 @@
 
 Hermes Bots is a Windows and Android client for a self-hosted Hermes Agent, plus one companion Hermes plugin. There is no separate server. Everything server-side is stock Hermes, Hermes config, or the plugin. The constraints behind this design are in [BLOCKERS.md](BLOCKERS.md).
 
+## Stack
+
+| Part | Stack |
+|---|---|
+| Windows app | Tauri, with the UI in HTML, CSS and JavaScript |
+| Android app | Kotlin with Jetpack Compose |
+| Companion plugin | Python, as a Hermes plugin |
+
+The reasons are in [WINDOWS-FIRST-STACK.md](WINDOWS-FIRST-STACK.md).
+
 ## Components
 
 ```mermaid
@@ -107,7 +117,10 @@ The plugin raises alerts from its hooks, in whichever process runs the turn, and
 | `on_session_end` hook | "<bot> finished" (for long turns) |
 | `hbapp` adapter, after writing routine output | "<bot> has a new routine result" |
 
-Alerts carry no conversation text, only the bot and the kind of event. The app fetches details when opened, and a tap deep-links into the chat. The plugin keeps the alerts and serves them from a dashboard route, so alerts raised in the gateway and in the dashboard feed one stream.
+Alerts carry no conversation text, only the bot and the kind of event. The app fetches details when opened, and a tap deep-links into the chat. The plugin keeps the alerts and serves them from a WebSocket route, `/api/plugins/hermes-bots/alerts`, so alerts raised in the gateway and in the dashboard feed one stream.
+
+- The client connects with a fresh ticket from `POST /api/auth/ws-ticket`, as for `/api/ws`.
+- Hermes does not check logins on plugin WebSocket routes (B17). The route calls `hermes_cli.web_server_chat._ws_auth_ok(ws)` before accepting and closes with 1008 when it fails.
 
 ### Delivery
 
@@ -150,6 +163,4 @@ Foreground-service setup on Android:
 
 ## Open decisions
 
-- Desktop and mobile stack.
-- Alert stream transport: WebSocket route or long-polling.
 - Messages between bots. Hermes's `message_agent` tool is available only in Bot Chat.

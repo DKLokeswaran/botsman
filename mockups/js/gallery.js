@@ -11,7 +11,7 @@
     {
       id: "chat",
       title: "Bot chat",
-      blurb: "Junior's main chat. A routine posted the morning briefing, and the reply under it quotes that message. Older runs of that routine are earlier in the same chat. A private handoff is a full-width note: one line for who sent it, who it is for, and the time. Open it and the note wraps. Scroll for the table, the todo list, the file diff, and a code block with Copy. Finished replies show tokens, cost, and Retry. Thinking and tool lines are collapsed; tap one to open it. Summarize is in the header.",
+      blurb: "Junior's chat. A routine posted the morning briefing, and the reply under it quotes that message. Older runs of that routine are earlier in the same chat. A private handoff is a full-width note: one line for who sent it, who it is for, and the time. Open it and the note wraps. Scroll for the table, the todo list, the file diff, and a code block with Copy. Finished replies show tokens, cost, and Retry. Thinking and tool lines are collapsed; tap one to open it. Summarize is in the header.",
       phone: "#/chat/junior",
       desk: "#/chat/junior"
     },
@@ -39,7 +39,7 @@
     {
       id: "slash",
       title: "Slash commands",
-      blurb: "Type / in the message box, or tap the / button. The menu filters as you type and moves with the arrow keys. Enter runs the highlighted command. These are Hermes commands without their own control: compress, clear, undo, skills, personality, usage, and help. Model, Stop, routines, and a new chat stay as buttons. Summarize in the header does the same thing as /compress.",
+      blurb: "Type / in the message box, or tap the / button. The menu filters as you type and moves with the arrow keys. Enter runs the highlighted command. These are Hermes commands without their own control: compress, clear, undo, skills, personality, usage, and help. Model, Stop, and routines stay as buttons. Summarize in the header does the same thing as /compress.",
       phone: "#/chat/junior?view=slash",
       desk: "#/chat/junior?view=slash"
     },
@@ -65,16 +65,9 @@
       desk: "#/chat/atlas"
     },
     {
-      id: "history",
-      title: "Side chats and history",
-      blurb: "Chats for one bot. Search is limited to this bot. Pin, rename, archive, and delete are on the row menu. Auto title stays until you rename. New side chat starts empty. Routines stay in Main. The main chat cannot be archived or deleted.",
-      phone: "#/history/junior",
-      desk: "#/history/junior"
-    },
-    {
       id: "routines-bot",
       title: "Routines for one bot",
-      blurb: "Junior's routines. Pause or resume, run now, edit, and history are on each card. Run now posts a message into that bot's main chat.",
+      blurb: "Junior's routines. Pause or resume, run now, edit, and history are on each card. Run now posts a message into that bot's chat.",
       phone: "#/routines/junior",
       desk: "#/routines/junior"
     },
@@ -102,7 +95,7 @@
     {
       id: "runs",
       title: "Run history",
-      blurb: "Outcomes only. Each bot has one main chat. A successful run opens that chat and highlights the message that run posted. A failed run posted nothing, so it has no Open.",
+      blurb: "Outcomes only. Each bot has one chat. A successful run opens that chat and highlights the message that run posted. A failed run posted nothing, so it has no Open.",
       phone: "#/routine/runs/morning",
       desk: "#/routine/runs/morning"
     },
@@ -116,7 +109,7 @@
     {
       id: "usage",
       title: "Usage",
-      blurb: "Spend over the last 14 days, then by bot, then by chat. Per-reply cost stays on the reply itself. The chat header also shows the open chat's total.",
+      blurb: "Spend over the last 14 days, then by bot. Per-reply cost stays on the reply itself. The chat header also shows the open chat's total.",
       phone: "#/usage",
       desk: "#/usage"
     },

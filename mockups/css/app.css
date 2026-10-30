@@ -22,7 +22,7 @@ img { max-width: 100%; display: block; }
 :focus-visible { outline: 2px solid var(--fg); outline-offset: 2px; }
 input:focus-visible, textarea:focus-visible, select:focus-visible { outline: none; }
 .field input:focus-visible, .field textarea:focus-visible, .field select:focus-visible,
-.search:focus-visible, .steer-row input:focus-visible { border-color: var(--fg); }
+.steer-row input:focus-visible { border-color: var(--fg); }
 .composer-box:focus-within { border-color: var(--fg); }
 ::selection { background: var(--fill); color: var(--fill-fg); }
 * { scrollbar-width: thin; scrollbar-color: var(--line-2) transparent; }
@@ -345,7 +345,7 @@ tr:last-child td { border-bottom: 0; }
 .chip img { width: 28px; height: 28px; border-radius: var(--r-sm); object-fit: cover; }
 .chip button { color: var(--fg-2); padding: 0 4px; }
 .steer-row { display: flex; gap: 8px; margin-bottom: 8px; }
-.steer-row input, .field input, .field textarea, .field select, .search {
+.steer-row input, .field input, .field textarea, .field select {
   width: 100%;
   background: var(--bg);
   border: 1px solid var(--line-2);
@@ -447,25 +447,8 @@ html[data-device="phone"] .primary.block { display: block; width: 100%; }
 .page { max-width: var(--measure); margin: 0 auto; padding: 16px 16px 32px; }
 .page h2 { font-size: 18px; letter-spacing: -0.03em; margin: 0 0 4px; }
 .lede { color: var(--fg-2); margin: 0 0 16px; }
-.search { margin-bottom: 12px; background: var(--bg); }
 .group-label { font-size: 12px; color: var(--fg-3); font-weight: 650; margin: 14px 0 6px; }
-.hist-row {
-  display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 8px;
-  padding: 10px 4px; border-bottom: 1px solid var(--line); align-items: center;
-}
-.hist-row button.title { text-align: left; }
-.hist-row .t { font-weight: 650; }
-.hist-row .m { display: block; color: var(--fg-3); font-size: 13px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.menu { position: relative; }
-.menu .pop-menu {
-  position: absolute; right: 0; top: 28px; z-index: 3;
-  background: var(--bg); border: 1px solid var(--line-2); border-radius: var(--r);
-  box-shadow: var(--shadow); min-width: 160px; padding: 4px;
-}
-.menu .pop-menu button { display: block; width: 100%; text-align: left; padding: 8px 10px; border-radius: var(--r-sm); }
-.menu .pop-menu button:hover { background: var(--bg-2); }
 .confirm { font-size: 13px; color: var(--fg-2); display: flex; gap: 8px; align-items: center; }
-.rename { width: 100%; }
 
 .r-card {
   border: 1px solid var(--line); border-radius: var(--r-card); padding: 12px 14px; margin: 0 0 10px;

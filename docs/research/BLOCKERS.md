@@ -43,6 +43,7 @@ Items not confirmed by source or by a test are marked **(unverified)**.
 | B14 | Bot Chat runs in the gateway process, out of the dashboard's reach | Hermes architecture | No | Avoided (Bot Chat not used) |
 | B15 | Routine delivery into Bot Chat always starts an agent turn | Hermes | No (plugin) | Manageable |
 | B16 | Routine output written during a running reply is lost to the model | Hermes | No (plugin) | Manageable |
+| B17 | Plugin WebSocket routes are not behind the dashboard login | Hermes | No (plugin) | Manageable |
 
 **Bottom line.** Hermes Bots is feasible as specified with stock Hermes v0.22.5 and a companion Hermes plugin. The plugin delivers routine output into chats and raises push alerts, and Android push goes through the app's own foreground service. B8 is the one serious risk left, and it is handled by pinning the Hermes version. Details are at the end.
 
@@ -264,6 +265,22 @@ Rows written between turns are fine. An open chat adds them to its history befor
 
 **Verdict: manageable.**
 
+## B17. Plugin WebSocket routes are not behind the login
+
+**Constraint.** Plugin HTTP routes under `/api/plugins/<name>/` require the dashboard login, but plugin WebSocket routes do not. Hermes checks socket credentials for its own sockets (`/api/ws`, the PTY and audio streams) and for plugins served by a secondary profile (`hermes_cli/web_server_plugin_profiles.py` `refuse_secondary_plugin_socket`), not for plugins of the main profile. Tested on the test instance with a plugin exposing one HTTP route and one WebSocket route:
+
+| Request | HTTP route | WebSocket route | WebSocket route with the plugin's own check |
+|---|---|---|---|
+| No credentials | 401 | accepted | 403 |
+| Login cookie | 200 | accepted | 403 |
+| Forged cookie | not tried | accepted | 403 |
+| Ticket from `POST /api/auth/ws-ticket` | not tried | accepted | accepted |
+| Login cookie with a foreign `Origin` | not tried | accepted | 403 |
+
+**Workaround.** The plugin's WebSocket handler calls `hermes_cli.web_server_chat._ws_auth_ok(ws)`, the check `/api/ws` uses, before accepting, and closes with 1008 when it fails. Clients then connect with a fresh single-use ticket, the same way they open `/api/ws`. `_ws_auth_ok` is a private function, so the plugin tests cover it on every Hermes upgrade (B8).
+
+**Verdict: manageable.**
+
 ---
 
 ## Build 39 push evidence
@@ -294,5 +311,4 @@ Open items:
 - How outbound webhooks behave in the standalone dashboard (B1).
 - Long-term foreground-service delivery and other phone makers (B2).
 - The gateway restart after installing the plugin relies on a supervisor to start the gateway again. Setups without one are unverified.
-- A transport for the alert stream. Whether WebSocket routes in plugins sit behind the dashboard login is unverified.
 - Messages between bots outside Bot Chat (`message_agent` is available only there).
