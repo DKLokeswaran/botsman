@@ -2,7 +2,7 @@
 
 Static, clickable mockups of the Hermes Bots client. They are for approval before any real client is built. They do not connect to Hermes. Sample data only.
 
-The look is Zoetrik. Orbitron, Tomorrow, Inter, and Fragment Mono load from Google Fonts. Dark follows the Zoetrik spec. Light is that flavor's Drafting Table scheme, derived so the app can follow the system. Mode is System, Light, or Dark, stored in this browser as `hb-theme`. A leftover `hb-flavor` value is removed on load.
+The look is Zoetrik, using the tokens in the shadcn/ui section of `DESIGN.md`. Orbitron, Inter, and Fragment Mono load from Google Fonts. Dark is the Zoetrik palette. Light is its Drafting Table scheme, so the app can follow the system. Mode is System, Light, or Dark, stored in this browser as `hb-theme`. A leftover `hb-flavor` value is removed on load.
 
 ## How to view
 
@@ -67,7 +67,7 @@ Typing `/` opens the command menu. It filters on the command name and the hint, 
 - Cost sits under every finished reply, and the chat header shows the thread total.
 - Reading width is about 720 pixels. The phone has an Android status bar. The desktop window has a caption bar.
 - Model names in the picker are samples.
-- Zoetrik is the only look. Dark matches the spec. Light uses the Drafting Table scheme, with the orange darkened to `#b73208` so the small uppercase labels stay readable on the paper background. System follows the device.
+- Zoetrik is the only look, with the tokens from the shadcn/ui section of `DESIGN.md`: orange primary buttons, Orbitron headings, Inter labels and body, an orange focus ring, square tags and avatars, and 4px buttons, cards and inputs. Light uses the Drafting Table scheme; its green, cyan and mint are darkened so they read on the paper background. System follows the device.
 
 ## Changes after the second review
 
@@ -91,4 +91,3 @@ Typing `/` opens the command menu. It filters on the command name and the hint, 
 11. Should a private handoff start collapsed, or open, as the Nightwatch sample does?
 12. Is a cost line under every reply too noisy?
 13. Steer adds a note and does not stop the turn. Stop ends it. A queued message waits. Is that the right trio?
-14. The light accent is a darker orange than the Drafting Table swatch, so 12px labels clear the paper background. Is that acceptable?

@@ -1,4 +1,4 @@
-/* Zoetrik tokens. Dark follows the flavor spec. Light is the Drafting Table scheme.
+/* Zoetrik tokens from DESIGN.md (shadcn/ui section). Dark is the flavor palette. Light is the Drafting Table scheme.
    data-theme="light"|"dark" forces a mode. With no attribute, the system preference applies. */
 
 :root {
@@ -9,27 +9,30 @@
   --bg-user: #ffffff;
   --bg-composer: #e8e5de;
   --fg: #111111;
-  --fg-2: #3c3a36;
-  --fg-3: #4e4c47;
+  --fg-2: #595856;
+  --fg-3: #595856;
   --bright: #111111;
   --line: #d4d0c6;
   --line-2: #b7b2a6;
   --fill: #111111;
   --fill-fg: #ffffff;
-  --accent: #b73208;
+  --accent: #d9480f;
   --accent-fg: #ffffff;
-  --error: #b42318;
+  --primary: #d9480f;
+  --primary-fg: #ffffff;
+  --ring: #d9480f;
+  --error: #dc2626;
   --green: #146b12;
   --cyan: #0b6e78;
   --mint: #0f6b52;
   --blue: #1f6fe0;
-  --btn: #111111;
-  --btn-fg: #ffffff;
+  --btn: #dedcd7;
+  --btn-fg: #111111;
   --hair: color-mix(in srgb, #111111 14%, transparent);
   --shadow: none;
   --font: "Inter", system-ui, sans-serif;
   --font-display: "Orbitron", sans-serif;
-  --font-label: "Tomorrow", sans-serif;
+  --font-label: "Inter", system-ui, sans-serif;
   --mono: "Fragment Mono", ui-monospace, monospace;
   --sidebar: 300px;
   --measure: 720px;
@@ -38,8 +41,8 @@
   --r-card: 4px;
   --r-composer: 4px;
   --r-bubble: 4px;
-  --r-av: 3px;
-  --r-sm: 3px;
+  --r-av: 0px;
+  --r-sm: 0px;
   --ease: cubic-bezier(0.2, 0.8, 0.2, 1);
   --dur: 200ms;
 }
@@ -57,16 +60,19 @@
   --bright: #ffffff;
   --line: #262626;
   --line-2: #262626;
-  --fill: #1d1d1d;
+  --fill: #171717;
   --fill-fg: #ffffff;
   --accent: #ffa41c;
   --accent-fg: #000000;
+  --primary: #ffa41c;
+  --primary-fg: #000000;
+  --ring: #ffa41c;
   --error: #f87171;
   --green: #71ff19;
   --cyan: #19f2ff;
   --mint: #78facb;
   --blue: #0099ff;
-  --btn: #1d1d1d;
+  --btn: #171717;
   --btn-fg: #ffffff;
   --hair: color-mix(in srgb, #ffffff 9%, transparent);
   --shadow: none;
@@ -86,16 +92,19 @@
     --bright: #ffffff;
     --line: #262626;
     --line-2: #262626;
-    --fill: #1d1d1d;
+    --fill: #171717;
     --fill-fg: #ffffff;
     --accent: #ffa41c;
     --accent-fg: #000000;
+    --primary: #ffa41c;
+    --primary-fg: #000000;
+    --ring: #ffa41c;
     --error: #f87171;
     --green: #71ff19;
     --cyan: #19f2ff;
     --mint: #78facb;
     --blue: #0099ff;
-    --btn: #1d1d1d;
+    --btn: #171717;
     --btn-fg: #ffffff;
     --hair: color-mix(in srgb, #ffffff 9%, transparent);
     --shadow: none;

@@ -181,8 +181,8 @@
     const sec = document.createElement("section");
     sec.className = "screen";
     sec.id = s.id;
-    const phoneSrc = "app.html?device=phone" + s.phone;
-    const deskSrc = "app.html?device=desktop" + s.desk;
+    const phoneSrc = "app.html?v=3&device=phone" + s.phone;
+    const deskSrc = "app.html?v=3&device=desktop" + s.desk;
     sec.innerHTML =
       "<h2>" + s.title + "</h2>" +
       "<p class=\"blurb\">" + s.blurb + "</p>" +

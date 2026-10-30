@@ -39,8 +39,8 @@ h2,
 .handoff .route {
   font-family: var(--font-label);
   font-weight: 600;
-  text-transform: uppercase;
-  letter-spacing: 0.1em;
+  text-transform: none;
+  letter-spacing: 0;
   font-size: 12px;
 }
 .side-label,
@@ -51,7 +51,7 @@ h2,
 .bot-sub,
 .meta,
 p { color: var(--fg-2); }
-.bubble { background: var(--bg); color: var(--fg); border: 1px solid var(--hair); }
+.bubble { background: var(--bg); color: var(--fg); border: 1px solid var(--line); }
 .bubble .msg-body,
 .bubble p { color: var(--fg); }
 .primary,
@@ -59,16 +59,20 @@ p { color: var(--fg-2); }
 .choice,
 .opt,
 .send,
-.day,
-.seg button.on {
+.day {
   background: var(--btn);
   color: var(--btn-fg);
-  border: 1px solid var(--hair);
-  box-shadow: none;
+  border: 1px solid transparent;
+}
+.primary,
+.choice.primary,
+.send {
+  background: var(--primary);
+  color: var(--primary-fg);
+  border: 1px solid transparent;
 }
 .opt.on,
-.day.on,
-.seg button.on {
+.day.on {
   background: var(--fg);
   color: var(--bg);
   border-color: var(--fg);
@@ -85,8 +89,7 @@ p { color: var(--fg-2); }
 .todos,
 .handoff-msg {
   background: var(--bg);
-  border: 1px solid var(--hair);
-  box-shadow: none;
+  border: 1px solid var(--line);
 }
 .card.alert { border-color: var(--accent); }
 .bars,
@@ -94,7 +97,7 @@ p { color: var(--fg-2); }
 .cmd {
   background: #000;
   color: #71ff19;
-  border: 1px solid var(--hair);
+  border: 1px solid var(--line);
   padding: 12px;
 }
 .bar { background: #71ff19; border-radius: 0; }
@@ -106,27 +109,26 @@ p { color: var(--fg-2); }
   outline: 1px solid var(--accent);
   background: color-mix(in srgb, var(--accent) 8%, transparent);
 }
-.status { border-bottom: 1px solid var(--hair); }
+.status { border-bottom: 1px solid var(--line); }
 .titlebar {
-  border-bottom: 1px solid var(--hair);
-  letter-spacing: 0.1em;
-  text-transform: uppercase;
+  border-bottom: 1px solid var(--line);
   font-family: var(--font-label);
 }
 .handoff { background: transparent; border: 0; }
-.handoff .route { color: var(--fg); letter-spacing: 0.08em; }
-.note-card { border-color: var(--hair); background: var(--bg); }
+.handoff .route { color: var(--fg); }
+.note-card { border-color: var(--line); background: var(--bg); }
 .note-card b {
   font-family: var(--font-label);
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
   font-size: 12px;
 }
 @media (prefers-reduced-motion: no-preference) {
-  .primary:hover,
   .ghost:hover,
-  .choice:hover,
-  .send:hover {
+  .choice:hover {
     background: color-mix(in srgb, var(--btn) 88%, var(--fg));
+  }
+  .primary:hover,
+  .choice.primary:hover,
+  .send:hover {
+    background: color-mix(in srgb, var(--primary) 90%, var(--bg));
   }
 }

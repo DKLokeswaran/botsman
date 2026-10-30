@@ -1,7 +1,7 @@
 ---
 version: "alpha"
 name: "Zoetrik"
-description: "Pitch-black engine room: Orbitron 900 caps, tracked Tomorrow labels, a vertical reel of glowing interface cards, a green-and-cyan install line, orange eyebrows on #111 bands."
+description: "Pitch-black engine room: Orbitron 900 caps, a vertical reel of glowing interface cards, a green-and-cyan install line, orange eyebrows on #111 bands."
 colors:
   primary: "#ffa41c"
   on-primary: "#000000"
@@ -11,13 +11,11 @@ colors:
   on-surface-variant: "#999999"
   outline: "#262626"
   bg3: "#151515"
-  btn: "#1d1d1d"
   green: "#71ff19"
   cyan: "#19f2ff"
   blue: "#0099ff"
   mint: "#78facb"
   magenta: "#c8287f"
-  paper: "#ebebeb"
 typography:
   headline-display:
     fontFamily: "Orbitron"
@@ -31,24 +29,14 @@ typography:
     fontWeight: 400
     lineHeight: 1.6
     letterSpacing: 0.01em
-  label-md:
-    fontFamily: "Tomorrow"
-    fontSize: 13px
-    fontWeight: 600
-    letterSpacing: 0.1em
 rounded:
-  sm: 3px
   md: 4px
   lg: 8px
 spacing:
   unit: 4px
-  section: 128px
-  max-width: 1000px
 ---
 
 # Zoetrik
-
-> A pitch-black engine room where every label is tracked uppercase and the only light comes from the screens being sold.
 
 Source: https://flavors.design/f/zoetrik
 
@@ -56,8 +44,7 @@ Source: https://flavors.design/f/zoetrik
 
 The landing page of an interactive-graphics engine for game HUDs, car dashboards
 and product UI, dressed like the tool itself: black canvas, square-shouldered
-sci-fi capitals, quiet grey body copy, and colour only where a screen is
-glowing. The hero is a split: on the left a 300px reel of labelled cards
+sci-fi capitals, quiet grey body copy. The hero is a split: on the left a 300px reel of labelled cards
 (GAME UI, PRODUCT UI, AUTOMOTIVE…) scrolls upward forever, each one a tiny
 live interface; on the right a tracked-out wordmark, a two-line Orbitron 900
 headline, and an install card whose command line is green and cyan. Sections
@@ -73,7 +60,6 @@ the chrome — the glow lives inside the product objects only.
 | bg        | `#000000` | the page, the hero, odd bands                             |
 | bg-2      | `#111111` | even bands, the install card, pricing and FAQ cards       |
 | bg-3      | `#151515` | quote cards sitting on a `#111` band                      |
-| btn       | `#1d1d1d` | every button slab                                         |
 | fg        | `#ffffff` | headlines, labels, card titles                            |
 | fg-muted  | `#999999` | every paragraph, captions, inactive tabs                  |
 | accent    | `#ffa41c` | section eyebrows, the "Most picked" tag, the gauge arc    |
@@ -84,88 +70,57 @@ the chrome — the glow lives inside the product objects only.
 | blue      | `#0099ff` | dial glow, editor selection, the Export chip, active node |
 | mint      | `#78facb` | pricing checks, seat-limit labels, status dot             |
 | magenta   | `#c8287f` | the closing panel, broadcast card, editor artboard        |
-| paper     | `#ebebeb` | the newsletter input, the only light surface              |
 
-Scheme: dark. Contrast rule: paragraphs `#999` on `#000` ≥ 7:1, headlines pure
-white. Colour rules: chrome is greyscale; accent orange appears only on
-eyebrows, one pricing tag and one gauge; green and cyan only inside commands
-and screens; every tint is `color-mix()` from these fifteen literals.
+Contrast rule: paragraphs `#999` on `#000` ≥ 7:1, headlines pure
+white.
 
 ## Typography
 
 - Display: `"Orbitron", sans-serif` — 900 for the h1 (40px/1.2), 700 for h2 (24px/1.4), always uppercase, tracking `0.01em`; 400 at 26px with `0.5em` tracking for the wordmark
-- Labels: `"Tomorrow", sans-serif` — 500/600, uppercase, tracking `0.1em` (`--label-track`): nav 12px, buttons 13px, eyebrows and card titles 14–15px, captions 10–12px
-- Body: `"Inter", system-ui, sans-serif` — 16px/1.6, tracking `0.01em`, always `--fg-muted`
+- Body: `"Inter", system-ui, sans-serif` — 16px/1.6, tracking `0.01em`
 - Mono: `"Fragment Mono", ui-monospace, monospace` — install commands, tab labels, the terminal, editor chrome
 - Scale: 9 / 10 / 12 / 13 / 14 / 16 / 22 / 24 / 28 / 30 / 40
-- Load: `<link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;500;700;900&family=Tomorrow:wght@500;600&family=Inter:wght@400;500;600&family=Fragment+Mono&display=swap">`
-- Rules: three voices with fixed jobs — Orbitron shouts, Tomorrow labels, Inter explains. Nothing is sentence case except paragraphs and quotes.
+- Load: `<link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;500;700;900&family=Inter:wght@400;500;600&family=Fragment+Mono&display=swap">`
 
 ## Layout
 
-- Max width 1000px, 24px gutters; the editor mockup is allowed to run past the right edge of the column
 - Base unit 4px; scale 4 / 8 / 12 / 16 / 24 / 32 / 64 / 128
-- Section rhythm 128px top and bottom (88px under 760px); bands alternate `#000` / `#111`
-- Hero: `300px | 1fr` with an 88px gap, full viewport height minus the 64px nav; the reel column is clipped top and bottom, the copy is vertically centred
-- Features are split rows (copy 0.9fr, object 1.1fr), alternating sides: editor mockup, runtime grid, agent terminal
-- Density: airy — whole viewports of black around one split; dense inside the cards
-- Mobile: the reel turns into a horizontal strip above the copy, splits stack, runtimes go 3-up
 
 ## Elevation & Depth
 
 Flat black slabs; depth comes from tone steps and from light emitted by the screens, never from shadows on chrome.
 
-- Surfaces step `#000 → #111 → #151515 → #1d1d1d` (page, band/card, card on band, button); a button inside the install card is mixed 70% toward the card so it sits one step up.
-- Hairlines are `1px solid color-mix(in srgb, var(--fg) 9%, transparent)` (`--hair`) on reel cards, quote cards, pricing cards, buttons, the nav bottom, and the stats strip.
 - Glow is emitted, not cast: the dial wears `box-shadow: 0 0 calc(var(--glow) * 26px) color-mix(in srgb, var(--blue) 65%, transparent), inset 0 0 calc(var(--glow) * 20px) …`; the reticle and gauge arc use `filter: drop-shadow(0 0 calc(var(--glow) * 6px) var(--green))`.
 - Scanlines over every reel card: `repeating-linear-gradient(color-mix(in srgb, var(--bg) calc(var(--scan) * 100%), transparent) 0 1px, transparent 1px 3px)`.
-- The highlighted plan gets an accent border at 70% and a 40px accent halo at 12%; the pricing toggle's selected half has `0 1px 2px` shadow (`--shadow`).
 - The closing panel is lit from above: `radial-gradient(38% 70% at 50% 0%, color-mix(in srgb, var(--fg) 30%, transparent), transparent 70%)` over a magenta vertical gradient.
 
 ## Shapes
 
-- Radius: 4px (`--radius`) on buttons, reel cards, the install card, quote cards, FAQ cards; 8px (`--radius-lg`) on pricing cards and the closing panel; 3px on tags, avatars and the toggle; 6px on the editor window and the newsletter input
+- Radius: 4px (`--radius`) on buttons, reel cards, the install card, quote cards, FAQ cards; 8px (`--radius-lg`) on pricing cards and the closing panel
 - Circles only inside screens: the dial, HUD rings, phone rings, the mint check discs (16px)
 - The phone in the mobile card has 20px top corners and no bottom edge, cropped by the card
 
-## Components
-
-- Buttons: 40px slabs, `padding: 0 16px`, `#1d1d1d`, hairline border, Tomorrow 600 13px uppercase at `0.1em`, a 15px glyph on the left (play disc, monitor, star, book). Hover lightens 12% toward fg. Nav button is 36px/12px. Pricing buttons are full width with the arrow on the right.
-- Reel cards: 34px title bar (Tomorrow 600 15px, centred, hairline under it) over a 220px live scene. Scenes: HUD reticle with three green chips, a blue-glowing round dial, an orange gauge reading 88, a phone on a green field, a broadcast lower-third on magenta stripes.
-- Install card: `#111`, 24px/20px padding. "ZOETRIK CLI" label, mono tabs with a 2px white underline on the active one over a `--border` rule, then the command (`curl -fsSL` cyan, URL green, `| sh` cyan) and a copy glyph, then "ZOETRIK EDITOR" and two buttons.
-- Nav: 64px black bar with a hairline under it; mark, five Tomorrow 12px labels at 80% white with 11px chevrons, then a book-glyph "DOCS" link and the button.
-- Eyebrows: orange Tomorrow 600 14px uppercase with a 15px line glyph, directly above an Orbitron 700 h2.
-- Editor mockup: toolbar with a blue Export chip, a hierarchy tree with a blue-tinted selected row, a magenta-to-blue artboard, and a state machine panel whose nodes are 62×20 rects joined by bezier edges.
-- Quote cards: masonry in three CSS columns; 24px initials avatar tinted from an extra colour, name in Tomorrow 600 11px caps, handle or role in 45% white caps, quote in 14px muted Inter.
-- Pricing: name in Tomorrow 600 22px caps, seat limit in mint 10px caps, Inter 700 28px price with `/seat/mo`, full-width button, "CHOOSE IF YOU NEED TO" and "KEY FEATURES" captions, mint check list.
-- Inputs: the newsletter field is the one light object: 46px, `#ebebeb`, 6px radius, black text, next to an Inter 600 "Sign up" slab.
-- Footer: Tomorrow caps column heads, underlined 14px muted links, the tracked wordmark, copyright and a mint status dot.
-
 ## Do's and Don'ts
 
-- Do set every headline in Orbitron caps and every label, button and eyebrow in tracked Tomorrow caps.
+- Do set every headline in Orbitron caps.
 - Do keep paragraphs grey (`#999`) and short; white is reserved for things you scan.
-- Do alternate `#000` and `#111` bands and let the band change be the only divider.
-- Do put the colour inside product objects (screens, gauges, commands) and keep the chrome greyscale.
-- Do give every button a glyph on its left and a `#1d1d1d` slab with a hairline.
-- Do build signature objects in CSS/SVG: a reel of labelled screens, an editor window with a state machine, a runtime glyph grid.
 
 - Don't use rounded pills; 4px is the default and 8px is the maximum.
-- Don't add gradients, shadows or glow to nav, buttons or cards; glow belongs to the screens.
+- Don't add gradients, shadows or glow to nav, buttons or cards; glow belongs to the screens. The focus ring (`--ring`) is not a shadow and stays.
 - Don't set body copy in Orbitron or Tomorrow, or headlines in sentence case.
 - Don't make the hero reel jump or ease; it moves at one constant speed.
 
 ## Motion
 
 - Duration 200ms, easing `ease`
-- What animates: button and nav-link colour, tab underline, the FAQ plus rotating 45°, the footer status dot blinking every 2s
+- What animates: button and nav-link colour, the FAQ plus rotating 45°, the footer status dot blinking every 2s
 - Signature move: the hero reel translates `0 → -50%` over 56s (`--reel-speed`), linear and infinite, on a duplicated card list so it loops seamlessly; on phones it scrolls sideways instead
 - What never animates: headlines, cards entering on scroll, anything with a bounce
 - All motion sits inside `@media (prefers-reduced-motion: no-preference)`; the still frame shows the reel already cut mid-card at the top
 
 ## Tweaks
 
-- Signature knobs: wordmark tracking (0.1–0.9em), label tracking for every Tomorrow caps label (0–0.3em), state machine nodes (3–7, the graph redraws), screen glow (0–2, scales every emitted glow), scanlines (0–0.4)
+- Signature knobs: wordmark tracking (0.1–0.9em), state machine nodes (3–7, the graph redraws), screen glow (0–2, scales every emitted glow), scanlines (0–0.4)
 - Alternate schemes: **Phosphor**, **Arcade**, **Redline**, and **Drafting Table** (light)
 
 ## Reference CSS
@@ -176,7 +131,6 @@ Flat black slabs; depth comes from tone steps and from light emitted by the scre
 --bg:#000000;
 --bg-2:#111111;
 --bg-3:#151515;
---btn:#1d1d1d;
 --fg:#ffffff;
 --fg-muted:#999999;
 --accent:#ffa41c;
@@ -187,15 +141,12 @@ Flat black slabs; depth comes from tone steps and from light emitted by the scre
 --blue:#0099ff;
 --mint:#78facb;
 --magenta:#c8287f;
---paper:#ebebeb;
 --font-display:"Orbitron", sans-serif;
---font-label:"Tomorrow", sans-serif;
 --font-body:"Inter", system-ui, sans-serif;
 --font-mono:"Fragment Mono", ui-monospace, monospace;
 --radius:4px;
 --radius-lg:8px;
 --mark-track:0.5em;
---label-track:0.1em;
 --states:5;
 --glow:1;
 --scan:0.14;
@@ -208,52 +159,311 @@ Flat black slabs; depth comes from tone steps and from light emitted by the scre
 --space-6:32px;
 --space-7:64px;
 --space-8:128px;
---shadow:0 1px 2px color-mix(in srgb, var(--accent-fg) 25%, transparent);
 --ease:ease;
 --dur:200ms;
---max-width:1000px;
---gut:max(var(--space-5), calc(50% - var(--max-width) / 2));
 --soft:color-mix(in srgb, var(--fg) 80%, transparent);
---hair:color-mix(in srgb, var(--fg) 9%, transparent);
 }
-.btn{display:inline-flex;align-items:center;gap:10px;height:40px;padding:0 16px;border:1px solid var(--hair);border-radius:var(--radius);background:var(--btn);font:600 13px/1 var(--font-label);letter-spacing:var(--label-track);text-transform:uppercase}
-.btn:hover{background:color-mix(in srgb, var(--btn) 88%, var(--fg))}
 .cmd{font:400 13px/1.5 var(--font-mono);color:var(--green)}
 ```
 
-## Reference markup
+## shadcn/ui Usage
 
-```html
-<div class="inst">
-  <h3 class="lb">Zoetrik CLI</h3>
-  <div class="tabs" role="tablist">
-    <button type="button" role="tab" aria-selected="true">Shell</button>
-    <button type="button" role="tab" aria-selected="false">Tarball</button>
-  </div>
-  <div class="cmd">
-    <code
-      ><i>curl -fsSL</i> https://get.zoetrik.dev/install.sh <i>| sh</i></code
-    >
-    <button type="button" aria-label="Copy">
-      <svg><use href="#i-copy" /></svg>
-    </button>
-  </div>
-  <h3 class="lb">Zoetrik Editor</h3>
-  <div class="row">
-    <a class="btn" href="#"
-      ><svg><use href="#i-play" /></svg>Sign up</a
-    >
-    <a class="btn" href="#"
-      ><svg><use href="#i-mon" /></svg>Download desktop app</a
-    >
-  </div>
-</div>
+### Install
+
+Add this flavor's theme with `npx shadcn@latest add https://flavors.design/r/zoetrik.json`. The CLI has no cookie — Pro users append `?key=YOUR_API_KEY` (Settings → API keys). Install primitives with `npx shadcn@latest add button card input textarea select dialog sheet tabs badge separator checkbox switch slider tooltip dropdown-menu table`.
+
+### Theme variables
+
+```css
+@import url("https://fonts.googleapis.com/css2?family=Orbitron:wght@400;500;700;900&family=Inter:wght@400;500;600&family=Fragment+Mono&display=swap");
+
+:root {
+  --accent: #171717;
+  --accent-foreground: #ffffff;
+  --background: #000000;
+  --border: #262626;
+  --card: #111111;
+  --card-foreground: #ffffff;
+  --chart-1: #ffa41c;
+  --chart-2: #ffffff;
+  --chart-3: #999999;
+  --chart-4: #151515;
+  --chart-5: #0099ff;
+  --destructive: #f87171;
+  --destructive-foreground: #000000;
+  --foreground: #ffffff;
+  --input: #262626;
+  --muted: #171717;
+  --muted-foreground: #999999;
+  --popover: #111111;
+  --popover-foreground: #ffffff;
+  --primary: #ffa41c;
+  --primary-foreground: #000000;
+  --radius: 4px;
+  --ring: #ffa41c;
+  --secondary: #171717;
+  --secondary-foreground: #ffffff;
+  --sidebar: #111111;
+  --sidebar-accent: #171717;
+  --sidebar-accent-foreground: #ffffff;
+  --sidebar-border: #262626;
+  --sidebar-foreground: #ffffff;
+  --sidebar-primary: #ffa41c;
+  --sidebar-primary-foreground: #000000;
+  --sidebar-ring: #ffa41c;
+}
+
+.dark {
+  --accent: #171717;
+  --accent-foreground: #ffffff;
+  --background: #000000;
+  --border: #262626;
+  --card: #111111;
+  --card-foreground: #ffffff;
+  --chart-1: #ffa41c;
+  --chart-2: #ffffff;
+  --chart-3: #999999;
+  --chart-4: #151515;
+  --chart-5: #0099ff;
+  --destructive: #f87171;
+  --destructive-foreground: #000000;
+  --foreground: #ffffff;
+  --input: #262626;
+  --muted: #171717;
+  --muted-foreground: #999999;
+  --popover: #111111;
+  --popover-foreground: #ffffff;
+  --primary: #ffa41c;
+  --primary-foreground: #000000;
+  --radius: 4px;
+  --ring: #ffa41c;
+  --secondary: #171717;
+  --secondary-foreground: #ffffff;
+  --sidebar: #111111;
+  --sidebar-accent: #171717;
+  --sidebar-accent-foreground: #ffffff;
+  --sidebar-border: #262626;
+  --sidebar-foreground: #ffffff;
+  --sidebar-primary: #ffa41c;
+  --sidebar-primary-foreground: #000000;
+  --sidebar-ring: #ffa41c;
+}
+
+[data-flavor-scheme="phosphor"] {
+  --accent: #152019;
+  --accent-foreground: #d9ffe4;
+  --background: #020a05;
+  --border: #16301f;
+  --card: #07140b;
+  --card-foreground: #d9ffe4;
+  --chart-1: #71ff19;
+  --chart-2: #d9ffe4;
+  --chart-3: #6f9c7c;
+  --chart-4: #10261a;
+  --chart-5: #2fd2ff;
+  --destructive: #f87171;
+  --destructive-foreground: #020a05;
+  --foreground: #d9ffe4;
+  --input: #16301f;
+  --muted: #152019;
+  --muted-foreground: #6f9c7c;
+  --popover: #07140b;
+  --popover-foreground: #d9ffe4;
+  --primary: #71ff19;
+  --primary-foreground: #021004;
+  --radius: 4px;
+  --ring: #71ff19;
+  --secondary: #152019;
+  --secondary-foreground: #d9ffe4;
+  --sidebar: #07140b;
+  --sidebar-accent: #152019;
+  --sidebar-accent-foreground: #d9ffe4;
+  --sidebar-border: #16301f;
+  --sidebar-foreground: #d9ffe4;
+  --sidebar-primary: #71ff19;
+  --sidebar-primary-foreground: #021004;
+  --sidebar-ring: #71ff19;
+}
+
+[data-flavor-scheme="arcade"] {
+  --accent: #201b2b;
+  --accent-foreground: #f6efff;
+  --background: #0b0616;
+  --border: #2c1f47;
+  --card: #130b22;
+  --card-foreground: #f6efff;
+  --chart-1: #ff4fd8;
+  --chart-2: #f6efff;
+  --chart-3: #9d8fbf;
+  --chart-4: #22163a;
+  --chart-5: #6c7bff;
+  --destructive: #f87171;
+  --destructive-foreground: #0b0616;
+  --foreground: #f6efff;
+  --input: #2c1f47;
+  --muted: #201b2b;
+  --muted-foreground: #9d8fbf;
+  --popover: #130b22;
+  --popover-foreground: #f6efff;
+  --primary: #ff4fd8;
+  --primary-foreground: #12041a;
+  --radius: 4px;
+  --ring: #ff4fd8;
+  --secondary: #201b2b;
+  --secondary-foreground: #f6efff;
+  --sidebar: #130b22;
+  --sidebar-accent: #201b2b;
+  --sidebar-accent-foreground: #f6efff;
+  --sidebar-border: #2c1f47;
+  --sidebar-foreground: #f6efff;
+  --sidebar-primary: #ff4fd8;
+  --sidebar-primary-foreground: #12041a;
+  --sidebar-ring: #ff4fd8;
+}
+
+[data-flavor-scheme="redline"] {
+  --accent: #201b1a;
+  --accent-foreground: #fff4f0;
+  --background: #0a0505;
+  --border: #2e1c1a;
+  --card: #140b0a;
+  --card-foreground: #fff4f0;
+  --chart-1: #ff3b2f;
+  --chart-2: #fff4f0;
+  --chart-3: #a8908b;
+  --chart-4: #241413;
+  --chart-5: #ff6a4d;
+  --destructive: #f87171;
+  --destructive-foreground: #0a0505;
+  --foreground: #fff4f0;
+  --input: #2e1c1a;
+  --muted: #201b1a;
+  --muted-foreground: #a8908b;
+  --popover: #140b0a;
+  --popover-foreground: #fff4f0;
+  --primary: #ff3b2f;
+  --primary-foreground: #120202;
+  --radius: 4px;
+  --ring: #ff3b2f;
+  --secondary: #201b1a;
+  --secondary-foreground: #fff4f0;
+  --sidebar: #140b0a;
+  --sidebar-accent: #201b1a;
+  --sidebar-accent-foreground: #fff4f0;
+  --sidebar-border: #2e1c1a;
+  --sidebar-foreground: #fff4f0;
+  --sidebar-primary: #ff3b2f;
+  --sidebar-primary-foreground: #120202;
+  --sidebar-ring: #ff3b2f;
+}
+
+[data-flavor-scheme="drafting-table"] {
+  --accent: #dedcd7;
+  --accent-foreground: #111111;
+  --background: #f2f0eb;
+  --border: #d4d0c6;
+  --card: #e8e5de;
+  --card-foreground: #111111;
+  --chart-1: #d9480f;
+  --chart-2: #111111;
+  --chart-3: #6b675f;
+  --chart-4: #dedad1;
+  --chart-5: #1f6fe0;
+  --destructive: #dc2626;
+  --destructive-foreground: #ffffff;
+  --foreground: #111111;
+  --input: #d4d0c6;
+  --muted: #dedcd7;
+  --muted-foreground: #595856;
+  --popover: #e8e5de;
+  --popover-foreground: #111111;
+  --primary: #d9480f;
+  --primary-foreground: #ffffff;
+  --radius: 4px;
+  --ring: #d9480f;
+  --secondary: #dedcd7;
+  --secondary-foreground: #111111;
+  --sidebar: #e8e5de;
+  --sidebar-accent: #dedcd7;
+  --sidebar-accent-foreground: #111111;
+  --sidebar-border: #d4d0c6;
+  --sidebar-foreground: #111111;
+  --sidebar-primary: #d9480f;
+  --sidebar-primary-foreground: #ffffff;
+  --sidebar-ring: #d9480f;
+}
+
+@theme inline {
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-background: var(--background);
+  --color-border: var(--border);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-chart-1: var(--chart-1);
+  --color-chart-2: var(--chart-2);
+  --color-chart-3: var(--chart-3);
+  --color-chart-4: var(--chart-4);
+  --color-chart-5: var(--chart-5);
+  --color-destructive: var(--destructive);
+  --color-destructive-foreground: var(--destructive-foreground);
+  --color-foreground: var(--foreground);
+  --color-input: var(--input);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-ring: var(--ring);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-sidebar: var(--sidebar);
+  --color-sidebar-accent: var(--sidebar-accent);
+  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+  --color-sidebar-border: var(--sidebar-border);
+  --color-sidebar-foreground: var(--sidebar-foreground);
+  --color-sidebar-primary: var(--sidebar-primary);
+  --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
+  --color-sidebar-ring: var(--sidebar-ring);
+  --font-display: "Orbitron", sans-serif;
+  --font-mono: "Fragment Mono", ui-monospace, monospace;
+  --font-sans: "Inter", system-ui, sans-serif;
+  --radius-lg: var(--radius);
+  --radius-md: max(0px, calc(var(--radius) - 2px));
+  --radius-sm: max(0px, calc(var(--radius) - 4px));
+  --radius-xl: calc(var(--radius) + 4px);
+}
 ```
 
-## How to apply this flavor
+### Schemes
 
-1. Replace the target page's tokens with the palette, the three type voices and the 4px/8px radii above.
-2. Rebuild the hero as a clipped reel of labelled product screens beside a centred copy column with an install card.
-3. Turn feature lists into alternating split rows, each with a CSS/SVG product object; alternate `#000` / `#111` bands.
-4. Apply the motion rules: one constant-speed reel, 200ms colour fades, nothing else.
-5. Check the Don't list before finishing.
+- The flavor is dark-native: `:root` and `.dark` carry the same palette, so the theme reads the same with or without a `dark` class.
+- Extra palettes are opt-in: set `data-flavor-scheme="<slug>"` on `<html>` or any subtree. Available: `phosphor` (Phosphor), `arcade` (Arcade), `redline` (Redline), `drafting-table` (Drafting Table).
+
+### Token mapping
+
+| Flavor token | shadcn variable |
+| --- | --- |
+| bg | `--background` |
+| fg | `--foreground`, first choice for every `--*-foreground` |
+| bg2 | `--card`, `--popover`, `--sidebar` when it sits on the same side as `bg` and reads with `fg` |
+| bg + fg (9%) | `--secondary`, `--muted`, `--accent` (shadcn's hover surface, not the flavor accent) |
+| fg-muted | `--muted-foreground` (pulled toward `fg` until it reads) |
+| accent | `--primary`, `--ring`, `--chart-1` |
+| accent-fg | `--primary-foreground` |
+| border | `--border`, `--input`, `--sidebar-border` (derived from `bg`/`fg` when the token is a `var()`, `color-mix()` or invisible against `bg`) |
+| extra.* | `--destructive`, `--chart-2..5` |
+| radius | `--radius`; `--radius-sm/md` never go below 0 |
+
+### Component recipes
+
+- **Button:** use `bg-primary text-primary-foreground rounded-[var(--radius)]`; headings can use `font-display` ("Orbitron", sans-serif).
+- **Card:** use `bg-card text-card-foreground border border-border rounded-[var(--radius)]`.
+- **Input:** use `bg-background border border-input rounded-[var(--radius)]`.
+- **Badge:** use `bg-secondary text-secondary-foreground rounded-[var(--radius)]`; follow the flavor's density and typography rules above.
+- **Tabs:** use `border-b border-border` with active `text-primary`.
+
+### Implementation rule for agents
+
+Import primitives from `@/components/ui/*`, apply the theme CSS first, and keep this flavor's Do's and Don'ts as the source of truth. shadcn names are only the implementation surface.
