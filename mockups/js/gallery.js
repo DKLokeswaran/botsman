@@ -81,7 +81,7 @@
     {
       id: "routine-new",
       title: "New routine",
-      blurb: "A template fills the form. The schedule is a picker: daily, weekdays, weekly, or once. Advanced: cron reveals the expression that will be saved. Delivery is this bot's chat, an alert, or both. The alert is UnifiedPush on the phone and a tray notification on Windows.",
+      blurb: "A template fills the form. The schedule is a picker: daily, weekdays, weekly, or once. Advanced: cron reveals the expression that will be saved. Delivery is this bot's chat, an alert, or both. The alert comes from the app's background connection (or ntfy) on the phone and is a tray notification on Windows.",
       phone: "#/routine/new?bot=junior",
       desk: "#/routine/new?bot=junior"
     },
@@ -130,7 +130,7 @@
     {
       id: "notifications",
       title: "Notifications",
-      blurb: "On the phone, alerts arrive from ntfy on devbox through UnifiedPush and show as Hermes Bots. On Windows, the app posts its own tray notifications. The sample alert opens Junior's morning briefing. Each kind of alert has a switch.",
+      blurb: "On the phone, the default is the app's own background connection over Tailscale, with its setup checklist. ntfy is the optional alternative: server, topic, and access token. On Windows, the app posts its own tray notifications. The sample alert opens Junior's chat.",
       phone: "#/notifications",
       desk: "#/notifications"
     },

@@ -38,7 +38,7 @@ Mode is on the index and again in Settings.
 16. **Usage.** Cost on each reply, a total on the chat, and a 14-day dashboard by bot.
 17. **Bot info and avatar.** Upload a photo or choose a mark. Name and description are shown, not edited.
 18. **Servers.** Add a server, switch server. Mode lives here too.
-19. **Notifications.** Notification server and topic. On the phone the status line is UnifiedPush registered with ntfy on devbox, and a sample alert opens Junior's briefing. On Windows the status line is the app's own tray, and the same sample opens the same message.
+19. **Notifications.** On the phone, Background connection is the default: the app keeps its own connection to the server and shows its setup (battery, always-on VPN, phone maker guide). ntfy is the optional alternative, with server, topic, and access token. On Windows the status line is the app's own tray. A sample alert opens Junior's chat.
 20. **Login.** Shown when the session expires, with the username already filled in.
 21. **Update available.** Install, or Not now.
 
@@ -59,7 +59,7 @@ Typing `/` opens the command menu. It filters on the command name and the hint, 
 - The approval card shows the time left until the five-minute auto-deny.
 - Clarifying questions are one card. They are sent together. Answering does not reset scroll.
 - While the app is open, Needs you is the sidebar list, the badges, and the inline cards.
-- Alerts when the app is closed: Android uses self-hosted ntfy on devbox through UnifiedPush, so the notification is Hermes Bots and a tap opens the chat. Windows shows the app's own tray notification for the same events.
+- Alerts when the app is closed: Android keeps its own background connection to the server by default, and ntfy is optional. Windows shows the app's own tray notification for the same events. A tap or click opens the chat.
 - Switching server opens sign-in again. The username stays filled in.
 - Chats from other clients are not listed.
 - Bot name, description, and tools are not editable. The avatar is. Creating a bot is not on screen.
@@ -84,7 +84,7 @@ Typing `/` opens the command menu. It filters on the command name and the hint, 
 4. Should the five-minute countdown be visible the whole time, or only near the end?
 5. Should the five questions stay one scrolling card, or become one question at a time?
 6. While the app is open, are the Needs you list and the inline cards enough, or do you also want a toast?
-7. Is one ntfy topic right for the phone's UnifiedPush subscription, or do you want a topic per bot?
+7. With ntfy, is one topic right, or do you want a topic per bot?
 8. When you switch server, is a fresh password required?
 9. Should Discord and CLI history stay completely absent, with no import entry?
 10. When a bot is created on the server, is it enough that it appears on the next load of the list, with no toast?

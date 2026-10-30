@@ -67,8 +67,10 @@
     view: "",
     reconnect: null,
     menu: false,
-    ntfyUrl: "http://100.101.102.10:8091",
-    ntfyTopic: "hermes",
+    pushMode: "service",
+    ntfyUrl: "https://ntfy.sh",
+    ntfyTopic: "hermes-bots-7f3k2q",
+    ntfyToken: "",
     notif: {},
     loginUser: HB.user,
     loginPass: "",
@@ -738,7 +740,7 @@
       '<div class="field" style="margin-top:12px"><div class="lbl">Deliver to</div><div class="checks">' +
       '<button type="button" class="check" data-act="deliver" data-id="chat"><span class="toggle' + (f.chat ? " on" : "") + '"><i></i></span> This bot\'s chat</button>' +
       '<button type="button" class="check" data-act="deliver" data-id="ntfy"><span class="toggle' + (f.ntfy ? " on" : "") + '"><i></i></span> Alert</button></div>' +
-      '<p class="need-k">An alert is a Hermes Bots notification. On the phone it arrives through UnifiedPush. On Windows it is a tray notification.</p></div>' +
+      '<p class="need-k">An alert is a Hermes Bots notification. On the phone it comes from the app\'s own background connection, or from ntfy if you chose it. On Windows it is a tray notification.</p></div>' +
       (f.error ? '<div class="err">' + esc(f.error) + "</div>" : "") +
       '<div class="choices"><button type="button" class="primary" data-act="save-routine">Save</button>' +
       '<button type="button" class="ghost" data-act="nav" data-to="' + (backTarget() || "#/routines") + '">Cancel</button></div>' +
@@ -809,7 +811,7 @@
       (add.error ? '<div class="err">' + esc(add.error) + "</div>" : "") +
       '<button type="button" class="primary" data-act="add-server">Add server</button>' +
       '<div class="group-label">Mode</div><div class="seg" style="margin-bottom:12px">' + seg + "</div>" +
-      '<div class="set-row"><div><b>Notifications</b><div class="sub">Phone: UnifiedPush via ntfy on devbox. Windows: this app\'s tray.</div></div><button type="button" class="text-btn" data-act="nav" data-to="#/notifications">Open</button></div>' +
+      '<div class="set-row"><div><b>Notifications</b><div class="sub">Phone: this app\'s background connection, or ntfy. Windows: this app\'s tray.</div></div><button type="button" class="text-btn" data-act="nav" data-to="#/notifications">Open</button></div>' +
       '<div class="set-row"><div><b>Hermes Bots ' + esc(version()) + '</b><div class="sub">' + (state.installed ? "Up to date" : "Update available · " + HB.nextVersion) + "</div></div>" +
       (state.installed ? "" : '<button type="button" class="ghost" data-act="nav" data-to="#/update">View</button>') + "</div>" +
       '<p class="need-k">API keys stay on the server. This app does not show them.</p></div></div>';
@@ -821,19 +823,33 @@
       const on = !!state.notif[n.id];
       return '<button type="button" class="set-row" data-act="notif" data-id="' + n.id + '"><span>' + esc(n.label) + '</span><span class="toggle' + (on ? " on" : "") + '"><i></i></span></button>';
     }).join("");
-    const lede = phone
-      ? "On Android, alerts come from the ntfy server on devbox through UnifiedPush. They show under Hermes Bots, with this app's icon. A tap opens the chat."
-      : "On Windows, Hermes Bots posts its own tray notifications. The phone uses UnifiedPush against the same ntfy server, so a tap there opens the same chat.";
-    const status = phone ? "UnifiedPush · registered with ntfy on devbox" : "Windows tray · posted by Hermes Bots";
-    const sample = '<button type="button" class="note-card" data-act="open-run" data-bot="junior" data-msg="j-brief"><b>Hermes Bots</b>Morning briefing finished<span>' +
+    const sample = '<button type="button" class="note-card" data-act="open-run" data-bot="junior" data-msg="j-brief"><b>Hermes Bots</b>Junior has a new routine result<span>' +
       (phone ? "Tap opens Junior's chat" : "Tray notification · opens Junior's chat") + "</span></button>";
-    const body = '<div class="pane"><div class="page"><h2>' + (phone ? "UnifiedPush" : "Tray") + "</h2><p class=\"lede\">" + lede + "</p>" +
-      '<div class="set-row"><div><b>Status</b><div class="sub">' + status + "</div></div></div>" +
-      '<div class="field"><label for="ntfy-url">Notification server</label><input id="ntfy-url" data-field="ntfy-url" value="' + esc(state.ntfyUrl) + '" spellcheck="false"></div>' +
+    const body = '<div class="pane"><div class="page">' + (phone ? phonePush() : desktopPush()) + sample + toggles + "</div></div>";
+    return column("Notifications", phone ? (state.pushMode === "ntfy" ? "ntfy" : "Background connection") : "Windows tray", body);
+  }
+  function desktopPush() {
+    return "<h2>Tray</h2><p class=\"lede\">Hermes Bots stays in the tray, keeps its connection to the server, and posts its own notifications. A click opens the chat.</p>" +
+      '<div class="set-row"><div><b>Status</b><div class="sub">Windows tray · connected to ' + esc(currentServer().name) + "</div></div></div>";
+  }
+  function phonePush() {
+    const ntfy = state.pushMode === "ntfy";
+    const seg = [["service", "Background connection"], ["ntfy", "ntfy"]].map(function (m) {
+      return '<button type="button" class="' + (state.pushMode === m[0] ? "on" : "") + '" data-act="push-mode" data-id="' + m[0] + '">' + m[1] + "</button>";
+    }).join("");
+    const head = '<h2>Alerts when the app is closed</h2><div class="seg" style="margin-bottom:12px">' + seg + "</div>";
+    if (!ntfy) {
+      return head + '<p class="lede">Hermes Bots keeps its own connection to ' + esc(currentServer().name) + " over Tailscale and posts notifications itself. Nothing else to install.</p>" +
+        '<div class="set-row"><div><b>Status</b><div class="sub">Connected to ' + esc(currentServer().name) + " · ongoing notification shown</div></div></div>" +
+        '<div class="set-row"><div><b>Battery</b><div class="sub">Unrestricted</div></div><span class="tag">Done</span></div>' +
+        '<div class="set-row"><div><b>Tailscale always-on VPN</b><div class="sub">Set it in Android settings, under VPN</div></div><button type="button" class="text-btn">Open</button></div>' +
+        '<div class="set-row"><div><b>Phone maker</b><div class="sub">Samsung can stop background apps. See its guide on dontkillmyapp.com</div></div><button type="button" class="text-btn">Guide</button></div>';
+    }
+    return head + '<p class="lede">Alerts go through an ntfy server and the ntfy app. They carry no message text, only the bot and what happened.</p>' +
+      '<div class="field"><label for="ntfy-url">Server</label><input id="ntfy-url" data-field="ntfy-url" value="' + esc(state.ntfyUrl) + '" spellcheck="false"></div>' +
       '<div class="field"><label for="ntfy-topic">Topic</label><input id="ntfy-topic" data-field="ntfy-topic" value="' + esc(state.ntfyTopic) + '" spellcheck="false"></div>' +
-      '<p class="need-k">The server is the self-hosted ntfy on devbox. The topic is what UnifiedPush subscribes to. Windows does not use that socket; it shows the same events in the tray.</p>' +
-      sample + toggles + "</div></div>";
-    return column("Notifications", phone ? "UnifiedPush" : "Windows tray", body);
+      '<div class="field"><label for="ntfy-token">Access token</label><input id="ntfy-token" data-field="ntfy-token" type="password" value="' + esc(state.ntfyToken) + '" placeholder="tk_…" spellcheck="false"></div>' +
+      '<p class="need-k">Reserve the topic on the server so only this token can read it.</p>';
   }
   function loginView() {
     const server = state.pendingServer
@@ -1405,6 +1421,7 @@
       state.addServer = { name: "", host: "", port: "9119", error: "" };
       render({ preserve: true });
     },
+    "push-mode": function (el) { state.pushMode = el.dataset.id; render({ preserve: true }); },
     notif: function (el) { state.notif[el.dataset.id] = !state.notif[el.dataset.id]; render({ preserve: true }); },
     login: function () {
       if (!state.loginPass) { state.loginError = "Enter your password."; render({ preserve: true, focus: "password" }); return; }
@@ -1476,6 +1493,7 @@
       if (f.indexOf("add:") === 0) { state.addServer[f.slice(4)] = t.value; return; }
       if (f === "ntfy-url") state.ntfyUrl = t.value;
       if (f === "ntfy-topic") state.ntfyTopic = t.value;
+      if (f === "ntfy-token") state.ntfyToken = t.value;
     });
     app.addEventListener("change", function (e) {
       if (e.target.id === "file-in") { addFiles(e.target.files); e.target.value = ""; }
