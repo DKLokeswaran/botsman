@@ -4,9 +4,9 @@
 | --- | --- |
 | **Product name** | Hermes Bots |
 | **Document type** | Product Requirements Document (PRD) |
-| **Version** | 1.0 |
+| **Version** | 1.1 |
 | **Status** | Draft |
-| **Last updated** | 2026-10-30 |
+| **Last updated** | 2026-10-31 |
 | **Audience** | Builders implementing the Windows app, the Android app and the companion plugin |
 | **Related** | [Roadmap](./roadmap.md), [Architecture](../research/ARCHITECTURE.md), [Feasibility blockers](../research/BLOCKERS.md), [Mockups](../../mockups/README.md), [Design](../../DESIGN.md) |
 
@@ -108,10 +108,10 @@ Priority: **P0** is required at Alpha exit (MVP), **P1** at Stable / v1.0, **P2*
 
 | ID | Requirement | Priority |
 | --- | --- | --- |
-| FR-PLG-1 | The plugin registers the `hbapp` delivery platform that writes routine output into a chat without starting a turn | P0 |
+| FR-PLG-1 | The plugin registers the `hbapp` delivery platform that writes routine output into a chat without starting a turn, for scheduled runs and for Run now | P0 |
 | FR-PLG-2 | The plugin waits until no reply is running in the target chat before writing | P0 |
-| FR-PLG-3 | The plugin raises alerts from Hermes hooks and routine deliveries and serves them on an authenticated WebSocket route | P0 |
-| FR-PLG-4 | The app detects a missing or outdated plugin at connect, installs or updates it through `plugins.manage`, and restarts the gateway once | P0 |
+| FR-PLG-3 | The plugin raises alerts from Hermes hooks and routine deliveries in every bot's profile and serves them on one authenticated WebSocket route | P0 |
+| FR-PLG-4 | The app detects a missing or outdated plugin in each bot's profile at connect, installs or updates it through `plugins.manage`, and restarts the gateway once; when the dashboard still runs older plugin code, the update screen shows the exact steps to restart it (manual for now, automated later) | P0 |
 | FR-PLG-5 | Optionally publish each alert to an ntfy topic | P1 |
 
 ### 4.3 Bots (FR-BOT)
@@ -252,6 +252,9 @@ Reasons are in [WINDOWS-FIRST-STACK.md](../research/WINDOWS-FIRST-STACK.md); the
 | Connection drops mid-reply | Reconnecting banner; on return the chat catches up from replay or refetches history |
 | Hermes restarts | The app resumes chats by stored id and refetches |
 | Plugin missing or outdated | The app offers to install or update it before routines and push are available |
+| Plugin missing in one bot's profile | That bot's routines fail at delivery; the app offers to install the plugin into that profile |
+| Plugin updated but the dashboard not restarted | Routines and hooks use the new code after the gateway restart; the update screen shows the exact steps to restart the dashboard for the new alert route |
+| Gateway stopped | Scheduled routines do not run; Run now still delivers |
 | Android kills the foreground service | Push stops until the app is opened; the setup screen explains the phone maker's settings |
 | Hermes version not recognised | The app refuses to connect and says which version it supports |
 
@@ -305,3 +308,4 @@ Where **Decision** is filled, that ruling is final. Empty **Decision** means sti
 | Version | Date | Notes |
 | --- | --- | --- |
 | 1.0 | 2026-10-30 | Draft PRD from the planning answers, approved mockups, architecture and feasibility findings |
+| 1.1 | 2026-10-31 | Companion plugin requirements per bot profile, Run now delivery, plugin update restarts |
