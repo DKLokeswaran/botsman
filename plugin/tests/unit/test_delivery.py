@@ -6,7 +6,7 @@ import time
 import types
 
 import pytest
-from helpers import all_alerts
+from helpers import all_alerts, delivery_row
 
 from hermes_bots import delivery, store
 
@@ -77,7 +77,7 @@ def test_queued_output_is_written_as_the_bots_message_and_alerts(db):
     row_id = _queue()
     assert delivery.process_next() is True
     assert db.messages == [("s1", "assistant", "[Routine: Morning briefing]\nGood morning.")]
-    assert store.get_delivery(row_id)["state"] == "written"
+    assert delivery_row(row_id)["state"] == "written"
     assert all_alerts() == [("junior", "routine", "s1", None)]
     assert delivery.process_next() is False
 
@@ -100,7 +100,7 @@ def test_a_running_reply_defers_the_write(db):
     db.lease_holder = "a running turn"
     row_id = _queue()
     delivery.process_next()
-    row = store.get_delivery(row_id)
+    row = delivery_row(row_id)
     assert (row["state"], row["claimed_by"], row["attempts"]) == ("pending", None, 0)
     assert row["next_attempt_at"] > time.time()
     assert db.messages == [] and all_alerts() == []
@@ -120,7 +120,7 @@ def test_a_chat_busy_past_the_limit_drops_the_row_and_alerts(db):
     started = time.time() - delivery.BUSY_LIMIT_S - 1
     _make_due(row_id, busy_since=started, next_attempt_at=time.time())
     delivery.process_next()
-    assert store.get_delivery(row_id)["state"] == "dropped"
+    assert delivery_row(row_id)["state"] == "dropped"
     assert all_alerts() == [("junior", "routine_failed", "s1", None)]
 
 
@@ -130,7 +130,7 @@ def test_a_gap_in_busy_checks_starts_a_new_busy_stretch(db):
     long_ago = time.time() - delivery.BUSY_LIMIT_S - 1
     _make_due(row_id, busy_since=long_ago, next_attempt_at=long_ago)
     delivery.process_next()
-    row = store.get_delivery(row_id)
+    row = delivery_row(row_id)
     assert row["state"] == "pending" and row["busy_since"] > long_ago
 
 
@@ -138,12 +138,12 @@ def test_an_error_retry_ends_the_busy_stretch(db):
     db.lease_holder = "a running turn"
     row_id = _queue()
     delivery.process_next()
-    assert store.get_delivery(row_id)["busy_since"] is not None
+    assert delivery_row(row_id)["busy_since"] is not None
     db.lease_holder = None
     db.fail_with = sqlite3.OperationalError("database is locked")
     _make_due(row_id)
     delivery.process_next()
-    assert store.get_delivery(row_id)["busy_since"] is None
+    assert delivery_row(row_id)["busy_since"] is None
 
 
 def test_a_row_that_waited_in_the_queue_is_not_dropped_on_its_first_busy_attempt(db):
@@ -151,7 +151,7 @@ def test_a_row_that_waited_in_the_queue_is_not_dropped_on_its_first_busy_attempt
     row_id = _queue()
     _make_due(row_id, created_at=0)
     delivery.process_next()
-    assert store.get_delivery(row_id)["state"] == "pending"
+    assert delivery_row(row_id)["state"] == "pending"
     assert all_alerts() == []
 
 
@@ -159,7 +159,7 @@ def test_a_failed_lease_release_still_counts_the_write_once(db):
     db.release_fails = True
     row_id = _queue()
     delivery.process_next()
-    assert store.get_delivery(row_id)["state"] == "written"
+    assert delivery_row(row_id)["state"] == "written"
     assert len(db.messages) == 1
     assert all_alerts() == [("junior", "routine", "s1", None)]
 
@@ -176,7 +176,7 @@ def test_a_write_whose_bookkeeping_was_lost_is_not_written_again(db, monkeypatch
     monkeypatch.setattr(store, "finish_delivery", finish)
     _make_due(row_id)
     delivery.process_next()
-    row = store.get_delivery(row_id)
+    row = delivery_row(row_id)
     assert (row["state"], row["message_id"]) == ("written", 1)
     assert len(db.messages) == 1
     assert all_alerts() == [("junior", "routine", "s1", None)]
@@ -185,7 +185,7 @@ def test_a_write_whose_bookkeeping_was_lost_is_not_written_again(db, monkeypatch
 def test_a_missing_chat_drops_the_row_at_once(db):
     row_id = _queue("session-gone/News")
     delivery.process_next()
-    row = store.get_delivery(row_id)
+    row = delivery_row(row_id)
     assert (row["state"], row["error"]) == ("dropped", "chat gone not found")
     assert all_alerts() == [("junior", "routine_failed", "gone", None)]
 
@@ -195,12 +195,12 @@ def test_unexpected_errors_retry_with_backoff_then_drop(db, monkeypatch):
     row_id = _queue()
     for attempt in range(1, delivery.MAX_ATTEMPTS):
         delivery.process_next()
-        row = store.get_delivery(row_id)
+        row = delivery_row(row_id)
         assert (row["state"], row["attempts"]) == ("pending", attempt)
         assert db.lease_holder is None
         _make_due(row_id)  # skip the backoff wait
     delivery.process_next()
-    assert store.get_delivery(row_id)["state"] == "dropped"
+    assert delivery_row(row_id)["state"] == "dropped"
     assert all_alerts() == [("junior", "routine_failed", "s1", None)]
 
 
@@ -218,7 +218,7 @@ def test_a_worker_that_lost_its_claim_does_not_write(db):
     with pytest.raises(delivery.ClaimLost):
         delivery.write_under_lease(row)
     assert db.messages == [] and db.lease_holder is None
-    assert store.get_delivery(row_id)["claimed_by"] == "another worker"
+    assert delivery_row(row_id)["claimed_by"] == "another worker"
 
 
 def test_a_worker_that_lost_its_claim_before_finishing_raises_no_alert(db):
@@ -227,7 +227,7 @@ def test_a_worker_that_lost_its_claim_before_finishing_raises_no_alert(db):
     _make_due(row_id)
     store.claim_next_delivery("another worker")
     delivery._after_attempt(row, message_id=1)
-    assert store.get_delivery(row_id)["state"] == "pending"
+    assert delivery_row(row_id)["state"] == "pending"
     assert all_alerts() == []
 
 
@@ -238,7 +238,7 @@ def test_a_lost_claim_leaves_the_row_to_the_worker_that_took_it(db, monkeypatch)
         raise delivery.ClaimLost()
     monkeypatch.setattr(delivery, "write_under_lease", taken_over)
     delivery.process_next()
-    row = store.get_delivery(row_id)
+    row = delivery_row(row_id)
     assert (row["state"], row["claimed_by"], row["attempts"]) == ("pending", delivery.WORKER_ID, 0)
     assert all_alerts() == []
 

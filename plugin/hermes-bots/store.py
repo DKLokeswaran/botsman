@@ -231,13 +231,6 @@ def finish_delivery(row_id: int, worker_id: str, *, state: str, alert_kind: str,
         return True
 
 
-def get_delivery(row_id: int, path: Optional[Path] = None) -> Optional[dict]:
-    """One queue row by id; None when it does not exist."""
-    with open_store(path) as conn:
-        row = conn.execute("SELECT * FROM deliveries WHERE id = ?", (row_id,)).fetchone()
-        return dict(row) if row else None
-
-
 # Alert log
 
 def add_alert(*, bot: str, kind: str, session_id: str, ref: Optional[str] = None,

@@ -4,6 +4,8 @@ import time
 import types
 import uuid
 
+from helpers import delivery_row
+
 from hermes_bots import store
 
 
@@ -38,7 +40,7 @@ def test_a_deferred_row_waits_until_it_is_due():
     store.claim_next_delivery("w1")
     store.defer_delivery(row_id, "w1", retry_at=time.time() + 60, error="busy", count_attempt=True)
     assert store.claim_next_delivery("w1") is None
-    row = store.get_delivery(row_id)
+    row = delivery_row(row_id)
     assert (row["attempts"], row["error"], row["claimed_by"]) == (1, "busy", None)
 
 
@@ -53,9 +55,9 @@ def test_only_the_claiming_worker_can_finish_a_row():
     row_id = _enqueue("s1")
     store.claim_next_delivery("w1")
     store.finish_delivery(row_id, "w2", state="written", alert_kind="routine", message_id=1)
-    assert store.get_delivery(row_id)["state"] == "pending"
+    assert delivery_row(row_id)["state"] == "pending"
     store.finish_delivery(row_id, "w1", state="written", alert_kind="routine", message_id=1)
-    assert store.get_delivery(row_id)["state"] == "written"
+    assert delivery_row(row_id)["state"] == "written"
 
 
 def test_alert_ids_increase_and_survive_pruning():
@@ -79,8 +81,8 @@ def test_prune_keeps_pending_deliveries():
     claimed = store.claim_next_delivery("w")
     store.finish_delivery(claimed["id"], "w", state="written", alert_kind="routine", message_id=1)
     store.prune(now=time.time() + store.RETENTION_S + 1)
-    assert store.get_delivery(pending) is not None
-    assert store.get_delivery(done) is None
+    assert delivery_row(pending) is not None
+    assert delivery_row(done) is None
 
 
 def test_reads_need_no_write_lock_once_the_store_is_set_up(temp_store):
@@ -99,10 +101,10 @@ def test_a_deferral_records_or_clears_the_busy_stretch():
     row_id = _enqueue("s1")
     store.claim_next_delivery("w1")
     store.defer_delivery(row_id, "w1", retry_at=0, busy_since=123.0)
-    assert store.get_delivery(row_id)["busy_since"] == 123.0
+    assert delivery_row(row_id)["busy_since"] == 123.0
     store.claim_next_delivery("w1")
     store.defer_delivery(row_id, "w1", retry_at=0, error="locked", count_attempt=True)
-    assert store.get_delivery(row_id)["busy_since"] is None
+    assert delivery_row(row_id)["busy_since"] is None
 
 
 def _hermes_probe(monkeypatch, dead_holders):

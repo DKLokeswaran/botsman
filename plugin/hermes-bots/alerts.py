@@ -60,11 +60,6 @@ def active_bot() -> str:
     return get_active_profile_name()
 
 
-def raise_alert(bot: str, kind: str, session_id: str, ref: Optional[str] = None) -> int:
-    """Record an alert for the apps' alert stream; returns its id."""
-    return store.add_alert(bot=bot, kind=kind, session_id=session_id, ref=ref)
-
-
 def _active_profile_home() -> Path:
     from hermes_constants import get_hermes_home
     return get_hermes_home()
@@ -87,7 +82,7 @@ def _write_hook_alert(bot: str, profile_home: Path, kind: str, session_id: str, 
     try:
         chat_id = app_chat.app_chat_of(profile_home, session_id)
         if chat_id is not None:
-            raise_alert(bot, kind, chat_id, ref)
+            store.add_alert(bot=bot, kind=kind, session_id=chat_id, ref=ref)
     except Exception:
         logger.exception("hermes-bots could not record a %s alert", kind)
 
