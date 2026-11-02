@@ -1,8 +1,10 @@
 from pathlib import Path
 
+import hermes_bots
 from hermes_bots import store
 
-PLUGIN_DIR = Path(__file__).resolve().parents[2] / "hermes-bots"
+# The plugin folder, as registered for the ``hermes_bots`` package by tests/conftest.py
+PLUGIN_DIR = Path(hermes_bots.__path__[0])
 
 
 def delivery_row(row_id):
