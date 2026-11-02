@@ -13,13 +13,17 @@ REAL_LOOKUP = app_chat.app_chat_of
 
 
 class FakeSessionDB:
-    """Knows which session each chat continues in after compression."""
+    """Knows each chat's compression chain and each session's parent."""
 
-    def __init__(self, continuations):
-        self.continuations = continuations
+    def __init__(self):
+        self.chains = {}
+        self.parents = {}
 
-    def resolve_resume_session_id(self, session_id):
-        return self.continuations.get(session_id, session_id)
+    def get_compression_chain(self, session_id):
+        return self.chains.get(session_id, [session_id])
+
+    def get_session(self, session_id):
+        return {"id": session_id, "parent_session_id": self.parents.get(session_id)}
 
 
 @pytest.fixture
@@ -28,7 +32,7 @@ def bot_home(tmp_path, monkeypatch):
     hermes_yaml = types.ModuleType("hermes_yaml")
     hermes_yaml.safe_load = json.loads
     monkeypatch.setitem(sys.modules, "hermes_yaml", hermes_yaml)
-    db = FakeSessionDB({})
+    db = FakeSessionDB()
     registry = types.ModuleType("hermes_state_registry")
     registry.acquire = lambda path: db
     registry.release_or_close = lambda handle: None
@@ -61,12 +65,30 @@ def test_a_bot_with_no_app_chat_yet_raises_no_hook_alerts(bot_home):
     assert all_alerts() == []
 
 
-def test_an_alert_from_a_compressed_chat_names_the_chats_stored_id(bot_home):
+@pytest.mark.parametrize("session_id", ["chat1-continued", "chat1-continued-again"])
+def test_an_alert_from_any_continuation_of_a_compressed_chat_names_the_chats_stored_id(bot_home, session_id):
     home, db = bot_home
     _record_app_chat(home, "chat1")
-    db.continuations["chat1"] = "chat1-continued"
-    alerts.on_human_input_request(kind="clarify", request_id="r2", session_id="chat1-continued")
+    db.chains["chat1"] = ["chat1", "chat1-continued", "chat1-continued-again"]
+    alerts.on_human_input_request(kind="clarify", request_id="r2", session_id=session_id)
     assert all_alerts() == [("junior", "question", "chat1", "r2")]
+
+
+def test_an_approval_asked_by_a_subagent_of_the_app_chat_raises_an_alert_for_the_chat(bot_home):
+    home, db = bot_home
+    _record_app_chat(home, "chat1")
+    db.chains["chat1"] = ["chat1", "chat1-continued"]
+    db.parents.update({"subagent": "chat1-continued", "nested-subagent": "subagent"})
+    alerts.on_human_input_request(kind="approval", request_id="r3", session_id="nested-subagent")
+    assert all_alerts() == [("junior", "approval", "chat1", "r3")]
+
+
+def test_a_subagent_of_another_chat_raises_nothing(bot_home):
+    home, db = bot_home
+    _record_app_chat(home, "chat1")
+    db.parents["subagent"] = "other-chat"
+    alerts.on_human_input_request(kind="approval", request_id="r4", session_id="subagent")
+    assert all_alerts() == []
 
 
 @pytest.mark.parametrize("profile_yaml", ["", '{"ui_meta": "not a mapping"}',

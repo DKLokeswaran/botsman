@@ -12,7 +12,7 @@
         "plugin": {"const": "hermes-bots"},
         "version": {"type": "string", "description": "Plugin version, for example 0.1.0"},
         "store_schema": {"type": "integer", "description": "Version of the shared store layout"},
-        "store_id": {"type": "string", "description": "Random id of the shared store, set when the store file is created. A value different from the one a client saw before means the store was recreated: the client's last-seen alert id no longer applies, and it reconnects with ?since=0"},
+        "store_id": {"type": "string", "description": "Random id of the shared store, set when the store file is created. A value different from the one a client saw before means the store was recreated and its alert ids restarted: the client reconnects with ?since=0"},
         "latest_alert_id": {"type": "integer", "minimum": 0, "description": "Highest alert id issued so far"}
       },
       "additionalProperties": false
@@ -31,7 +31,7 @@
         "ts": {"type": "number", "description": "Unix time in seconds"},
         "bot": {"type": "string", "description": "Hermes profile name"},
         "kind": {"$ref": "#/$defs/AlertKind"},
-        "session_id": {"type": "string", "description": "Stored session id of the bot's app chat (AppChatRecord). Hook alerts are raised only for that chat, under its stored id even after Hermes compressed it; routine alerts name the chat their target named"},
+        "session_id": {"type": "string", "description": "Stored session id of the bot's app chat (AppChatRecord). Hook alerts are raised only for that chat, including its continuations after compression and its subagents' sessions, always under the chat's stored id; routine alerts name the chat their target named"},
         "ref": {
           "type": ["string", "null"],
           "description": "Request id for approval, question and resolved; turn id for finished and error; null otherwise"
@@ -40,7 +40,7 @@
       "additionalProperties": false
     },
     "Ping": {
-      "description": "Sent on a quiet alert stream every 20 seconds, and at once when the store is recreated during the stream. A store_id different from the one the client holds means the store was recreated: the client reconnects with ?since=0, as for Info.store_id.",
+      "description": "Sent on a quiet alert stream every 20 seconds, and at once when the store is recreated during the stream. A store_id different from the one the client holds means the store was recreated: the client resets its last-seen alert id to 0 and keeps reading, because the stream follows this ping with the new store's alerts from the start. Reconnecting would receive them twice.",
       "type": "object",
       "required": ["type", "latest_alert_id", "store_id"],
       "properties": {
@@ -52,7 +52,7 @@
     },
     "AlertStreamMessage": {"oneOf": [{"$ref": "#/$defs/Alert"}, {"$ref": "#/$defs/Ping"}]},
     "AppChatRecord": {
-      "description": "What an app writes into a bot's profile when it creates the bot's chat, with profiles.configure {name: <bot>, ui_meta: {\"hermes-bots-app\": <this object>}}. The plugin reads it from the profile's profile.yaml to raise hook alerts only for this chat. The key is hermes-bots-app, not hermes-bots, which Hermes's own Bot Mode uses for the bot's title.",
+      "description": "What an app writes into a bot's profile right after creating the bot's chat with session.create. Procedure: read ui_meta and ui_meta_revisions from profiles.list; if ui_meta[\"hermes-bots-app\"] names a chat, use it; otherwise write profiles.configure {name: <bot>, ui_meta: {\"hermes-bots-app\": <this whole object>}, ui_meta_expected_revisions: {\"hermes-bots-app\": <revision read>}}, and on a conflict read again and use the recorded chat. The write replaces the whole object, so it always carries every field. The plugin reads it from the profile's profile.yaml to raise hook alerts only for this chat. The key is hermes-bots-app, not hermes-bots, which Hermes's own Bot Mode uses for the bot's title.",
       "type": "object",
       "required": ["chat_session_id"],
       "properties": {

@@ -83,7 +83,14 @@ Delivery returns at once and queues the row in the shared store. A background wo
 | `routine` | Routine output was written into the chat | none |
 | `routine_failed` | A routine reported a failure, or its output could not be written | none |
 
-Hook alerts (`approval`, `question`, `resolved`, `finished`, `error`) are raised only for the bot's app chat, and name its stored id even after Hermes compressed the chat. The apps record that chat when they create it, with `profiles.configure {name: <bot>, ui_meta: {"hermes-bots-app": {"chat_session_id": <stored id>}}}` (`AppChatRecord` in the contract). The bot's other sessions, such as other dashboard chats, the CLI and messaging platforms, raise none and work as configured; a bot with no recorded chat raises no hook alerts.
+Hook alerts (`approval`, `question`, `resolved`, `finished`, `error`) are raised only for the bot's app chat: its own session, the sessions it continued in after compressions, and the sessions of subagents it delegated to. They always name the chat's stored id. The bot's other sessions, such as other dashboard chats, the CLI and messaging platforms, raise none and work as configured; a bot with no recorded chat raises no hook alerts.
+
+The apps record that chat right after `session.create`, before its first turn, with this procedure (`AppChatRecord` in the contract):
+
+1. Read the bot's `ui_meta` and `ui_meta_revisions` from `profiles.list`.
+2. If `ui_meta["hermes-bots-app"]` names a chat, use it.
+3. Otherwise create the chat and write `profiles.configure {name: <bot>, ui_meta: {"hermes-bots-app": {"chat_session_id": <stored id>}}, ui_meta_expected_revisions: {"hermes-bots-app": <revision read>}}`. Send the whole record: the write replaces the `hermes-bots-app` object.
+4. If the write reports a conflict, another device recorded a chat first: read it again and use that chat.
 
 Routine runs, turns of delegated subagents and interrupted replies raise no hook alerts. Alerts are kept for 7 days.
 
@@ -97,7 +104,9 @@ WS   /api/plugins/hermes-bots/alerts?ticket=<ticket>&since=<last alert id>
 - Call `/info` before opening the socket. On a dashboard that just installed the plugin, this request is what mounts the socket route.
 - Get the ticket from `POST /api/auth/ws-ticket`. It works once and expires after 30 s. The ticket can also go in the `hermes-gateway-v1` subprotocol pair, as for `/api/ws`. The socket refuses, with an HTTP 403 at the handshake, every connection `/api/ws` would refuse: one without a valid ticket, one from a refused Host or Origin, one carrying the Desktop app's `X-Hermes-Gateway-Ticket` header, and every connection while the dashboard's chat is switched off.
 - Without `since`, the stream starts after the newest alert. With it, the stream first replays every alert after that id. A `since` above the newest alert makes the stream replay every alert the store still keeps.
-- `/info` and every ping carry the store's `store_id`, a random id set when the store file is created. When it differs from the one the client saw before, the store was recreated, for example because its file was deleted or the Hermes root was rebuilt: the client's last-seen id no longer applies, and it reconnects with `since=0`. This applies wherever the client sees the new id, in `/info` or in a ping. If the store is recreated while a stream is open, the stream announces it at once with a ping carrying the new `store_id`.
+- `/info` and every ping carry the store's `store_id`, a random id set when the store file is created. A different id means the store was recreated, for example because its file was deleted or the Hermes root was rebuilt, and its alert ids restarted. The client acts on it in one of two ways:
+  - In `/info`, before or between streams: it reconnects with `since=0`.
+  - In a ping on an open stream: it resets its last-seen id to 0 and keeps reading. The stream sends that ping as soon as the store is recreated, then the new store's alerts from the start, so reconnecting would receive them twice.
 - A quiet stream sends `{"type": "ping", "latest_alert_id": <last id sent>, "store_id": <id>}` every 20 s.
 
 Only the launch profile's dashboard can serve the socket. It streams alerts for every bot.
