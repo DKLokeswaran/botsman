@@ -158,3 +158,29 @@ def test_info_and_pings_carry_the_same_store_id(client, plugin_api, monkeypatch)
     store_id = client.get("/info").json()["store_id"]
     with client.websocket_connect("/alerts?since=0") as ws:
         assert ws.receive_json()["store_id"] == store_id
+
+
+def test_a_store_recreated_during_a_stream_announces_its_new_id_then_streams_from_the_start(
+        client, plugin_api, temp_store, monkeypatch):
+    _add_alert(plugin_api, ref="old")
+    old_store = plugin_api.store.store_id()
+    monkeypatch.setattr(plugin_api, "PING_EVERY_S", 0.0)
+    with client.websocket_connect("/alerts") as ws:
+        assert ws.receive_json()["store_id"] == old_store
+        for leftover in temp_store.parent.glob(temp_store.name + "*"):
+            leftover.unlink()
+        new_alert = _add_alert(plugin_api, ref="new")
+        messages = _receive_until_alert(ws)
+    new_store_pings = [m for m in messages if m["type"] == "ping" and m["store_id"] != old_store]
+    assert new_store_pings and new_store_pings[0]["latest_alert_id"] == 0
+    assert (messages[-1]["id"], messages[-1]["ref"]) == (new_alert, "new")
+
+
+def _receive_until_alert(ws, limit=200):
+    """Messages up to and including the first alert."""
+    messages = []
+    while len(messages) < limit:
+        messages.append(ws.receive_json())
+        if messages[-1]["type"] == "alert":
+            return messages
+    raise AssertionError("no alert arrived")

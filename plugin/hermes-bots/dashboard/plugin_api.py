@@ -84,37 +84,49 @@ async def alerts(ws: WebSocket) -> None:
         return
     # Accept, echoing the subprotocol the ticket came in, and stream from the starting alert
     await ws.accept(subprotocol=getattr(ws, "_hermes_ws_subprotocol", None))
-    last_id = await asyncio.to_thread(_stream_start, since)
+    stream_store, last_id = await asyncio.to_thread(_stream_start, since)
     try:
-        await _stream(ws, last_id)
+        await _stream(ws, stream_store, last_id)
     except (WebSocketDisconnect, RuntimeError):
         return
 
 
-def _stream_start(since: int | None) -> int:
-    """The alert id the stream starts after.
+def _stream_start(since: int | None) -> tuple[str, int]:
+    """The store the stream reads and the alert id it starts after.
 
     Without ``since`` that is the newest alert. A ``since`` above the newest alert means the store was
     recreated since the client last connected, so the stream replays every alert from the start.
     """
-    latest = store.latest_alert_id()
+    stream_store, latest = store.store_id(), store.latest_alert_id()
     if since is None:
-        return latest
-    return since if since <= latest else 0
+        return stream_store, latest
+    return stream_store, (since if since <= latest else 0)
 
 
-async def _stream(ws: WebSocket, last_id: int) -> None:
-    """Send every alert after ``last_id`` as it arrives, with a ping when the stream is quiet."""
+async def _stream(ws: WebSocket, stream_store: str, last_id: int) -> None:
+    """Send every alert after ``last_id`` as it arrives, with a ping when the stream is quiet.
+
+    When the store is recreated during the stream, a ping with the new ``store_id`` comes first,
+    then the new store's alerts from the start.
+    """
     last_sent = time.monotonic()
     while True:
+        # Start over on a recreated store, announcing its id before any of its alerts
+        current_store = await asyncio.to_thread(store.store_id)
+        if current_store != stream_store:
+            stream_store, last_id = current_store, 0
+            last_sent = await _send_ping(ws, last_id, stream_store)
         # Send alerts raised since the last poll
         for row in await asyncio.to_thread(store.alerts_after, last_id):
             await ws.send_text(json.dumps({"type": "alert", **row}))
-            last_id = row["id"]
-            last_sent = time.monotonic()
+            last_id, last_sent = row["id"], time.monotonic()
         # Ping when nothing was sent for a while
         if time.monotonic() - last_sent >= PING_EVERY_S:
-            current_store = await asyncio.to_thread(store.store_id)
-            await ws.send_text(json.dumps({"type": "ping", "latest_alert_id": last_id, "store_id": current_store}))
-            last_sent = time.monotonic()
+            last_sent = await _send_ping(ws, last_id, stream_store)
         await asyncio.sleep(POLL_S)
+
+
+async def _send_ping(ws: WebSocket, last_id: int, store_id: str) -> float:
+    """Send a ping; returns when it was sent."""
+    await ws.send_text(json.dumps({"type": "ping", "latest_alert_id": last_id, "store_id": store_id}))
+    return time.monotonic()

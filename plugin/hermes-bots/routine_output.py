@@ -19,7 +19,11 @@ _WRAPPED = re.compile(
     r"\ACronjob Response: (?P<name>[^\n]*)\n\(job_id: [^\n]*\)\n-------------\n\n(?P<body>.*?)"
     r"(?:\n\nTo stop or manage this job, send me a new message \(e\.g\. \"stop reminder [^\n]*\"\)\.)?\Z",
     re.DOTALL)
-_FAILURE = re.compile(r"\A⚠️? ?Cron '.*?' failed:", re.DOTALL)
+# Every notice Hermes's cron delivers when a run fails, was refused, or a job was paused
+_FAILURE = re.compile(
+    r"\A(?:⚠️?|⛔) ?Cron(?: job| watchdog| monitor)? '.*?' "
+    r"(?:failed:|did not run:|was auto-paused|script failed|source failed)",
+    re.DOTALL)
 
 
 def format_target(session_id: str, routine: str) -> str:

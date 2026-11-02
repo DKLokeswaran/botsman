@@ -65,3 +65,14 @@ def test_targets_and_messages_match_the_contract():
     schema = json.loads((PLUGIN_DIR.parent / "contract" / "hermes-bots-plugin.schema.json").read_text())["$defs"]
     assert re.match(schema["DeliverTarget"]["pattern"], format_target("20261031_212026_cdff05", "News, daily / ü"))
     assert re.match(schema["RoutineMessage"]["pattern"], routine_message("News", "body"))
+
+
+@pytest.mark.parametrize("notice", [
+    "⚠️ Cron 'News' failed: its script timed out. No model was invoked.",
+    "⛔ Cron 'News' did not run: no model is configured. Nothing was charged.",
+    "⚠ Cron job 'News' was auto-paused\n\nIt failed three times in a row.",
+    "⚠ Cron watchdog 'News' script failed\n\nexit status 1",
+    "⚠ Cron monitor 'News' source failed\n\nconnection refused",
+])
+def test_every_cron_failure_notice_is_a_failure(notice):
+    assert extract_output(notice) == (notice, True)
