@@ -14,7 +14,7 @@ python3 -m http.server 8000 --directory mockups
 
 Open `http://127.0.0.1:8000/`. The index lists every screen. Each one is shown in a phone frame (390 CSS pixels wide) and a desktop window (1280 CSS pixels wide). The two frames are separate pages. A click stays inside the frame you clicked.
 
-`app.html` is the client itself. The index loads it with `?device=phone` or `?device=desktop` and a hash for the screen. Opening `app.html` directly picks phone or desktop from the window width.
+`mockups/app.html` is the client itself. The index loads it with `?device=phone` or `?device=desktop` and a hash for the screen. Opening `mockups/app.html` directly picks phone or desktop from the window width.
 
 Mode is on the index and again in Settings.
 
