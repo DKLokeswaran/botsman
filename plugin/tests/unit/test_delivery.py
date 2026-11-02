@@ -1,0 +1,182 @@
+import sqlite3
+import sys
+import time
+import types
+
+import pytest
+from helpers import all_alerts
+
+from hermes_bots import delivery, store
+
+
+class FakeSessionDB:
+    """The SessionDB methods the delivery worker uses, with one turn lease per chat."""
+
+    def __init__(self):
+        self.sessions = {"s1": "s1", "old": "tip"}
+        self.lease_holder = None
+        self.messages = []
+        self.message_uids = []
+        self.fail_with = None
+        self.release_fails = False
+
+    def get_session(self, session_id):
+        return {"id": session_id} if session_id in self.sessions else None
+
+    def resolve_resume_session_id(self, session_id):
+        return self.sessions.get(session_id, session_id)
+
+    def try_acquire_session_turn_lease(self, session_id, holder, ttl_seconds):
+        if self.lease_holder is not None:
+            return False
+        self.lease_holder = holder
+        return True
+
+    def release_session_turn_lease(self, session_id, holder):
+        assert self.lease_holder == holder
+        self.lease_holder = None
+        if self.release_fails:
+            raise sqlite3.OperationalError("database is locked")
+
+    def append_message(self, session_id, role, content, turn_lease_holder, message_uid):
+        if self.fail_with:
+            raise self.fail_with
+        assert turn_lease_holder == self.lease_holder
+        self.messages.append((session_id, role, content))
+        self.message_uids.append(message_uid)
+        return len(self.messages)
+
+    def get_messages(self, session_id, include_ancestors=False):
+        return [{"id": index + 1, "message_uid": uid} for index, uid in enumerate(self.message_uids)]
+
+
+@pytest.fixture
+def db(monkeypatch):
+    fake = FakeSessionDB()
+    registry = types.ModuleType("hermes_state_registry")
+    registry.acquire = lambda path: fake
+    registry.release_or_close = lambda handle: None
+    monkeypatch.setitem(sys.modules, "hermes_state_registry", registry)
+    monkeypatch.setattr(delivery, "_active_db_path", lambda: "/home/junior/state.db")
+    monkeypatch.setattr(delivery, "ensure_worker_running", lambda: None)
+    return fake
+
+
+def _queue(chat_id="session-s1/Morning%20briefing", content="Good morning."):
+    return delivery.queue_routine_output(chat_id, content)
+
+
+def test_queued_output_is_written_as_the_bots_message_and_alerts(db):
+    row_id = _queue()
+    assert delivery.process_next() is True
+    assert db.messages == [("s1", "assistant", "[Routine: Morning briefing]\nGood morning.")]
+    assert store.get_delivery(row_id)["state"] == "written"
+    assert all_alerts() == [("junior", "routine", "s1", None)]
+    assert delivery.process_next() is False
+
+
+def test_output_goes_to_the_chats_current_tip_but_alerts_name_the_stored_id(db):
+    _queue("session-old/News")
+    delivery.process_next()
+    assert db.messages[0][0] == "tip"
+    assert all_alerts() == [("junior", "routine", "old", None)]
+
+
+def test_a_failed_run_is_written_and_raises_the_failure_alert(db):
+    _queue(content="⚠️ Cron 'News' failed: provider error.")
+    delivery.process_next()
+    assert db.messages[0][2] == "[Routine: Morning briefing]\n⚠️ Cron 'News' failed: provider error."
+    assert all_alerts() == [("junior", "routine_failed", "s1", None)]
+
+
+def test_a_running_reply_defers_the_write(db):
+    db.lease_holder = "a running turn"
+    row_id = _queue()
+    delivery.process_next()
+    row = store.get_delivery(row_id)
+    assert (row["state"], row["claimed_by"], row["attempts"]) == ("pending", None, 0)
+    assert row["next_attempt_at"] > time.time()
+    assert db.messages == [] and all_alerts() == []
+
+
+def _make_due(row_id, **columns):
+    """Make a deferred or claimed row claimable now, optionally changing other columns."""
+    assignments = ", ".join(["next_attempt_at = 0", "claimed_at = 0"] + [f"{name} = ?" for name in columns])
+    with store.open_store() as conn:
+        conn.execute(f"UPDATE deliveries SET {assignments} WHERE id = ?", (*columns.values(), row_id))
+
+
+def test_a_chat_busy_past_the_limit_drops_the_row_and_alerts(db, monkeypatch):
+    db.lease_holder = "a running turn"
+    row_id = _queue()
+    monkeypatch.setattr(delivery, "BUSY_LIMIT_S", -1.0)
+    delivery.process_next()
+    assert store.get_delivery(row_id)["state"] == "pending"
+    _make_due(row_id)
+    delivery.process_next()
+    assert store.get_delivery(row_id)["state"] == "dropped"
+    assert all_alerts() == [("junior", "routine_failed", "s1", None)]
+
+
+def test_a_row_that_waited_in_the_queue_is_not_dropped_on_its_first_busy_attempt(db):
+    db.lease_holder = "a running turn"
+    row_id = _queue()
+    _make_due(row_id, created_at=0)
+    delivery.process_next()
+    assert store.get_delivery(row_id)["state"] == "pending"
+    assert all_alerts() == []
+
+
+def test_a_failed_lease_release_still_counts_the_write_once(db):
+    db.release_fails = True
+    row_id = _queue()
+    delivery.process_next()
+    assert store.get_delivery(row_id)["state"] == "written"
+    assert len(db.messages) == 1
+    assert all_alerts() == [("junior", "routine", "s1", None)]
+
+
+def test_a_write_whose_bookkeeping_was_lost_is_not_written_again(db, monkeypatch):
+    row_id = _queue()
+    finish = store.finish_delivery
+
+    def stopped_process(*args, **kwargs):
+        raise sqlite3.OperationalError("database is locked")
+    monkeypatch.setattr(store, "finish_delivery", stopped_process)
+    with pytest.raises(sqlite3.OperationalError):
+        delivery.process_next()
+    monkeypatch.setattr(store, "finish_delivery", finish)
+    _make_due(row_id)
+    delivery.process_next()
+    row = store.get_delivery(row_id)
+    assert (row["state"], row["message_id"]) == ("written", 1)
+    assert len(db.messages) == 1
+    assert all_alerts() == [("junior", "routine", "s1", None)]
+
+
+def test_a_missing_chat_drops_the_row_at_once(db):
+    row_id = _queue("session-gone/News")
+    delivery.process_next()
+    row = store.get_delivery(row_id)
+    assert (row["state"], row["error"]) == ("dropped", "chat gone not found")
+    assert all_alerts() == [("junior", "routine_failed", "gone", None)]
+
+
+def test_unexpected_errors_retry_with_backoff_then_drop(db, monkeypatch):
+    db.fail_with = sqlite3.OperationalError("database is locked")
+    row_id = _queue()
+    for attempt in range(1, delivery.MAX_ATTEMPTS):
+        delivery.process_next()
+        row = store.get_delivery(row_id)
+        assert (row["state"], row["attempts"]) == ("pending", attempt)
+        assert db.lease_holder is None
+        _make_due(row_id)  # skip the backoff wait
+    delivery.process_next()
+    assert store.get_delivery(row_id)["state"] == "dropped"
+    assert all_alerts() == [("junior", "routine_failed", "s1", None)]
+
+
+def test_a_malformed_target_is_refused_before_queuing(db):
+    with pytest.raises(ValueError):
+        _queue("chat-s1/News")
+    assert store.claim_next_delivery("w") is None

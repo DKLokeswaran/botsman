@@ -1,0 +1,63 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/DKLokeswaran/hermes-bots/plugin/contract/hermes-bots-plugin.schema.json",
+  "title": "Hermes Bots companion plugin contract",
+  "description": "What the Windows and Android apps exchange with the hermes-bots plugin. Both apps generate their types from this file.",
+  "$defs": {
+    "Info": {
+      "description": "Response of GET /api/plugins/hermes-bots/info: the plugin code the dashboard is running.",
+      "type": "object",
+      "required": ["plugin", "version", "store_schema", "latest_alert_id"],
+      "properties": {
+        "plugin": {"const": "hermes-bots"},
+        "version": {"type": "string", "description": "Plugin version, for example 0.1.0"},
+        "store_schema": {"type": "integer", "description": "Version of the shared store layout"},
+        "latest_alert_id": {"type": "integer", "minimum": 0, "description": "Highest alert id issued so far"}
+      },
+      "additionalProperties": false
+    },
+    "AlertKind": {
+      "description": "approval and question: a person is asked. resolved: that request was answered, denied or timed out (ref matches the request). finished: a long reply completed. routine: routine output was written into the chat. routine_failed: a routine reported a failure, or its output could not be written.",
+      "enum": ["approval", "question", "resolved", "finished", "routine", "routine_failed"]
+    },
+    "Alert": {
+      "description": "One message on the /api/plugins/hermes-bots/alerts WebSocket. Carries no conversation text.",
+      "type": "object",
+      "required": ["type", "id", "ts", "bot", "kind", "session_id", "ref"],
+      "properties": {
+        "type": {"const": "alert"},
+        "id": {"type": "integer", "minimum": 1, "description": "Increasing id; reconnect with ?since=<id>"},
+        "ts": {"type": "number", "description": "Unix time in seconds"},
+        "bot": {"type": "string", "description": "Hermes profile name"},
+        "kind": {"$ref": "#/$defs/AlertKind"},
+        "session_id": {"type": "string", "description": "Stored session id of the chat"},
+        "ref": {
+          "type": ["string", "null"],
+          "description": "Request id for approval, question and resolved; turn id for finished; null otherwise"
+        }
+      },
+      "additionalProperties": false
+    },
+    "Ping": {
+      "description": "Sent on a quiet alert stream every 20 seconds.",
+      "type": "object",
+      "required": ["type", "latest_alert_id"],
+      "properties": {
+        "type": {"const": "ping"},
+        "latest_alert_id": {"type": "integer", "minimum": 0}
+      },
+      "additionalProperties": false
+    },
+    "AlertStreamMessage": {"oneOf": [{"$ref": "#/$defs/Alert"}, {"$ref": "#/$defs/Ping"}]},
+    "DeliverTarget": {
+      "description": "Cron deliver value that writes a routine's output into a chat: hbapp:session-<stored session id>/<percent-encoded routine name>. Every character outside A-Z a-z 0-9 - _ . ~ is percent-encoded, including / and ,.",
+      "type": "string",
+      "pattern": "^hbapp:session-[^/,]+/[A-Za-z0-9._~%-]+$"
+    },
+    "RoutineMessage": {
+      "description": "Content of the assistant-role chat row a routine writes: [Routine: <routine name>] on the first line, then the output.",
+      "type": "string",
+      "pattern": "^\\[Routine: [^\\n]*\\]\\n"
+    }
+  }
+}
