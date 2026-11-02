@@ -109,3 +109,11 @@ def test_a_hook_does_not_wait_for_a_locked_store(temp_store, monkeypatch):
     writer.shutdown(wait=True)
     assert took < 0.5
     assert all_alerts()[-1] == ("junior", "approval", "s1", "r1")
+
+
+def test_a_delegated_subagent_turn_raises_no_finished_alert(monkeypatch):
+    monkeypatch.setattr(alerts, "FINISHED_AFTER_S", 0.0)
+    child = {**TURN, "session_id": "child", "task_id": "sa-0-1a2b3c4d", "turn_id": "child:t1"}
+    alerts.on_pre_llm_call(parent_session_id="s1", **child)
+    alerts.on_session_end(completed=True, interrupted=False, **child)
+    assert all_alerts() == []

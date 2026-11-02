@@ -83,11 +83,23 @@ async def alerts(ws: WebSocket) -> None:
         return
     # Accept, echoing the subprotocol the ticket came in, and stream from the starting alert
     await ws.accept(subprotocol=getattr(ws, "_hermes_ws_subprotocol", None))
-    last_id = since if since is not None else await asyncio.to_thread(store.latest_alert_id)
+    last_id = await asyncio.to_thread(_stream_start, since)
     try:
         await _stream(ws, last_id)
     except (WebSocketDisconnect, RuntimeError):
         return
+
+
+def _stream_start(since: int | None) -> int:
+    """The alert id the stream starts after.
+
+    Without ``since`` that is the newest alert. A ``since`` above the newest alert means the store was
+    recreated since the client last connected, so the stream replays every alert from the start.
+    """
+    latest = store.latest_alert_id()
+    if since is None:
+        return latest
+    return since if since <= latest else 0
 
 
 async def _stream(ws: WebSocket, last_id: int) -> None:

@@ -90,7 +90,7 @@ WS   /api/plugins/hermes-bots/alerts?ticket=<ticket>&since=<last alert id>
 
 - Call `/info` before opening the socket. On a dashboard that just installed the plugin, this request is what mounts the socket route.
 - Get the ticket from `POST /api/auth/ws-ticket`. It works once and expires after 30 s. The ticket can also go in the `hermes-gateway-v1` subprotocol pair, as for `/api/ws`. The socket refuses, with an HTTP 403 at the handshake, every connection `/api/ws` would refuse: one without a valid ticket, one from a refused Host or Origin, one carrying the Desktop app's `X-Hermes-Gateway-Ticket` header, and every connection while the dashboard's chat is switched off.
-- Without `since`, the stream starts after the newest alert. With it, the stream first replays every alert after that id.
+- Without `since`, the stream starts after the newest alert. With it, the stream first replays every alert after that id. A `since` above the newest alert means the store was recreated, for example after a reinstall: the stream then replays every alert from the start, and the client sets its last-seen id from what it receives.
 - A quiet stream sends `{"type": "ping"}` every 20 s.
 
 Only the launch profile's dashboard can serve the socket. It streams alerts for every bot.

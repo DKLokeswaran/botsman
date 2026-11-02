@@ -115,9 +115,13 @@ def on_human_input_resolved(**kwargs) -> None:
 
 @_observer
 def on_pre_llm_call(**kwargs) -> None:
-    """Note when a reply starts, so its end can tell how long it ran."""
+    """Note when a reply starts, so its end can tell how long it ran.
+
+    Turns of a delegated subagent carry their parent's session id and are not timed: their chat is
+    not one the apps show, and the parent's own reply raises ``finished``.
+    """
     turn_id = kwargs.get("turn_id")
-    if turn_id and not _is_routine_run(kwargs):
+    if turn_id and not kwargs.get("parent_session_id") and not _is_routine_run(kwargs):
         _remember_turn_start(turn_id, time.time())
 
 

@@ -26,7 +26,7 @@
       "required": ["type", "id", "ts", "bot", "kind", "session_id", "ref"],
       "properties": {
         "type": {"const": "alert"},
-        "id": {"type": "integer", "minimum": 1, "description": "Increasing id; reconnect with ?since=<id>"},
+        "id": {"type": "integer", "minimum": 1, "description": "Increasing id; reconnect with ?since=<id>. When ?since= is above the newest id, the store was recreated and the stream replays from id 1, so a client sets its last-seen id from the alerts it receives"},
         "ts": {"type": "number", "description": "Unix time in seconds"},
         "bot": {"type": "string", "description": "Hermes profile name"},
         "kind": {"$ref": "#/$defs/AlertKind"},

@@ -143,3 +143,10 @@ def test_a_ticket_sent_as_a_subprotocol_is_echoed(client, checks, plugin_api, mo
     with client.websocket_connect("/alerts", subprotocols=["hermes-gateway-v1", "hermes-gateway-ticket.t"]) as ws:
         assert ws.accepted_subprotocol == "hermes-gateway-v1"
         ws.receive_json()
+
+
+def test_a_since_ahead_of_the_store_replays_from_the_start(client, plugin_api):
+    first, second = _add_alert(plugin_api, ref="r1"), _add_alert(plugin_api, ref="r2")
+    with client.websocket_connect("/alerts?since=900") as ws:
+        received = [ws.receive_json(), ws.receive_json()]
+    assert [alert["id"] for alert in received] == [first, second]
