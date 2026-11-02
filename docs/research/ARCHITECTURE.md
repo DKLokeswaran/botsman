@@ -56,7 +56,7 @@ flowchart LR
 | Concept | Hermes object | Notes |
 |---|---|---|
 | Bot | Profile | `profiles.list` is the roster. One machine-level dashboard serves every profile |
-| Chat | Ordinary dashboard session | One per bot, created with `session.create`. Its stored id is kept in the profile's `ui_meta`. Routines post into it |
+| Chat | Ordinary dashboard session | One per bot, created with `session.create`. Its stored id is kept in the profile's `ui_meta["hermes-bots-app"].chat_session_id`, written with `profiles.configure`. Routines post into it, and hook alerts come only from it |
 | Bot metadata the app adds | `ui_meta` on the profile | Free-form JSON with per-key compare-and-swap (`profiles.configure` with `ui_meta_expected_revisions`) |
 
 The profile's Bot Chat is not used. Its routine delivery always starts an agent turn (B15).
@@ -82,7 +82,7 @@ Output shapes the adapter handles (B15):
 |---|---|---|
 | Wrapped (`cron.wrap_response` true, the default) | Starts `Cronjob Response: <name>\n(job_id: <id>)\n-------------\n\n` and ends `\n\nTo stop or manage this job, send me a new message (e.g. "stop reminder <name>").` | The text between header and footer |
 | Unwrapped (`cron.wrap_response: false`, per profile) | Neither header nor footer | All of it |
-| Failure | The kept text starts `⚠️ Cron '<name>' failed:` | All of it; the alert is "routine failed" |
+| Failure | The kept text starts with one of Hermes's cron failure notices: `⚠️ Cron '<name>' failed:`, `⛔ Cron '<name>' did not run:`, `⚠ Cron job '<name>' was auto-paused`, `⚠ Cron watchdog '<name>' script failed` or `⚠ Cron monitor '<name>' source failed` | All of it; the alert is "routine failed" |
 
 The row is the bot's own message, so the user's next message never merges into it (B20):
 
@@ -131,20 +131,25 @@ The plugin raises alerts from its hooks, in whichever process runs the turn, and
 | `on_human_input_request` hook, kind `clarify` | "<bot> has a question" |
 | `on_human_input_resolved` hook | clear the pending alert |
 | `on_session_end` hook with a `turn_id`, at least 60 s after that turn's `pre_llm_call` (configurable) | "<bot> finished" |
+| `on_session_end` hook with a `turn_id` and `failed` | "<bot>'s reply failed" |
 | delivery function, after writing routine output | "<bot> has a new routine result" |
 | delivery function, after writing a failure | "<bot>'s routine failed" |
 
 - The bot is the profile, read with `get_active_profile_name()` inside the hook.
-- Hooks from routine runs (`task_id` starting `cron:`) and `on_session_end` calls without a `turn_id` raise nothing.
+- Hook alerts are raised only for the bot's app chat: the plugin reads the chat id from the profile's `profile.yaml` (`ui_meta["hermes-bots-app"].chat_session_id`) and also accepts the sessions the chat continued in after compressions and the sessions of subagents it delegated to (found through each session's `parent_session_id`), naming the alert with the chat's stored id. The bot's other sessions raise nothing. `ui_meta["hermes-bots"]` is not used, because Hermes's own Bot Mode keeps the bot's title there.
+- Hooks from routine runs (`task_id` starting `cron:`), turns of delegated subagents (`parent_session_id` set in `pre_llm_call`), interrupted turns and `on_session_end` calls without a `turn_id` raise nothing.
 - `pre_approval_request` is not used, because it also fires for requests Hermes's `smart` mode settles with nobody asked.
+- The app records the chat right after `session.create`: it reads `ui_meta` and `ui_meta_revisions` from `profiles.list`, uses a chat already recorded, and otherwise writes the whole `hermes-bots-app` record with `ui_meta_expected_revisions`, so two devices setting up the same bot end with one chat.
+- Approval alerts need each bot's `approvals.mode` to be `manual`. The app sets it at every connect, with `PUT /api/config?profile=<bot>`, when a bot's profile has another mode (FR-PLG-6). Choosing a mode per bot comes later, from the app.
 
 Alerts carry no conversation text: the bot, the kind of event, the stored session id and a time. The app fetches details when opened, and a tap deep-links into the chat.
 
 Hooks run in the gateway, the dashboard and the gateway's cron workers, and every profile has its own copy of the plugin. So all of them append alerts to one SQLite file at the Hermes root, `<root>/plugin-data/hermes-bots/` (WAL mode), with an increasing id. The launch profile's plugin serves the WebSocket route `/api/plugins/hermes-bots/alerts`, which streams new rows after the id the client last saw (`?since=<id>`). Secondary profiles cannot serve plugin WebSockets (B18), so this one route carries every bot's alerts.
 
 - The client connects with a fresh ticket from `POST /api/auth/ws-ticket`, as for `/api/ws`.
-- Hermes does not check logins on plugin WebSocket routes (B17). Before accepting, the route calls `hermes_cli.web_server_chat._ws_auth_ok(ws)` and `_ws_request_is_allowed(ws)`, the credential and Host/Origin checks `/api/ws` runs, and closes the socket when either fails.
+- Hermes does not check logins on plugin WebSocket routes (B17). Before accepting, the route runs every check `/api/ws` runs and closes the socket when one fails: it refuses every connection while the dashboard's chat is switched off, refuses the Desktop app's `X-Hermes-Gateway-Ticket` header, and calls `hermes_cli.web_server_chat._ws_auth_ok(ws)` and `_ws_request_is_allowed(ws)` for the credential and the Host and Origin headers.
 - The app calls `GET /api/plugins/hermes-bots/info` before opening the socket. That request mounts the route on a dashboard that has just installed the plugin (B17).
+- `/info` and every ping carry the store's `store_id`. A different id means the store was recreated and its alert ids restarted. Seen in `/info`, the app reconnects with `since=0`. Seen in a ping on an open stream, the app resets its last-seen id to 0 and keeps reading: the stream sends that ping as soon as the store is recreated, followed by the new store's alerts from the start.
 
 ### Delivery
 
@@ -179,6 +184,7 @@ At connect the app checks every profile:
 |---|---|
 | Installed and enabled, version and pinned SHA on disk | `plugins.manage {action: "list", profile}` (`plugins.list` reports no versions) |
 | Version the dashboard is running | `GET /api/plugins/hermes-bots/info` |
+| Approval mode | The profile's `approvals.mode`; set to `manual` when it differs (FR-PLG-6) |
 
 A missing or outdated plugin in any profile is offered for install or update. Routines and push for that bot wait until it is done.
 

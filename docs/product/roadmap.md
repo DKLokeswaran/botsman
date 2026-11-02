@@ -50,8 +50,8 @@ flowchart TD
 | Milestone | Focus |
 | --- | --- |
 | **M1 – Companion plugin** | `hbapp` delivery platform for scheduled runs and Run now (header and footer removed, routine framing, turn lease for running replies), push hooks, shared alert store, alert WebSocket route with Hermes's credential and Origin checks, `/info` version route, works in every bot's profile, tests against a Hermes test instance |
-| **M2 – Foundations** | Both app shells; Android signing key and Tauri update key kept as GitHub secrets; release builds on every tagged release and in-app updates from them; client types generated from the Hermes contract; Zoetrik design tokens from DESIGN.md; login, reconnect and version check; plugin detection and install from the app |
-| **M3 – Bots and chat** | Bot list with row details and ordering; one chat per bot; streaming, markdown, copy, stop; routine messages; read state synced across devices |
+| **M2 – Foundations** | Both app shells; Android signing key and Tauri update key kept as GitHub secrets; release builds on every tagged release and in-app updates from them; client types generated from the Hermes contract; Zoetrik design tokens from DESIGN.md; login, reconnect and version check; plugin detection and install from the app; at connect, each bot's approval mode set to manual (FR-PLG-6) |
+| **M3 – Bots and chat** | Bot list with row details and ordering; one chat per bot, recorded in the bot's profile `ui_meta` so alerts come only from it (FR-CHAT-1); streaming, markdown, copy, stop; routine messages; read state synced across devices |
 | **M4 – Approvals and questions** | Inline approval and question cards, Needs you list, clearing across devices |
 | **M5 – Routines** | List, create, edit, pause, resume, run now, delete; schedule picker with cron; delivery to chat and alert |
 | **M6 – Push** | Android foreground service with its setup screen; Windows tray and notifications, including notification clicks and the unsigned-installer check; alert toggles |

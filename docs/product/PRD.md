@@ -4,9 +4,9 @@
 | --- | --- |
 | **Product name** | Hermes Bots |
 | **Document type** | Product Requirements Document (PRD) |
-| **Version** | 1.1 |
+| **Version** | 1.2 |
 | **Status** | Draft |
-| **Last updated** | 2026-10-31 |
+| **Last updated** | 2026-11-03 |
 | **Audience** | Builders implementing the Windows app, the Android app and the companion plugin |
 | **Related** | [Roadmap](./roadmap.md), [Architecture](../research/ARCHITECTURE.md), [Feasibility blockers](../research/BLOCKERS.md), [Mockups](../../mockups/README.md), [Design](../../DESIGN.md) |
 
@@ -113,6 +113,7 @@ Priority: **P0** is required at Alpha exit (MVP), **P1** at Stable / v1.0, **P2*
 | FR-PLG-3 | The plugin raises alerts from Hermes hooks and routine deliveries in every bot's profile and serves them on one authenticated WebSocket route | P0 |
 | FR-PLG-4 | The app detects a missing or outdated plugin in each bot's profile at connect, installs or updates it through `plugins.manage`, and restarts the gateway once; when the dashboard still runs older plugin code, the update screen shows the exact steps to restart it (manual for now, automated later) | P0 |
 | FR-PLG-5 | Optionally publish each alert to an ntfy topic | P1 |
+| FR-PLG-6 | At every connect the app sets each bot's `approvals.mode` to `manual` when it differs, so every approval reaches the user and raises an alert; choosing a different mode per bot comes later, from the app | P0 |
 
 ### 4.3 Bots (FR-BOT)
 
@@ -129,7 +130,7 @@ Priority: **P0** is required at Alpha exit (MVP), **P1** at Stable / v1.0, **P2*
 
 | ID | Requirement | Priority |
 | --- | --- | --- |
-| FR-CHAT-1 | One chat per bot, created on first use and remembered in the profile's `ui_meta` | P0 |
+| FR-CHAT-1 | One chat per bot, created on first use and recorded in the profile's `ui_meta["hermes-bots-app"].chat_session_id` right after it is created, with a revision check so every device uses the same chat; alerts come only from this chat | P0 |
 | FR-CHAT-2 | Send messages; replies stream in | P0 |
 | FR-CHAT-3 | Markdown with tables and code highlighting; Copy on messages and code blocks | P0 |
 | FR-CHAT-4 | Stop a running reply | P0 |
@@ -309,3 +310,4 @@ Where **Decision** is filled, that ruling is final. Empty **Decision** means sti
 | --- | --- | --- |
 | 1.0 | 2026-10-30 | Draft PRD from the planning answers, approved mockups, architecture and feasibility findings |
 | 1.1 | 2026-10-31 | Companion plugin requirements per bot profile, Run now delivery, plugin update restarts |
+| 1.2 | 2026-11-03 | The app sets each bot's approval mode to manual at setup; alert for a failed reply; alerts only from each bot's app chat |
