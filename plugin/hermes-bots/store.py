@@ -8,6 +8,8 @@ from the plugin package, because the dashboard routes load it by file path.
 from __future__ import annotations
 
 import contextlib
+import os
+import re
 import sqlite3
 import threading
 import time
@@ -101,6 +103,20 @@ def _prepare_once(conn: sqlite3.Connection, path: Path) -> None:
         _prepared_paths.add(str(path))
 
 
+def _process_alive(worker_id: str) -> bool:
+    """Whether the process named by a ``...:pid=<n>:...`` worker id still runs; True when unknown."""
+    match = re.search(r":pid=(\d+):", worker_id)
+    if match is None:
+        return True
+    try:
+        os.kill(int(match.group(1)), 0)
+    except ProcessLookupError:
+        return False
+    except PermissionError:
+        return True
+    return True
+
+
 @contextlib.contextmanager
 def _write(conn: sqlite3.Connection) -> Iterator[sqlite3.Connection]:
     """One write transaction that takes the lock up front, so claims never race."""
@@ -134,6 +150,7 @@ def claim_next_delivery(worker_id: str, path: Optional[Path] = None) -> Optional
     """Claim the next row that is due, or return None when there is nothing to do."""
     now = time.time()
     with open_store(path) as conn, _write(conn):
+        _release_dead_claims(conn)
         row = conn.execute(_CLAIMABLE_SQL, {"now": now, "stale": now - CLAIM_TIMEOUT_S}).fetchone()
         if row is None:
             return None
@@ -141,17 +158,27 @@ def claim_next_delivery(worker_id: str, path: Optional[Path] = None) -> Optional
         return dict(row)
 
 
+def _release_dead_claims(conn: sqlite3.Connection) -> None:
+    """Free the rows held by a worker whose process has stopped, without waiting for the claim timeout."""
+    holders = conn.execute(
+        "SELECT DISTINCT claimed_by FROM deliveries WHERE state = 'pending' AND claimed_by IS NOT NULL").fetchall()
+    for (holder,) in holders:
+        if not _process_alive(holder):
+            conn.execute("UPDATE deliveries SET claimed_by = NULL, claimed_at = NULL"
+                         " WHERE state = 'pending' AND claimed_by = ?", (holder,))
+
+
 def defer_delivery(row_id: int, worker_id: str, *, retry_at: float, error: Optional[str] = None,
-                   count_attempt: bool = False, chat_busy: bool = False, path: Optional[Path] = None) -> None:
+                   count_attempt: bool = False, busy_since: Optional[float] = None,
+                   path: Optional[Path] = None) -> None:
     """Release a claim and make the row due again at ``retry_at``.
 
-    ``chat_busy`` starts the busy clock the first time a running reply holds the chat.
+    ``busy_since`` is when the chat's current busy stretch began; None means the chat is not busy.
     """
-    busy_since = time.time() if chat_busy else None
     with open_store(path) as conn:
         conn.execute(
             "UPDATE deliveries SET claimed_by = NULL, claimed_at = NULL, next_attempt_at = ?,"
-            " attempts = attempts + ?, error = COALESCE(?, error), busy_since = COALESCE(busy_since, ?)"
+            " attempts = attempts + ?, error = COALESCE(?, error), busy_since = ?"
             " WHERE id = ? AND claimed_by = ?",
             (retry_at, int(count_attempt), error, busy_since, row_id, worker_id))
 

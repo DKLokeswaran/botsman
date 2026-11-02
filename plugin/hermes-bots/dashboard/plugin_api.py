@@ -2,7 +2,8 @@
 
 Mounted under ``/api/plugins/hermes-bots/``. Only the launch profile's copy can serve the socket,
 and it streams alerts for every bot from the shared store. Hermes does not check logins on plugin
-WebSocket routes, so the socket runs the same credential and Host/Origin checks as ``/api/ws``.
+WebSocket routes, so the socket runs the same checks as ``/api/ws``: chat switched on, credentials,
+and Host/Origin.
 """
 
 from __future__ import annotations
@@ -50,8 +51,13 @@ async def info() -> dict:
 
 
 def _connection_allowed(ws: WebSocket) -> bool:
-    """The same login and Host/Origin checks that ``/api/ws`` runs."""
+    """The same checks that ``/api/ws`` runs: chat switched on, a valid login and an allowed Host/Origin."""
+    from hermes_cli import web_server
+    from hermes_cli.dashboard_auth.native_http import HEADER
     from hermes_cli.web_server_chat import _ws_auth_ok, _ws_request_is_allowed
+    # /api/ws refuses everything while chat is off, and refuses the Desktop app's native sign-in header
+    if not getattr(web_server, "_DASHBOARD_EMBEDDED_CHAT_ENABLED", False) or HEADER in ws.headers:
+        return False
     return _ws_auth_ok(ws) and _ws_request_is_allowed(ws)
 
 

@@ -1,3 +1,4 @@
+import os
 import sqlite3
 import time
 import uuid
@@ -93,11 +94,23 @@ def test_reads_need_no_write_lock_once_the_store_is_set_up(temp_store):
         writer.close()
 
 
-def test_the_busy_clock_starts_at_the_first_busy_deferral():
+def test_a_deferral_records_or_clears_the_busy_stretch():
     row_id = _enqueue("s1")
     store.claim_next_delivery("w1")
-    store.defer_delivery(row_id, "w1", retry_at=0, chat_busy=True)
-    first = store.get_delivery(row_id)["busy_since"]
+    store.defer_delivery(row_id, "w1", retry_at=0, busy_since=123.0)
+    assert store.get_delivery(row_id)["busy_since"] == 123.0
     store.claim_next_delivery("w1")
-    store.defer_delivery(row_id, "w1", retry_at=0, chat_busy=True)
-    assert first is not None and store.get_delivery(row_id)["busy_since"] == first
+    store.defer_delivery(row_id, "w1", retry_at=0, error="locked", count_attempt=True)
+    assert store.get_delivery(row_id)["busy_since"] is None
+
+
+def test_a_claim_held_by_a_stopped_process_is_released_at_once():
+    row_id = _enqueue("s1")
+    store.claim_next_delivery("hermes-bots:pid=999999999:dead")
+    assert store.claim_next_delivery("w2")["id"] == row_id
+
+
+def test_a_claim_held_by_a_running_process_is_kept():
+    _enqueue("s1")
+    store.claim_next_delivery(f"hermes-bots:pid={os.getpid()}:live")
+    assert store.claim_next_delivery("w2") is None

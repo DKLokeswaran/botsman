@@ -10,9 +10,15 @@ from hermes_bots import delivery, store
 
 
 class FakeSessionDB:
-    """The SessionDB methods the delivery worker uses, with one turn lease per chat."""
+    """The SessionDB methods the delivery worker uses, with one turn lease per chat.
 
-    def __init__(self):
+    Messages also go into a SQLite file with Hermes's ``messages`` columns that the worker reads.
+    """
+
+    def __init__(self, path):
+        self.path = path
+        with sqlite3.connect(path) as conn:
+            conn.execute("CREATE TABLE messages (id INTEGER PRIMARY KEY, session_id TEXT, message_uid TEXT)")
         self.sessions = {"s1": "s1", "old": "tip"}
         self.lease_holder = None
         self.messages = []
@@ -41,23 +47,22 @@ class FakeSessionDB:
     def append_message(self, session_id, role, content, turn_lease_holder, message_uid):
         if self.fail_with:
             raise self.fail_with
-        assert turn_lease_holder == self.lease_holder
+        assert turn_lease_holder is not None and turn_lease_holder == self.lease_holder
         self.messages.append((session_id, role, content))
         self.message_uids.append(message_uid)
-        return len(self.messages)
-
-    def get_messages(self, session_id, include_ancestors=False):
-        return [{"id": index + 1, "message_uid": uid} for index, uid in enumerate(self.message_uids)]
+        with sqlite3.connect(self.path) as conn:
+            return conn.execute("INSERT INTO messages (session_id, message_uid) VALUES (?, ?)",
+                                (session_id, message_uid)).lastrowid
 
 
 @pytest.fixture
-def db(monkeypatch):
-    fake = FakeSessionDB()
+def db(monkeypatch, tmp_path):
+    fake = FakeSessionDB(tmp_path / "state.db")
     registry = types.ModuleType("hermes_state_registry")
     registry.acquire = lambda path: fake
     registry.release_or_close = lambda handle: None
     monkeypatch.setitem(sys.modules, "hermes_state_registry", registry)
-    monkeypatch.setattr(delivery, "_active_db_path", lambda: "/home/junior/state.db")
+    monkeypatch.setattr(delivery, "_active_db_path", lambda: fake.path)
     monkeypatch.setattr(delivery, "ensure_worker_running", lambda: None)
     return fake
 
@@ -101,21 +106,42 @@ def test_a_running_reply_defers_the_write(db):
 
 def _make_due(row_id, **columns):
     """Make a deferred or claimed row claimable now, optionally changing other columns."""
-    assignments = ", ".join(["next_attempt_at = 0", "claimed_at = 0"] + [f"{name} = ?" for name in columns])
+    columns = {"next_attempt_at": 0, "claimed_at": 0, **columns}
+    assignments = ", ".join(f"{name} = ?" for name in columns)
     with store.open_store() as conn:
         conn.execute(f"UPDATE deliveries SET {assignments} WHERE id = ?", (*columns.values(), row_id))
 
 
-def test_a_chat_busy_past_the_limit_drops_the_row_and_alerts(db, monkeypatch):
+def test_a_chat_busy_past_the_limit_drops_the_row_and_alerts(db):
     db.lease_holder = "a running turn"
     row_id = _queue()
-    monkeypatch.setattr(delivery, "BUSY_LIMIT_S", -1.0)
-    delivery.process_next()
-    assert store.get_delivery(row_id)["state"] == "pending"
-    _make_due(row_id)
+    started = time.time() - delivery.BUSY_LIMIT_S - 1
+    _make_due(row_id, busy_since=started, next_attempt_at=time.time())
     delivery.process_next()
     assert store.get_delivery(row_id)["state"] == "dropped"
     assert all_alerts() == [("junior", "routine_failed", "s1", None)]
+
+
+def test_a_gap_in_busy_checks_starts_a_new_busy_stretch(db):
+    db.lease_holder = "a running turn"
+    row_id = _queue()
+    long_ago = time.time() - delivery.BUSY_LIMIT_S - 1
+    _make_due(row_id, busy_since=long_ago, next_attempt_at=long_ago)
+    delivery.process_next()
+    row = store.get_delivery(row_id)
+    assert row["state"] == "pending" and row["busy_since"] > long_ago
+
+
+def test_an_error_retry_ends_the_busy_stretch(db):
+    db.lease_holder = "a running turn"
+    row_id = _queue()
+    delivery.process_next()
+    assert store.get_delivery(row_id)["busy_since"] is not None
+    db.lease_holder = None
+    db.fail_with = sqlite3.OperationalError("database is locked")
+    _make_due(row_id)
+    delivery.process_next()
+    assert store.get_delivery(row_id)["busy_since"] is None
 
 
 def test_a_row_that_waited_in_the_queue_is_not_dropped_on_its_first_busy_attempt(db):

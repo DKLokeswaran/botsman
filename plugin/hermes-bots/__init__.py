@@ -26,8 +26,6 @@ class HbappAdapter(BasePlatformAdapter):
         super().__init__(config=config, platform=Platform(PLATFORM))
 
     async def connect(self, *, is_reconnect: bool = False) -> bool:
-        # The gateway is long-lived, so its worker also writes rows a stopped process left queued
-        delivery.ensure_worker_running()
         if hasattr(self, "_mark_connected"):
             self._mark_connected()
         return True
@@ -70,3 +68,5 @@ def register(ctx) -> None:
     # Hooks that raise alerts
     for name, hook in alerts.HOOKS.items():
         ctx.register_hook(name, hook)
+    # Every process that loads the plugin writes queued rows, including rows a stopped process left behind
+    delivery.ensure_worker_running()

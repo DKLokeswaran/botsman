@@ -41,6 +41,11 @@ def test_no_ticket_is_refused_even_with_the_login_cookie(client, headers):
     assert not asyncio.run(_opens(ALERTS, additional_headers=headers))
 
 
+def test_the_desktop_sign_in_header_is_refused_even_with_a_ticket(client):
+    url = f"{ALERTS}?ticket={ticket(client)}"
+    assert not asyncio.run(_opens(url, additional_headers={"X-Hermes-Gateway-Ticket": "grant"}))
+
+
 def test_a_foreign_origin_is_refused_even_with_a_ticket(client):
     url = f"{ALERTS}?ticket={ticket(client)}"
     assert not asyncio.run(_opens(url, origin="https://evil.example"))

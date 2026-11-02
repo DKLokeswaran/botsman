@@ -14,6 +14,8 @@ Low-severity issues in the `hermes-bots` plugin, its contract and its tests. Non
 | One failing row delays the later rows of the same chat | `plugin/hermes-bots/store.py` (`_CLAIMABLE_SQL`) | A row in error backoff holds back the chat's later routines for up to about a minute. This keeps routines in order | State the ordering choice in a comment above the query |
 | Delivered routine text stays in the store for 7 days | `plugin/hermes-bots/store.py` (`finish_delivery`, `prune`) | The shared store holds a second copy of routine output until pruning | Clear `text` when a row is finished |
 | `send` and `_standalone_send` repeat the same queue-and-log code | `plugin/hermes-bots/__init__.py` | Two copies to keep in step | Move the shared part into one helper |
+| A routine for a deleted profile creates an empty session database | `plugin/hermes-bots/delivery.py` (`write_under_lease`) | Hermes's `acquire` creates the missing folder and `state.db` before the row is dropped as "chat not found" | Drop the row when its `db_path` does not exist, before acquiring |
+| A long lock on the session database may count as a failed attempt | `plugin/hermes-bots/delivery.py` (`process_next`) | Unverified. If taking the turn lease raises "database is locked", five such attempts drop the row with `routine_failed`; Hermes itself treats a locked lease as busy | Treat a "locked" error like a busy chat and defer without counting an attempt |
 
 ## Alerts and the alert stream
 
@@ -22,6 +24,10 @@ Low-severity issues in the `hermes-bots` plugin, its contract and its tests. Non
 | The turn-start map is trimmed only by age | `plugin/hermes-bots/alerts.py` (`_remember_turn_start`) | More than 2,000 turns started within 24 hours are all kept until they are 24 hours old. The memory used is small | Also drop the oldest entries when the map is over its cap |
 | A malformed `since` uses up the one-time ticket | `plugin/hermes-bots/dashboard/plugin_api.py` (`alerts`) | The client gets the same HTTP 403 as for a bad ticket and cannot tell the two apart | Check `since` before the login check, still before accepting, and document the refusal |
 | The subprotocol echo relies on a private Hermes attribute | `plugin/hermes-bots/dashboard/plugin_api.py` (`_hermes_ws_subprotocol`) | If Hermes renames it, clients that send the ticket as a subprotocol cannot connect | The integration tests cover it; run them before every Hermes upgrade |
+| Routine runs are not filtered out of approval and question alerts | `plugin/hermes-bots/alerts.py` (`_is_routine_run`) | The human-input hooks carry no `task_id`, so the check never applies to them. Routine runs cannot ask a person today: Hermes settles their approvals itself and turns off clarifying questions | Detect a routine run from Hermes's cron session context, and use the real hook payload in the unit test |
+| A `since` above the largest SQLite integer ends the stream after it opens | `plugin/hermes-bots/dashboard/plugin_api.py` (`_start_id`) | The first store read raises `OverflowError`, which the route does not catch | Refuse values above 2^63 - 1 before accepting |
+| A store error ends the alert stream | `plugin/hermes-bots/dashboard/plugin_api.py` (`_stream`) | Any error other than a disconnect, such as a long lock, closes the stream; the app notices only through the missing pings | Log the error and retry the read on the next poll |
+| `HERMES_BOTS_FINISHED_AFTER_S` accepts `nan` and negative values | `plugin/hermes-bots/alerts.py` (`_finished_after_s`) | `nan` silently stops `finished` alerts; a negative value raises one for every completed reply | Fall back to the default unless the value is finite and positive |
 | Hook alerts may name a different chat id than routine alerts after a chat is compressed | `plugin/hermes-bots/alerts.py` | Unverified. Hook alerts use the session id Hermes passes, which may be a continuation id; the contract promises the stored id | Check on a test instance after a compression, then resolve to the stored id or reword the contract |
 
 ## Contract and docs
@@ -30,10 +36,14 @@ Low-severity issues in the `hermes-bots` plugin, its contract and its tests. Non
 | --- | --- | --- | --- |
 | The README's ping example leaves out `latest_alert_id` | `plugin/README.md` (Alert stream) | The code and the contract's `Ping` include it | Show the full ping message and say what the field holds: the last alert id sent on this stream |
 | `ARCHITECTURE.md` does not say the routine name in the target is percent-encoded | `docs/research/ARCHITECTURE.md` (Routines) | The code, README and contract require it, because cron splits targets on commas | Say "percent-encoded routine name" there |
+| The PRD lists an "errors" alert that has no alert kind | `docs/product/PRD.md` (FR-PUSH-1) | The contract's `AlertKind` and ARCHITECTURE's push table have no error alert, so the PRD and the design disagree | Add an `error` kind raised for failed replies, or remove "errors" from FR-PUSH-1 |
+| The `mockups/app.html` path reads as a URL in the mockups README | `mockups/README.md` | The README serves `mockups/` as the web root, where the page is `/app.html`; `mockups/app.html` is its path from the repo root | Say both: the file is `mockups/app.html`, served as `/app.html` |
 
 ## Tests
 
 | Issue | Where | Effect | Suggested fix |
 | --- | --- | --- | --- |
 | The integration ping test passes on any message | `plugin/tests/integration/test_alert_socket.py` (`test_a_quiet_stream_pings`) | It does not prove a live dashboard sends pings. The unit test `test_a_quiet_stream_pings` in `plugin/tests/unit/test_plugin_api.py` does | Assert the message type is `ping` on a stream that starts after the newest alert |
+| The fake session database models only part of Hermes's write guard | `plugin/tests/unit/test_delivery.py` (`FakeSessionDB`) | It rejects a write without the lease, but does not model the lease expiring or a process stopping between the write and `mark_write_started` | Let the fake expire the lease on demand, and add a test that stops between the two steps |
+| Smaller gaps in the unit tests | `plugin/tests/unit/test_delivery.py`, `plugin/tests/unit/test_plugin_api.py` | No test of a slow writer racing a claim takeover, of the types of `ts`, `id` and `store_schema` in sent messages, or of a socket where Hermes sets no subprotocol attribute | Add those cases |
 | Unused `monkeypatch` parameters | `plugin/tests/integration/test_alert_socket.py` (`test_a_quiet_stream_pings`), `plugin/tests/unit/test_alerts.py` (`test_the_first_start_of_a_turn_counts`) | Noise in the test signatures | Remove them |

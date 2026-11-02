@@ -15,9 +15,10 @@ SCHEMA = json.loads((PLUGIN_DIR.parent / "contract" / "hermes-bots-plugin.schema
 
 
 class HermesChecks:
-    """Stands in for ``hermes_cli.web_server_chat``'s login and Host/Origin checks."""
+    """Stands in for the Hermes checks ``/api/ws`` runs: chat switched on, login, and Host/Origin."""
 
     def __init__(self):
+        self.chat_enabled = True
         self.login_ok = True
         self.origin_ok = True
         self.ticket_subprotocol = None
@@ -33,12 +34,29 @@ class HermesChecks:
 @pytest.fixture
 def checks(monkeypatch):
     fake = HermesChecks()
-    module = types.ModuleType("hermes_cli.web_server_chat")
-    module._ws_auth_ok = fake._ws_auth_ok
-    module._ws_request_is_allowed = fake._ws_request_is_allowed
-    monkeypatch.setitem(sys.modules, "hermes_cli", types.ModuleType("hermes_cli"))
-    monkeypatch.setitem(sys.modules, "hermes_cli.web_server_chat", module)
+    chat = types.ModuleType("hermes_cli.web_server_chat")
+    chat._ws_auth_ok = fake._ws_auth_ok
+    chat._ws_request_is_allowed = fake._ws_request_is_allowed
+    native = types.ModuleType("hermes_cli.dashboard_auth.native_http")
+    native.HEADER = "x-hermes-gateway-ticket"
+    hermes_cli = types.ModuleType("hermes_cli")
+    hermes_cli.web_server = ChatSwitch(fake)
+    for name, module in {"hermes_cli": hermes_cli, "hermes_cli.web_server_chat": chat,
+                         "hermes_cli.dashboard_auth": types.ModuleType("hermes_cli.dashboard_auth"),
+                         "hermes_cli.dashboard_auth.native_http": native}.items():
+        monkeypatch.setitem(sys.modules, name, module)
     return fake
+
+
+class ChatSwitch:
+    """Stands in for ``hermes_cli.web_server``, whose flag says whether the dashboard's chat is on."""
+
+    def __init__(self, checks):
+        self._checks = checks
+
+    @property
+    def _DASHBOARD_EMBEDDED_CHAT_ENABLED(self):
+        return self._checks.chat_enabled
 
 
 @pytest.fixture
@@ -73,11 +91,18 @@ def test_info_reports_the_running_version_and_the_newest_alert(client, plugin_ap
     assert (info["plugin"], info["version"], info["latest_alert_id"]) == ("hermes-bots", plugin_api.version.VERSION, 1)
 
 
-@pytest.mark.parametrize("failing_check", ["login_ok", "origin_ok"])
+@pytest.mark.parametrize("failing_check", ["chat_enabled", "login_ok", "origin_ok"])
 def test_the_socket_refuses_what_api_ws_refuses(client, checks, failing_check):
     setattr(checks, failing_check, False)
     with pytest.raises(WebSocketDisconnect) as refused:
         with client.websocket_connect("/alerts"):
+            pass
+    assert refused.value.code == 1008
+
+
+def test_the_desktop_sign_in_header_is_refused_like_on_api_ws(client):
+    with pytest.raises(WebSocketDisconnect) as refused:
+        with client.websocket_connect("/alerts", headers={"X-Hermes-Gateway-Ticket": "grant"}):
             pass
     assert refused.value.code == 1008
 

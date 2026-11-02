@@ -47,6 +47,9 @@ def _fake_gateway(monkeypatch):
 @pytest.fixture
 def registered(monkeypatch):
     parse_nonempty = _fake_gateway(monkeypatch)
+    from hermes_bots import delivery
+    worker_starts = []
+    monkeypatch.setattr(delivery, "ensure_worker_running", lambda: worker_starts.append(True))
     # Load the package's __init__ as a plain module inside the test package, so its relative imports work
     spec = importlib.util.spec_from_file_location("hermes_bots.entry", PLUGIN_DIR / "__init__.py",
                                                   submodule_search_locations=None)
@@ -54,6 +57,7 @@ def registered(monkeypatch):
     spec.loader.exec_module(plugin)
     context = FakeContext()
     plugin.register(context)
+    context.worker_starts = worker_starts
     return plugin, context, parse_nonempty
 
 
@@ -76,3 +80,8 @@ def test_the_adapter_takes_whole_output(registered):
 def test_every_alert_hook_is_registered_under_its_hermes_name(registered):
     _, context, _ = registered
     assert set(context.hooks) == HERMES_HOOK_NAMES
+
+
+def test_loading_the_plugin_starts_the_delivery_worker(registered):
+    _, context, _ = registered
+    assert context.worker_starts == [True]

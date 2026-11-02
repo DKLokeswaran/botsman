@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import logging
 import os
+import sqlite3
 import threading
 import time
 import uuid
@@ -26,6 +27,7 @@ IDLE_POLL_S = 1.0
 LEASE_RETRY_S = 2.0
 LEASE_TTL_S = 30.0
 BUSY_LIMIT_S = 15 * 60.0
+BUSY_GAP_S = 60.0
 MAX_ATTEMPTS = 5
 PRUNE_EVERY_S = 3600.0
 
@@ -107,10 +109,21 @@ def _after_attempt(row: dict, message_id: Optional[int]) -> None:
     if message_id is not None:
         store.finish_delivery(row["id"], WORKER_ID, state="written", message_id=message_id)
         alerts.raise_alert(row["bot"], "routine_failed" if row["failed"] else "routine", row["session_id"])
-    elif row["busy_since"] is not None and time.time() - row["busy_since"] > BUSY_LIMIT_S:
+        return
+    now = time.time()
+    busy_since = _busy_stretch_start(row, now)
+    if now - busy_since > BUSY_LIMIT_S:
         _drop(row, "the chat stayed busy for 15 minutes")
     else:
-        store.defer_delivery(row["id"], WORKER_ID, retry_at=time.time() + LEASE_RETRY_S, chat_busy=True)
+        store.defer_delivery(row["id"], WORKER_ID, retry_at=now + LEASE_RETRY_S, busy_since=busy_since)
+
+
+def _busy_stretch_start(row: dict, now: float) -> float:
+    """When the chat's current busy stretch began; a stretch ends when checks stopped for over BUSY_GAP_S."""
+    checked_without_gap = now - row["next_attempt_at"] <= BUSY_GAP_S
+    if row["busy_since"] is not None and checked_without_gap:
+        return row["busy_since"]
+    return now
 
 
 def _retry_or_drop(row: dict, error: str) -> None:
@@ -161,7 +174,7 @@ def _write_once(db, target: str, holder: str, row: dict) -> int:
     """Append the message, unless an earlier attempt already did; returns its message id."""
     # An attempt that got as far as writing may have landed before its process stopped
     if row["write_started"]:
-        earlier = _find_message(db, target, row["message_uid"])
+        earlier = _find_message(row["db_path"], row["message_uid"])
         if earlier is not None:
             return earlier
     store.mark_write_started(row["id"], WORKER_ID)
@@ -169,12 +182,17 @@ def _write_once(db, target: str, holder: str, row: dict) -> int:
                                  message_uid=row["message_uid"]))
 
 
-def _find_message(db, target: str, message_uid: str) -> Optional[int]:
-    """The id of the message written with ``message_uid``, searching the chat's whole history."""
-    for message in db.get_messages(target, include_ancestors=True):
-        if message.get("message_uid") == message_uid:
-            return int(message["id"])
-    return None
+def _find_message(db_path: str, message_uid: str) -> Optional[int]:
+    """The id of the message written with ``message_uid``, read straight from the bot's session database.
+
+    The id is random and unique, so it identifies the message in any session of the chat's lineage.
+    """
+    conn = sqlite3.connect(f"file:{db_path}?mode=ro", uri=True, timeout=15)
+    try:
+        row = conn.execute("SELECT id FROM messages WHERE message_uid = ? LIMIT 1", (message_uid,)).fetchone()
+    finally:
+        conn.close()
+    return int(row[0]) if row else None
 
 
 def _release_lease(db, target: str, holder: str) -> None:
