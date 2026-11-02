@@ -64,7 +64,7 @@ The plugin removes cron's `Cronjob Response` header and footer when present and 
 <output>
 ```
 
-Output that starts `⚠️ Cron '<name>' failed:` is a failed run. It is written the same way and raises `routine_failed`.
+Output that starts with one of Hermes's cron failure notices is a failed run: `⚠️ Cron '<name>' failed:`, `⛔ Cron '<name>' did not run:`, `⚠ Cron job '<name>' was auto-paused`, `⚠ Cron watchdog '<name>' script failed` or `⚠ Cron monitor '<name>' source failed`. It is written the same way and raises `routine_failed`.
 
 Routines deliver text only. Attachments a routine produces (`MEDIA:` tags) are not delivered: on a scheduled run Hermes records them in the run's delivery error, and on Run now they are dropped. Neither posts anything else to the chat.
 

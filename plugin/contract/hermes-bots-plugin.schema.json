@@ -40,12 +40,12 @@
       "additionalProperties": false
     },
     "Ping": {
-      "description": "Sent on a quiet alert stream every 20 seconds.",
+      "description": "Sent on a quiet alert stream every 20 seconds, and at once when the store is recreated during the stream. A store_id different from the one the client holds means the store was recreated: the client resets its last-seen alert id, and the new store's alerts follow from the start.",
       "type": "object",
       "required": ["type", "latest_alert_id", "store_id"],
       "properties": {
         "type": {"const": "ping"},
-        "latest_alert_id": {"type": "integer", "minimum": 0, "description": "The last alert id sent on this stream"},
+        "latest_alert_id": {"type": "integer", "minimum": 0, "description": "The last alert id sent on this stream; 0 in the ping that announces a recreated store"},
         "store_id": {"type": "string", "description": "The store's id, as in Info.store_id"}
       },
       "additionalProperties": false

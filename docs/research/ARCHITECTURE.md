@@ -82,7 +82,7 @@ Output shapes the adapter handles (B15):
 |---|---|---|
 | Wrapped (`cron.wrap_response` true, the default) | Starts `Cronjob Response: <name>\n(job_id: <id>)\n-------------\n\n` and ends `\n\nTo stop or manage this job, send me a new message (e.g. "stop reminder <name>").` | The text between header and footer |
 | Unwrapped (`cron.wrap_response: false`, per profile) | Neither header nor footer | All of it |
-| Failure | The kept text starts `⚠️ Cron '<name>' failed:` | All of it; the alert is "routine failed" |
+| Failure | The kept text starts with one of Hermes's cron failure notices: `⚠️ Cron '<name>' failed:`, `⛔ Cron '<name>' did not run:`, `⚠ Cron job '<name>' was auto-paused`, `⚠ Cron watchdog '<name>' script failed` or `⚠ Cron monitor '<name>' source failed` | All of it; the alert is "routine failed" |
 
 The row is the bot's own message, so the user's next message never merges into it (B20):
 
