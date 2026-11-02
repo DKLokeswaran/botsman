@@ -130,7 +130,7 @@ Priority: **P0** is required at Alpha exit (MVP), **P1** at Stable / v1.0, **P2*
 
 | ID | Requirement | Priority |
 | --- | --- | --- |
-| FR-CHAT-1 | One chat per bot, created on first use and remembered in the profile's `ui_meta` | P0 |
+| FR-CHAT-1 | One chat per bot, created on first use and remembered in the profile's `ui_meta["hermes-bots-app"].chat_session_id`; alerts come only from this chat | P0 |
 | FR-CHAT-2 | Send messages; replies stream in | P0 |
 | FR-CHAT-3 | Markdown with tables and code highlighting; Copy on messages and code blocks | P0 |
 | FR-CHAT-4 | Stop a running reply | P0 |
@@ -310,4 +310,4 @@ Where **Decision** is filled, that ruling is final. Empty **Decision** means sti
 | --- | --- | --- |
 | 1.0 | 2026-10-30 | Draft PRD from the planning answers, approved mockups, architecture and feasibility findings |
 | 1.1 | 2026-10-31 | Companion plugin requirements per bot profile, Run now delivery, plugin update restarts |
-| 1.2 | 2026-11-03 | The app sets each bot's approval mode to manual at setup; alert for a failed reply |
+| 1.2 | 2026-11-03 | The app sets each bot's approval mode to manual at setup; alert for a failed reply; alerts only from each bot's app chat |

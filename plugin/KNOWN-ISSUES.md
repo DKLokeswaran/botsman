@@ -64,7 +64,6 @@ Low-severity issues in the `hermes-bots` plugin, its contract and its tests. Non
 | A `since` above the largest SQLite integer ends the stream after it opens | `plugin/hermes-bots/dashboard/plugin_api.py` (`_start_id`) | The first store read raises `OverflowError`, which the route does not catch | Refuse values above 2^63 - 1 before accepting |
 | A store error ends the alert stream | `plugin/hermes-bots/dashboard/plugin_api.py` (`_stream`) | Any error other than a disconnect, such as a long lock, closes the stream; the app notices only through the missing pings | Log the error and retry the read on the next poll |
 | `HERMES_BOTS_FINISHED_AFTER_S` accepts `nan` and negative values | `plugin/hermes-bots/alerts.py` (`_finished_after_s`) | `nan` silently stops `finished` alerts; a negative value raises one for every completed reply | Fall back to the default unless the value is finite and positive |
-| Hook alerts may name a different chat id than routine alerts after a chat is compressed | `plugin/hermes-bots/alerts.py` | Unverified. Hook alerts use the session id Hermes passes, which may be a continuation id; the contract promises the stored id | Check on a test instance after a compression, then resolve to the stored id or reword the contract |
 
 ## Contract and docs
 
@@ -78,7 +77,6 @@ Low-severity issues in the `hermes-bots` plugin, its contract and its tests. Non
 | The README says Run now attachments are simply dropped | `plugin/README.md` (Routines) | Hermes also records them in the run's delivery error on Run now, as on scheduled runs | Say both paths record the attachments in the run's delivery status |
 | The README's replay promise ignores the 7-day retention | `plugin/README.md` (Alert stream) | It says the stream replays "every alert after that id"; alerts older than 7 days are pruned, so a client offline longer misses them without any sign | Say the stream replays the alerts the store still keeps, and that alerts are kept for 7 days |
 | `plugin.yaml` declares no `provides_hooks` | `plugin/hermes-bots/plugin.yaml` | `hermes plugins validate` reports the four registered hooks as undeclared. App installs are not affected | Add `provides_hooks` listing the four hooks |
-| The docs do not say which sessions' alerts the apps show | `plugin/contract/hermes-bots-plugin.schema.json` (`Alert.session_id`), `plugin/README.md` (Alerts) | Hooks raise alerts for every session of a bot, including other dashboard chats, the CLI and messaging platforms, while each bot has one app chat. Two apps could treat alerts for other sessions differently | State the rule: apps show only alerts for the bot's own chat, or show all of them |
 | The `mockups/app.html` path reads as a URL in the mockups README | `mockups/README.md` | The README serves `mockups/` as the web root, where the page is `/app.html`; `mockups/app.html` is its path from the repo root | Say both: the file is `mockups/app.html`, served as `/app.html` |
 
 ## Tests

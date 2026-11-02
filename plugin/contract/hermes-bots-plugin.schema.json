@@ -31,7 +31,7 @@
         "ts": {"type": "number", "description": "Unix time in seconds"},
         "bot": {"type": "string", "description": "Hermes profile name"},
         "kind": {"$ref": "#/$defs/AlertKind"},
-        "session_id": {"type": "string", "description": "Stored session id of the chat"},
+        "session_id": {"type": "string", "description": "Stored session id of the bot's app chat (AppChatRecord). Hook alerts are raised only for that chat, under its stored id even after Hermes compressed it; routine alerts name the chat their target named"},
         "ref": {
           "type": ["string", "null"],
           "description": "Request id for approval, question and resolved; turn id for finished and error; null otherwise"
@@ -51,6 +51,14 @@
       "additionalProperties": false
     },
     "AlertStreamMessage": {"oneOf": [{"$ref": "#/$defs/Alert"}, {"$ref": "#/$defs/Ping"}]},
+    "AppChatRecord": {
+      "description": "What an app writes into a bot's profile when it creates the bot's chat, with profiles.configure {name: <bot>, ui_meta: {\"hermes-bots-app\": <this object>}}. The plugin reads it from the profile's profile.yaml to raise hook alerts only for this chat. The key is hermes-bots-app, not hermes-bots, which Hermes's own Bot Mode uses for the bot's title.",
+      "type": "object",
+      "required": ["chat_session_id"],
+      "properties": {
+        "chat_session_id": {"type": "string", "minLength": 1, "description": "Stored session id of the bot's app chat"}
+      }
+    },
     "DeliverTarget": {
       "description": "Cron deliver value that writes a routine's output into a chat: hbapp:session-<stored session id>/<percent-encoded routine name>. Every character outside A-Z a-z 0-9 - _ . ~ is percent-encoded, including / and ,. Routines deliver text only: attachments in the output are not delivered.",
       "type": "string",

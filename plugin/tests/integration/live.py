@@ -16,11 +16,17 @@ def profile_home(profile: str) -> Path:
 
 
 async def new_chat(client, profile: str) -> str:
-    """A stored dashboard chat in ``profile``. Hermes stores a chat at its first turn, so one short turn runs."""
+    """The bot's app chat in ``profile``, created and recorded as the apps do.
+
+    Hermes stores a chat at its first turn, so one short turn runs before the chat is recorded.
+    """
     async with Rpc(client) as rpc:
         result = await rpc.call("session.create", {"profile": profile, "title": "hb-test"})
         await rpc.turn(result["session_id"], "Reply with OK only.")
-        return result["stored_session_id"]
+        chat_id = result["stored_session_id"]
+        await rpc.call("profiles.configure", {
+            "name": profile, "ui_meta": {"hermes-bots-app": {"chat_session_id": chat_id}}})
+        return chat_id
 
 
 def messages(client, profile: str, session_id: str) -> list[dict]:

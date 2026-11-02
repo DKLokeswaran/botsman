@@ -56,7 +56,7 @@ flowchart LR
 | Concept | Hermes object | Notes |
 |---|---|---|
 | Bot | Profile | `profiles.list` is the roster. One machine-level dashboard serves every profile |
-| Chat | Ordinary dashboard session | One per bot, created with `session.create`. Its stored id is kept in the profile's `ui_meta`. Routines post into it |
+| Chat | Ordinary dashboard session | One per bot, created with `session.create`. Its stored id is kept in the profile's `ui_meta["hermes-bots-app"].chat_session_id`, written with `profiles.configure`. Routines post into it, and hook alerts come only from it |
 | Bot metadata the app adds | `ui_meta` on the profile | Free-form JSON with per-key compare-and-swap (`profiles.configure` with `ui_meta_expected_revisions`) |
 
 The profile's Bot Chat is not used. Its routine delivery always starts an agent turn (B15).
@@ -136,6 +136,7 @@ The plugin raises alerts from its hooks, in whichever process runs the turn, and
 | delivery function, after writing a failure | "<bot>'s routine failed" |
 
 - The bot is the profile, read with `get_active_profile_name()` inside the hook.
+- Hook alerts are raised only for the bot's app chat: the plugin reads the chat id from the profile's `profile.yaml` (`ui_meta["hermes-bots-app"].chat_session_id`) and also accepts the session the chat continues in after a compression, naming the alert with the chat's stored id. The bot's other sessions raise nothing. `ui_meta["hermes-bots"]` is not used, because Hermes's own Bot Mode keeps the bot's title there.
 - Hooks from routine runs (`task_id` starting `cron:`), turns of delegated subagents (`parent_session_id` set in `pre_llm_call`), interrupted turns and `on_session_end` calls without a `turn_id` raise nothing.
 - `pre_approval_request` is not used, because it also fires for requests Hermes's `smart` mode settles with nobody asked.
 - Approval alerts need each bot's `approvals.mode` to be `manual`. The app sets it at connect, with `PUT /api/config?profile=<bot>`, when a bot's profile has another mode (FR-PLG-6). Choosing a mode per bot comes later, from the app.

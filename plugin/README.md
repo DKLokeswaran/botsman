@@ -17,6 +17,7 @@ The design and the Hermes constraints behind it are in [ARCHITECTURE.md](../docs
 | `plugin/hermes-bots/routine_output.py` | Delivery targets and the shapes of cron output |
 | `plugin/hermes-bots/delivery.py` | Delivery queue and the worker that writes into chats under the turn lease |
 | `plugin/hermes-bots/alerts.py` | Hooks that raise alerts |
+| `plugin/hermes-bots/app_chat.py` | Which session is the bot's app chat, from the profile's `ui_meta` |
 | `plugin/hermes-bots/store.py` | Shared SQLite store at the Hermes root |
 | `plugin/hermes-bots/dashboard/` | Dashboard routes: `GET /info` and the `/alerts` WebSocket |
 | `plugin/contract/` | JSON Schema for the info response, alert messages, delivery targets and routine messages |
@@ -81,6 +82,8 @@ Delivery returns at once and queues the row in the shared store. A background wo
 | `error` | A reply failed | Turn id |
 | `routine` | Routine output was written into the chat | none |
 | `routine_failed` | A routine reported a failure, or its output could not be written | none |
+
+Hook alerts (`approval`, `question`, `resolved`, `finished`, `error`) are raised only for the bot's app chat, and name its stored id even after Hermes compressed the chat. The apps record that chat when they create it, with `profiles.configure {name: <bot>, ui_meta: {"hermes-bots-app": {"chat_session_id": <stored id>}}}` (`AppChatRecord` in the contract). The bot's other sessions, such as other dashboard chats, the CLI and messaging platforms, raise none and work as configured; a bot with no recorded chat raises no hook alerts.
 
 Routine runs, turns of delegated subagents and interrupted replies raise no hook alerts. Alerts are kept for 7 days.
 

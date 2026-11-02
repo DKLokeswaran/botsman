@@ -1,5 +1,7 @@
 """Alerts raised from Hermes hooks. An alert names the bot, the kind of event and the chat; never any text.
 
+Hook alerts are raised only for the bot's app chat (see ``app_chat``) and name that chat's stored id.
+
 Alert kinds:
 - ``approval``: a person is asked to approve a command
 - ``question``: a person is asked clarifying questions
@@ -18,9 +20,10 @@ import os
 import threading
 import time
 from concurrent.futures import ThreadPoolExecutor
+from pathlib import Path
 from typing import Callable, Optional
 
-from . import store
+from . import app_chat, store
 
 logger = logging.getLogger(__name__)
 
@@ -62,16 +65,29 @@ def raise_alert(bot: str, kind: str, session_id: str, ref: Optional[str] = None)
     return store.add_alert(bot=bot, kind=kind, session_id=session_id, ref=ref)
 
 
+def _active_profile_home() -> Path:
+    from hermes_constants import get_hermes_home
+    return get_hermes_home()
+
+
 def _raise_from_hook(kind: str, session_id: str, ref: Optional[str] = None) -> None:
-    """Raise an alert for the running bot without making the hook wait for the store."""
-    bot = active_bot()
-    _hook_alert_writer.submit(_write_hook_alert, bot, kind, session_id, ref)
+    """Raise an alert for the running bot's app chat without making the hook wait.
+
+    The bot and its profile home are read here, where Hermes has the profile active.
+    """
+    bot, profile_home = active_bot(), _active_profile_home()
+    _hook_alert_writer.submit(_write_hook_alert, bot, profile_home, kind, session_id, ref)
 
 
-def _write_hook_alert(bot: str, kind: str, session_id: str, ref: Optional[str]) -> None:
-    """Runs on the alert writer thread; a failure is logged and the alert is lost."""
+def _write_hook_alert(bot: str, profile_home: Path, kind: str, session_id: str, ref: Optional[str]) -> None:
+    """Runs on the alert writer thread: records the alert when the session is the app chat.
+
+    A failure is logged and the alert is lost.
+    """
     try:
-        raise_alert(bot, kind, session_id, ref)
+        chat_id = app_chat.app_chat_of(profile_home, session_id)
+        if chat_id is not None:
+            raise_alert(bot, kind, chat_id, ref)
     except Exception:
         logger.exception("hermes-bots could not record a %s alert", kind)
 
