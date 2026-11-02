@@ -2,9 +2,17 @@
 
 from __future__ import annotations
 
+import os
 import time
+from pathlib import Path
 
 from hermes_client import Rpc
+
+
+def profile_home(profile: str) -> Path:
+    """The ``HERMES_HOME`` of a profile on the test instance."""
+    home = Path(os.environ["HB_TEST_HOME"])
+    return home if profile == "default" else home / "profiles" / profile
 
 
 async def new_chat(client, profile: str) -> str:

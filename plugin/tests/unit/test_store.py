@@ -1,6 +1,7 @@
-import os
 import sqlite3
+import sys
 import time
+import types
 import uuid
 
 from hermes_bots import store
@@ -16,7 +17,7 @@ def test_rows_of_one_chat_are_claimed_in_order_one_at_a_time():
     first, second = _enqueue("s1"), _enqueue("s1")
     assert store.claim_next_delivery("w1")["id"] == first
     assert store.claim_next_delivery("w2") is None
-    store.finish_delivery(first, "w1", state="written", message_id=7)
+    store.finish_delivery(first, "w1", state="written", alert_kind="routine", message_id=7)
     assert store.claim_next_delivery("w2")["id"] == second
 
 
@@ -51,9 +52,9 @@ def test_a_claim_left_by_a_stopped_process_is_taken_over(monkeypatch):
 def test_only_the_claiming_worker_can_finish_a_row():
     row_id = _enqueue("s1")
     store.claim_next_delivery("w1")
-    store.finish_delivery(row_id, "w2", state="written", message_id=1)
+    store.finish_delivery(row_id, "w2", state="written", alert_kind="routine", message_id=1)
     assert store.get_delivery(row_id)["state"] == "pending"
-    store.finish_delivery(row_id, "w1", state="written", message_id=1)
+    store.finish_delivery(row_id, "w1", state="written", alert_kind="routine", message_id=1)
     assert store.get_delivery(row_id)["state"] == "written"
 
 
@@ -76,7 +77,7 @@ def test_prune_keeps_pending_deliveries():
     pending, done = _enqueue("s1"), _enqueue("s2")
     store.claim_next_delivery("w")
     claimed = store.claim_next_delivery("w")
-    store.finish_delivery(claimed["id"], "w", state="written", message_id=1)
+    store.finish_delivery(claimed["id"], "w", state="written", alert_kind="routine", message_id=1)
     store.prune(now=time.time() + store.RETENTION_S + 1)
     assert store.get_delivery(pending) is not None
     assert store.get_delivery(done) is None
@@ -104,13 +105,45 @@ def test_a_deferral_records_or_clears_the_busy_stretch():
     assert store.get_delivery(row_id)["busy_since"] is None
 
 
-def test_a_claim_held_by_a_stopped_process_is_released_at_once():
+def _hermes_probe(monkeypatch, dead_holders):
+    """Stands in for Hermes's lease-holder probe, which says which holders' processes are gone."""
+    hermes_state = types.ModuleType("hermes_state")
+    hermes_state._compression_lock_holder_process_is_dead = lambda holder: holder in dead_holders
+    monkeypatch.setitem(sys.modules, "hermes_state", hermes_state)
+
+
+def test_a_claim_held_by_a_stopped_process_is_released_at_once(monkeypatch):
+    _hermes_probe(monkeypatch, {"hermes-bots:pid=41:dead"})
     row_id = _enqueue("s1")
-    store.claim_next_delivery("hermes-bots:pid=999999999:dead")
+    store.claim_next_delivery("hermes-bots:pid=41:dead")
     assert store.claim_next_delivery("w2")["id"] == row_id
 
 
-def test_a_claim_held_by_a_running_process_is_kept():
+def test_a_claim_held_by_a_running_process_is_kept(monkeypatch):
+    _hermes_probe(monkeypatch, set())
     _enqueue("s1")
-    store.claim_next_delivery(f"hermes-bots:pid={os.getpid()}:live")
+    store.claim_next_delivery("hermes-bots:pid=42:live")
     assert store.claim_next_delivery("w2") is None
+
+
+def test_without_hermes_no_claim_is_released_early(monkeypatch):
+    monkeypatch.setitem(sys.modules, "hermes_state", None)
+    _enqueue("s1")
+    store.claim_next_delivery("hermes-bots:pid=41:dead")
+    assert store.claim_next_delivery("w2") is None
+
+
+def test_marking_a_write_reports_whether_the_claim_is_still_held():
+    row_id = _enqueue("s1")
+    store.claim_next_delivery("w1")
+    assert store.mark_write_started(row_id, "w1") is True
+    assert store.mark_write_started(row_id, "w2") is False
+
+
+def test_finishing_a_row_raises_its_alert_only_while_the_claim_is_held():
+    row_id = _enqueue("s1")
+    store.claim_next_delivery("w1")
+    assert store.finish_delivery(row_id, "w2", state="written", alert_kind="routine", message_id=1) is False
+    assert store.alerts_after(0) == []
+    assert store.finish_delivery(row_id, "w1", state="written", alert_kind="routine", message_id=1) is True
+    assert [(a["bot"], a["kind"], a["session_id"]) for a in store.alerts_after(0)] == [("junior", "routine", "s1")]

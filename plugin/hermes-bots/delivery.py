@@ -31,13 +31,30 @@ BUSY_GAP_S = 60.0
 MAX_ATTEMPTS = 5
 PRUNE_EVERY_S = 3600.0
 
-WORKER_ID = f"hermes-bots:pid={os.getpid()}:{uuid.uuid4().hex[:8]}"
+
+def _new_worker_id() -> str:
+    """A worker id in Hermes's holder format, so Hermes's probe can tell when its process is gone."""
+    try:
+        from hermes_state_pidns import holder_namespace_token
+        namespace = holder_namespace_token()
+    except ImportError:
+        logger.warning("hermes-bots: Hermes's PID namespace stamp is unavailable; dead workers' claims wait"
+                       " for the claim timeout")
+        namespace = ""
+    return f"hermes-bots:pid={os.getpid()}{namespace}:{uuid.uuid4().hex[:8]}"
+
+
+WORKER_ID = _new_worker_id()
 _worker_lock = threading.Lock()
 _worker: Optional[threading.Thread] = None
 
 
 class ChatNotFound(Exception):
     """The target chat does not exist in the bot's session database."""
+
+
+class ClaimLost(Exception):
+    """Another worker took the row over, so this one must leave it alone."""
 
 
 # Queue
@@ -95,6 +112,8 @@ def process_next() -> bool:
         return False
     try:
         message_id = write_under_lease(row)
+    except ClaimLost:
+        _log_taken_over(row)
     except ChatNotFound as exc:
         _drop(row, str(exc))
     except Exception as exc:
@@ -107,8 +126,9 @@ def process_next() -> bool:
 def _after_attempt(row: dict, message_id: Optional[int]) -> None:
     """Record a write, or wait for the running reply until the chat has been busy for the busy limit."""
     if message_id is not None:
-        store.finish_delivery(row["id"], WORKER_ID, state="written", message_id=message_id)
-        alerts.raise_alert(row["bot"], "routine_failed" if row["failed"] else "routine", row["session_id"])
+        kind = "routine_failed" if row["failed"] else "routine"
+        if not store.finish_delivery(row["id"], WORKER_ID, state="written", alert_kind=kind, message_id=message_id):
+            _log_taken_over(row)
         return
     now = time.time()
     busy_since = _busy_stretch_start(row, now)
@@ -139,8 +159,12 @@ def _retry_or_drop(row: dict, error: str) -> None:
 def _drop(row: dict, error: str) -> None:
     """Give up on a row; the user still hears that the routine did not arrive."""
     logger.warning("hermes-bots dropped delivery %s: %s", row["id"], error)
-    store.finish_delivery(row["id"], WORKER_ID, state="dropped", error=error)
-    alerts.raise_alert(row["bot"], "routine_failed", row["session_id"])
+    if not store.finish_delivery(row["id"], WORKER_ID, state="dropped", alert_kind="routine_failed", error=error):
+        _log_taken_over(row)
+
+
+def _log_taken_over(row: dict) -> None:
+    logger.warning("hermes-bots delivery %s was taken over by another worker", row["id"])
 
 
 # Chat write
@@ -177,7 +201,8 @@ def _write_once(db, target: str, holder: str, row: dict) -> int:
         earlier = _find_message(row["db_path"], row["message_uid"])
         if earlier is not None:
             return earlier
-    store.mark_write_started(row["id"], WORKER_ID)
+    if not store.mark_write_started(row["id"], WORKER_ID):
+        raise ClaimLost()
     return int(db.append_message(target, "assistant", row["text"], turn_lease_holder=holder,
                                  message_uid=row["message_uid"]))
 

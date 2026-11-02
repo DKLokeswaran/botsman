@@ -318,7 +318,7 @@ A turn that starts in the meantime waits for the lease and then reloads the tran
 | Ticket from `POST /api/auth/ws-ticket` | not tried | accepted | accepted |
 | Login cookie with a foreign `Origin` | not tried | accepted | 403 |
 
-**Workaround.** Before accepting, the plugin's WebSocket handler runs both checks `/api/ws` runs: `hermes_cli.web_server_chat._ws_auth_ok(ws)` for the credential and `_ws_request_is_allowed(ws)` for the Host and Origin headers. It closes the socket when either fails. Clients connect with a fresh single-use ticket, the same way they open `/api/ws`. Both functions are private, so the plugin tests cover them on every Hermes upgrade (B8).
+**Workaround.** Before accepting, the plugin's WebSocket handler runs every check `/api/ws` runs, and closes the socket when one fails. It refuses every connection while the dashboard's chat is switched off (`hermes_cli.web_server._DASHBOARD_EMBEDDED_CHAT_ENABLED`), refuses the Desktop app's `X-Hermes-Gateway-Ticket` header, which `/api/ws` refuses, and runs `hermes_cli.web_server_chat._ws_auth_ok(ws)` for the credential and `_ws_request_is_allowed(ws)` for the Host and Origin headers. Clients connect with a fresh single-use ticket, the same way they open `/api/ws`. Both functions are private, so the plugin tests cover them on every Hermes upgrade (B8).
 
 Plugin spike, 2026-10-31, alerts route on the Tailscale bind:
 

@@ -1,3 +1,5 @@
+import os
+import re
 import sqlite3
 import sys
 import time
@@ -206,3 +208,46 @@ def test_a_malformed_target_is_refused_before_queuing(db):
     with pytest.raises(ValueError):
         _queue("chat-s1/News")
     assert store.claim_next_delivery("w") is None
+
+
+def test_a_worker_that_lost_its_claim_does_not_write(db):
+    row_id = _queue()
+    row = store.claim_next_delivery(delivery.WORKER_ID)
+    _make_due(row_id)
+    store.claim_next_delivery("another worker")
+    with pytest.raises(delivery.ClaimLost):
+        delivery.write_under_lease(row)
+    assert db.messages == [] and db.lease_holder is None
+    assert store.get_delivery(row_id)["claimed_by"] == "another worker"
+
+
+def test_a_worker_that_lost_its_claim_before_finishing_raises_no_alert(db):
+    row_id = _queue()
+    row = store.claim_next_delivery(delivery.WORKER_ID)
+    _make_due(row_id)
+    store.claim_next_delivery("another worker")
+    delivery._after_attempt(row, message_id=1)
+    assert store.get_delivery(row_id)["state"] == "pending"
+    assert all_alerts() == []
+
+
+def test_a_lost_claim_leaves_the_row_to_the_worker_that_took_it(db, monkeypatch):
+    row_id = _queue()
+
+    def taken_over(row):
+        raise delivery.ClaimLost()
+    monkeypatch.setattr(delivery, "write_under_lease", taken_over)
+    delivery.process_next()
+    row = store.get_delivery(row_id)
+    assert (row["state"], row["claimed_by"], row["attempts"]) == ("pending", delivery.WORKER_ID, 0)
+    assert all_alerts() == []
+
+
+def test_worker_ids_carry_hermess_pid_namespace_stamp(monkeypatch):
+    pidns = types.ModuleType("hermes_state_pidns")
+    pidns.holder_namespace_token = lambda: ":pidns=4026531836"
+    monkeypatch.setitem(sys.modules, "hermes_state_pidns", pidns)
+    worker_id = delivery._new_worker_id()
+    # The two patterns Hermes's dead-holder probe reads a holder with
+    assert re.search(r"(?:^|:)pid=(\d+)(?::|$)", worker_id).group(1) == str(os.getpid())
+    assert re.search(r"(?:^|:)pidns=(\d+)(?::|$)", worker_id).group(1) == "4026531836"

@@ -8,13 +8,15 @@ from the plugin package, because the dashboard routes load it by file path.
 from __future__ import annotations
 
 import contextlib
-import os
-import re
+import functools
+import logging
 import sqlite3
 import threading
 import time
 from pathlib import Path
 from typing import Iterator, Optional
+
+logger = logging.getLogger(__name__)
 
 SCHEMA_VERSION = 1
 STORE_FILE = "hermes-bots.db"
@@ -103,18 +105,26 @@ def _prepare_once(conn: sqlite3.Connection, path: Path) -> None:
         _prepared_paths.add(str(path))
 
 
-def _process_alive(worker_id: str) -> bool:
-    """Whether the process named by a ``...:pid=<n>:...`` worker id still runs; True when unknown."""
-    match = re.search(r":pid=(\d+):", worker_id)
-    if match is None:
-        return True
+def _holder_is_dead(worker_id: str) -> bool:
+    """Whether a worker's process is provably gone, judged the way Hermes judges its own lease holders.
+
+    Hermes's probe is safe on Windows and in other PID namespaces, and answers "not dead" whenever it
+    is unsure. Without the probe no worker counts as dead, so its claims wait for the claim timeout.
+    """
+    probe = _hermes_holder_probe()
+    return probe is not None and probe(worker_id)
+
+
+@functools.lru_cache(maxsize=1)
+def _hermes_holder_probe():
+    """Hermes's dead-holder probe, or None with one warning when this Hermes does not have it."""
     try:
-        os.kill(int(match.group(1)), 0)
-    except ProcessLookupError:
-        return False
-    except PermissionError:
-        return True
-    return True
+        from hermes_state import _compression_lock_holder_process_is_dead
+    except ImportError:
+        logger.warning("hermes-bots: Hermes's lease-holder probe is unavailable; dead workers' claims wait"
+                       " for the claim timeout")
+        return None
+    return _compression_lock_holder_process_is_dead
 
 
 @contextlib.contextmanager
@@ -163,7 +173,7 @@ def _release_dead_claims(conn: sqlite3.Connection) -> None:
     holders = conn.execute(
         "SELECT DISTINCT claimed_by FROM deliveries WHERE state = 'pending' AND claimed_by IS NOT NULL").fetchall()
     for (holder,) in holders:
-        if not _process_alive(holder):
+        if _holder_is_dead(holder):
             conn.execute("UPDATE deliveries SET claimed_by = NULL, claimed_at = NULL"
                          " WHERE state = 'pending' AND claimed_by = ?", (holder,))
 
@@ -183,20 +193,33 @@ def defer_delivery(row_id: int, worker_id: str, *, retry_at: float, error: Optio
             (retry_at, int(count_attempt), error, busy_since, row_id, worker_id))
 
 
-def mark_write_started(row_id: int, worker_id: str, path: Optional[Path] = None) -> None:
-    """Record that the chat write is about to happen, so a later retry first checks for it."""
+def mark_write_started(row_id: int, worker_id: str, path: Optional[Path] = None) -> bool:
+    """Record that the chat write is about to happen, so a later retry first checks for it.
+
+    Returns False when the worker no longer holds the row's claim, and must not write.
+    """
     with open_store(path) as conn:
-        conn.execute("UPDATE deliveries SET write_started = 1 WHERE id = ? AND claimed_by = ?", (row_id, worker_id))
+        cursor = conn.execute("UPDATE deliveries SET write_started = 1 WHERE id = ? AND claimed_by = ?",
+                              (row_id, worker_id))
+        return cursor.rowcount == 1
 
 
-def finish_delivery(row_id: int, worker_id: str, *, state: str, message_id: Optional[int] = None,
-                    error: Optional[str] = None, path: Optional[Path] = None) -> None:
-    """Close a claimed row as ``written`` or ``dropped``."""
-    with open_store(path) as conn:
-        conn.execute(
+def finish_delivery(row_id: int, worker_id: str, *, state: str, alert_kind: str, message_id: Optional[int] = None,
+                    error: Optional[str] = None, path: Optional[Path] = None) -> bool:
+    """Close a claimed row as ``written`` or ``dropped`` and raise its alert, in one transaction.
+
+    Returns False, and changes nothing, when the worker no longer holds the row's claim.
+    """
+    with open_store(path) as conn, _write(conn):
+        cursor = conn.execute(
             "UPDATE deliveries SET state = ?, message_id = ?, error = ?, finished_at = ?,"
             " claimed_by = NULL, claimed_at = NULL WHERE id = ? AND claimed_by = ?",
             (state, message_id, error, time.time(), row_id, worker_id))
+        if cursor.rowcount != 1:
+            return False
+        bot, session_id = conn.execute("SELECT bot, session_id FROM deliveries WHERE id = ?", (row_id,)).fetchone()
+        _insert_alert(conn, bot, alert_kind, session_id, None)
+        return True
 
 
 def get_delivery(row_id: int, path: Optional[Path] = None) -> Optional[dict]:
@@ -212,9 +235,14 @@ def add_alert(*, bot: str, kind: str, session_id: str, ref: Optional[str] = None
               path: Optional[Path] = None) -> int:
     """Append one alert; returns its id, which only ever increases."""
     with open_store(path) as conn:
-        cursor = conn.execute("INSERT INTO alerts (ts, bot, kind, session_id, ref) VALUES (?, ?, ?, ?, ?)",
-                              (time.time(), bot, kind, session_id, ref))
-        return int(cursor.lastrowid)
+        return _insert_alert(conn, bot, kind, session_id, ref)
+
+
+def _insert_alert(conn: sqlite3.Connection, bot: str, kind: str, session_id: str, ref: Optional[str]) -> int:
+    """Insert one alert on an open connection; returns its id."""
+    cursor = conn.execute("INSERT INTO alerts (ts, bot, kind, session_id, ref) VALUES (?, ?, ?, ?, ?)",
+                          (time.time(), bot, kind, session_id, ref))
+    return int(cursor.lastrowid)
 
 
 def alerts_after(last_id: int, limit: int = 500, path: Optional[Path] = None) -> list[dict]:

@@ -143,7 +143,7 @@ Alerts carry no conversation text: the bot, the kind of event, the stored sessio
 Hooks run in the gateway, the dashboard and the gateway's cron workers, and every profile has its own copy of the plugin. So all of them append alerts to one SQLite file at the Hermes root, `<root>/plugin-data/hermes-bots/` (WAL mode), with an increasing id. The launch profile's plugin serves the WebSocket route `/api/plugins/hermes-bots/alerts`, which streams new rows after the id the client last saw (`?since=<id>`). Secondary profiles cannot serve plugin WebSockets (B18), so this one route carries every bot's alerts.
 
 - The client connects with a fresh ticket from `POST /api/auth/ws-ticket`, as for `/api/ws`.
-- Hermes does not check logins on plugin WebSocket routes (B17). Before accepting, the route calls `hermes_cli.web_server_chat._ws_auth_ok(ws)` and `_ws_request_is_allowed(ws)`, the credential and Host/Origin checks `/api/ws` runs, and closes the socket when either fails.
+- Hermes does not check logins on plugin WebSocket routes (B17). Before accepting, the route runs every check `/api/ws` runs and closes the socket when one fails: it refuses every connection while the dashboard's chat is switched off, refuses the Desktop app's `X-Hermes-Gateway-Ticket` header, and calls `hermes_cli.web_server_chat._ws_auth_ok(ws)` and `_ws_request_is_allowed(ws)` for the credential and the Host and Origin headers.
 - The app calls `GET /api/plugins/hermes-bots/info` before opening the socket. That request mounts the route on a dashboard that has just installed the plugin (B17).
 
 ### Delivery

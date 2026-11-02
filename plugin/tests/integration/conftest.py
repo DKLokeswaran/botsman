@@ -22,7 +22,7 @@ import pytest
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 from hermes_client import login  # noqa: E402
-from live import new_chat  # noqa: E402
+from live import new_chat, profile_home  # noqa: E402
 
 SCRIPTS = {
     "hb_short.py": 'print("HB-SHORT-OK")\n',
@@ -41,11 +41,6 @@ def pytest_collection_modifyitems(config, items):
             item.add_marker(skip)
 
 
-def _profile_home(profile: str) -> Path:
-    home = Path(os.environ["HB_TEST_HOME"])
-    return home if profile == "default" else home / "profiles" / profile
-
-
 @pytest.fixture(scope="session")
 def profiles() -> list[str]:
     return os.environ.get("HB_TEST_PROFILES", "default").split(",")
@@ -60,7 +55,7 @@ def profile_without_plugin() -> str:
 def client(profiles, profile_without_plugin):
     for profile in [*profiles, profile_without_plugin]:
         if profile:
-            scripts = _profile_home(profile) / "scripts"
+            scripts = profile_home(profile) / "scripts"
             scripts.mkdir(parents=True, exist_ok=True)
             for name, body in SCRIPTS.items():
                 (scripts / name).write_text(body)

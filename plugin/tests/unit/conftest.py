@@ -10,7 +10,9 @@ def temp_store(tmp_path, monkeypatch):
     monkeypatch.setattr(store, "store_path", lambda: path)
     monkeypatch.setattr(alerts, "active_bot", lambda: "junior")
     monkeypatch.setattr(alerts, "_hook_alert_writer", ImmediateWriter())
-    return path
+    store._hermes_holder_probe.cache_clear()
+    yield path
+    store._hermes_holder_probe.cache_clear()
 
 
 class ImmediateWriter:
