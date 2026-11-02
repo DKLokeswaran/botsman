@@ -46,6 +46,7 @@ async def info() -> dict:
         "plugin": "hermes-bots",
         "version": version.VERSION,
         "store_schema": store.SCHEMA_VERSION,
+        "store_id": await asyncio.to_thread(store.store_id),
         "latest_alert_id": await asyncio.to_thread(store.latest_alert_id),
     }
 
@@ -113,6 +114,7 @@ async def _stream(ws: WebSocket, last_id: int) -> None:
             last_sent = time.monotonic()
         # Ping when nothing was sent for a while
         if time.monotonic() - last_sent >= PING_EVERY_S:
-            await ws.send_text(json.dumps({"type": "ping", "latest_alert_id": last_id}))
+            current_store = await asyncio.to_thread(store.store_id)
+            await ws.send_text(json.dumps({"type": "ping", "latest_alert_id": last_id, "store_id": current_store}))
             last_sent = time.monotonic()
         await asyncio.sleep(POLL_S)

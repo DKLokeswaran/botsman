@@ -11,8 +11,8 @@ import contextlib
 import functools
 import logging
 import sqlite3
-import threading
 import time
+import uuid
 from pathlib import Path
 from typing import Iterator, Optional
 
@@ -68,8 +68,6 @@ WHERE d.state = 'pending' AND d.next_attempt_at <= :now
 ORDER BY d.id LIMIT 1
 """
 
-_prepared_paths: set[str] = set()
-_prepare_lock = threading.Lock()
 
 
 def store_path() -> Path:
@@ -87,22 +85,33 @@ def open_store(path: Optional[Path] = None) -> Iterator[sqlite3.Connection]:
     conn = sqlite3.connect(path, timeout=15, isolation_level=None)
     conn.row_factory = sqlite3.Row
     try:
-        _prepare_once(conn, path)
+        _prepare_if_new(conn)
         yield conn
     finally:
         conn.close()
 
 
-def _prepare_once(conn: sqlite3.Connection, path: Path) -> None:
-    """Set up the file once per process, so later opens, reads included, take no write lock."""
-    with _prepare_lock:
-        if str(path) in _prepared_paths:
-            return
-        # WAL lets readers run while another process writes; create the tables if missing
-        conn.execute("PRAGMA journal_mode=WAL")
-        conn.executescript(_SCHEMA)
-        conn.execute("INSERT OR IGNORE INTO meta (key, value) VALUES ('schema_version', ?)", (str(SCHEMA_VERSION),))
-        _prepared_paths.add(str(path))
+def _prepare_if_new(conn: sqlite3.Connection) -> None:
+    """Set up a new or recreated store file. A store already set up costs one read and no write lock.
+
+    The store id is written last, so its presence means every table exists. Two processes setting
+    up the same file at once is harmless: every statement leaves an existing table or row alone.
+    """
+    if _is_set_up(conn):
+        return
+    # WAL lets readers run while another process writes
+    conn.execute("PRAGMA journal_mode=WAL")
+    conn.executescript(_SCHEMA)
+    conn.execute("INSERT OR IGNORE INTO meta (key, value) VALUES ('schema_version', ?)", (str(SCHEMA_VERSION),))
+    conn.execute("INSERT OR IGNORE INTO meta (key, value) VALUES ('store_id', ?)", (uuid.uuid4().hex,))
+
+
+def _is_set_up(conn: sqlite3.Connection) -> bool:
+    """Whether the store has its tables and id."""
+    try:
+        return conn.execute("SELECT 1 FROM meta WHERE key = 'store_id'").fetchone() is not None
+    except sqlite3.OperationalError:
+        return False
 
 
 def _holder_is_dead(worker_id: str) -> bool:
@@ -251,6 +260,12 @@ def alerts_after(last_id: int, limit: int = 500, path: Optional[Path] = None) ->
         rows = conn.execute("SELECT id, ts, bot, kind, session_id, ref FROM alerts WHERE id > ? ORDER BY id LIMIT ?",
                             (last_id, limit)).fetchall()
         return [dict(row) for row in rows]
+
+
+def store_id(path: Optional[Path] = None) -> str:
+    """The store's random id, set when the file is created; a new id means the store was recreated."""
+    with open_store(path) as conn:
+        return conn.execute("SELECT value FROM meta WHERE key = 'store_id'").fetchone()[0]
 
 
 def latest_alert_id(path: Optional[Path] = None) -> int:

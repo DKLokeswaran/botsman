@@ -127,7 +127,8 @@ def test_without_since_the_stream_starts_after_the_newest_alert(client, plugin_a
     _add_alert(plugin_api)
     monkeypatch.setattr(plugin_api, "PING_EVERY_S", 0.0)
     with client.websocket_connect("/alerts") as ws:
-        assert ws.receive_json() == {"type": "ping", "latest_alert_id": 1}
+        assert ws.receive_json() == {"type": "ping", "latest_alert_id": 1,
+                                     "store_id": plugin_api.store.store_id()}
 
 
 def test_a_quiet_stream_pings(client, plugin_api, monkeypatch):
@@ -150,3 +151,10 @@ def test_a_since_ahead_of_the_store_replays_from_the_start(client, plugin_api):
     with client.websocket_connect("/alerts?since=900") as ws:
         received = [ws.receive_json(), ws.receive_json()]
     assert [alert["id"] for alert in received] == [first, second]
+
+
+def test_info_and_pings_carry_the_same_store_id(client, plugin_api, monkeypatch):
+    monkeypatch.setattr(plugin_api, "PING_EVERY_S", 0.0)
+    store_id = client.get("/info").json()["store_id"]
+    with client.websocket_connect("/alerts?since=0") as ws:
+        assert ws.receive_json()["store_id"] == store_id

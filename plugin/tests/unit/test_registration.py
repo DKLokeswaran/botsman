@@ -1,5 +1,6 @@
 """What the plugin registers with Hermes: the ``hbapp`` platform and the alert hooks, with Hermes's gateway faked."""
 
+import asyncio
 import importlib.util
 import sys
 import types
@@ -85,3 +86,25 @@ def test_every_alert_hook_is_registered_under_its_hermes_name(registered):
 def test_loading_the_plugin_starts_the_delivery_worker(registered):
     _, context, _ = registered
     assert context.worker_starts == [True]
+
+
+@pytest.mark.parametrize("method", ["send_image", "send_image_file", "send_multiple_images", "send_animation",
+                                    "send_document", "send_video", "send_voice"])
+def test_attachments_are_refused_without_posting_to_the_chat(registered, monkeypatch, method):
+    plugin, _, _ = registered
+    queued = []
+    monkeypatch.setattr(plugin.delivery, "queue_routine_output", lambda *args: queued.append(args) or 1)
+    adapter = plugin.HbappAdapter(config=None)
+    result = asyncio.run(getattr(adapter, method)("session-s1/News", "/tmp/chart.png"))
+    assert result == {"success": False, "error": plugin.TEXT_ONLY}
+    assert queued == []
+
+
+def test_run_now_queues_only_the_text_of_output_with_attachments(registered, monkeypatch):
+    plugin, _, _ = registered
+    queued = []
+    monkeypatch.setattr(plugin.delivery, "queue_routine_output", lambda *args: queued.append(args) or 7)
+    result = asyncio.run(plugin._standalone_send(None, "session-s1/News", "Chart attached.",
+                                                 media_files=[("/tmp/chart.png", False)]))
+    assert result["success"] is True
+    assert queued == [("session-s1/News", "Chart attached.")]

@@ -66,6 +66,8 @@ The plugin removes cron's `Cronjob Response` header and footer when present and 
 
 Output that starts `⚠️ Cron '<name>' failed:` is a failed run. It is written the same way and raises `routine_failed`.
 
+Routines deliver text only. Attachments a routine produces (`MEDIA:` tags) are not delivered: on a scheduled run Hermes records them in the run's delivery error, and on Run now they are dropped. Neither posts anything else to the chat.
+
 Delivery returns at once and queues the row in the shared store. A background worker writes it while it holds the chat's turn lease, retrying every 2 s while a reply runs. Every process that loads the plugin runs the worker, so rows a stopped process left queued are written by the next one. If a reply holds the chat for 15 minutes without a break, or the chat does not exist, the worker drops the row and raises `routine_failed`.
 
 ## Alerts
@@ -90,8 +92,9 @@ WS   /api/plugins/hermes-bots/alerts?ticket=<ticket>&since=<last alert id>
 
 - Call `/info` before opening the socket. On a dashboard that just installed the plugin, this request is what mounts the socket route.
 - Get the ticket from `POST /api/auth/ws-ticket`. It works once and expires after 30 s. The ticket can also go in the `hermes-gateway-v1` subprotocol pair, as for `/api/ws`. The socket refuses, with an HTTP 403 at the handshake, every connection `/api/ws` would refuse: one without a valid ticket, one from a refused Host or Origin, one carrying the Desktop app's `X-Hermes-Gateway-Ticket` header, and every connection while the dashboard's chat is switched off.
-- Without `since`, the stream starts after the newest alert. With it, the stream first replays every alert after that id. A `since` above the newest alert means the store was recreated, for example after a reinstall: the stream then replays every alert from the start, and the client sets its last-seen id from what it receives.
-- A quiet stream sends `{"type": "ping"}` every 20 s.
+- Without `since`, the stream starts after the newest alert. With it, the stream first replays every alert after that id. A `since` above the newest alert makes the stream replay every alert the store still keeps.
+- `/info` and every ping carry the store's `store_id`, a random id set when the store file is created. When it differs from the one the client saw before, the store was recreated, for example because its file was deleted or the Hermes root was rebuilt: the client's last-seen id no longer applies, and it reconnects with `since=0`.
+- A quiet stream sends `{"type": "ping", "latest_alert_id": <last id sent>, "store_id": <id>}` every 20 s.
 
 Only the launch profile's dashboard can serve the socket. It streams alerts for every bot.
 

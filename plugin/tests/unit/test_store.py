@@ -147,3 +147,17 @@ def test_finishing_a_row_raises_its_alert_only_while_the_claim_is_held():
     assert store.alerts_after(0) == []
     assert store.finish_delivery(row_id, "w1", state="written", alert_kind="routine", message_id=1) is True
     assert [(a["bot"], a["kind"], a["session_id"]) for a in store.alerts_after(0)] == [("junior", "routine", "s1")]
+
+
+def test_a_store_recreated_while_running_is_set_up_again_with_a_new_id(temp_store):
+    first_id = store.store_id()
+    store.add_alert(bot="junior", kind="routine", session_id="s1")
+    for leftover in temp_store.parent.glob(temp_store.name + "*"):
+        leftover.unlink()
+    assert store.alerts_after(0) == []
+    assert store.add_alert(bot="junior", kind="routine", session_id="s1") == 1
+    assert store.store_id() != first_id
+
+
+def test_the_store_id_stays_the_same_across_opens():
+    assert store.store_id() == store.store_id()

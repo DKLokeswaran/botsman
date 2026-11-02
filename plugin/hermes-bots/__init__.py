@@ -15,9 +15,16 @@ from .routine_output import PLATFORM
 
 logger = logging.getLogger(__name__)
 
+TEXT_ONLY = "Hermes Bots routines deliver text only; the attachment was not delivered"
+
 
 class HbappAdapter(BasePlatformAdapter):
-    """Delivery-only platform for scheduled runs: queues cron output for a dashboard chat."""
+    """Delivery-only platform for scheduled runs: queues cron output for a dashboard chat.
+
+    Routines deliver text only. Cron hands each ``MEDIA:`` attachment to a media method after the
+    text; those methods report the attachment as not delivered, which Hermes records in the run's
+    delivery error, and post nothing to the chat.
+    """
 
     # Cron must hand over the whole output; the chat has no message size limit
     splits_long_messages = True
@@ -45,9 +52,42 @@ class HbappAdapter(BasePlatformAdapter):
     async def get_chat_info(self, chat_id: str) -> dict[str, Any]:
         return {"name": chat_id, "type": "dm"}
 
+    # Attachments: refused without a chat notice, so a routine never posts a second row or alert
+    async def send_image(self, chat_id, *args, **kwargs) -> SendResult:
+        return _attachment_refused(chat_id)
+
+    async def send_image_file(self, chat_id, *args, **kwargs) -> SendResult:
+        return _attachment_refused(chat_id)
+
+    async def send_multiple_images(self, chat_id, *args, **kwargs) -> SendResult:
+        return _attachment_refused(chat_id)
+
+    async def send_animation(self, chat_id, *args, **kwargs) -> SendResult:
+        return _attachment_refused(chat_id)
+
+    async def send_document(self, chat_id, *args, **kwargs) -> SendResult:
+        return _attachment_refused(chat_id)
+
+    async def send_video(self, chat_id, *args, **kwargs) -> SendResult:
+        return _attachment_refused(chat_id)
+
+    async def send_voice(self, chat_id, *args, **kwargs) -> SendResult:
+        return _attachment_refused(chat_id)
+
+
+def _attachment_refused(chat_id: str) -> SendResult:
+    logger.info("hbapp did not deliver an attachment for %r: routines deliver text only", chat_id)
+    return SendResult(success=False, error=TEXT_ONLY)
+
 
 async def _standalone_send(pconfig, chat_id, message, *, thread_id=None, media_files=None, force_document=False):
-    """Run now path: the dashboard runs the job and hands the output here, with no live adapter."""
+    """Run now path: the dashboard runs the job and hands the output here, with no live adapter.
+
+    Only the text is queued; ``media_files`` are not delivered, as on scheduled runs.
+    """
+    if media_files:
+        logger.info("hbapp did not deliver %d attachment(s) for %r: routines deliver text only",
+                    len(media_files), chat_id)
     try:
         row_id = await asyncio.to_thread(delivery.queue_routine_output, chat_id, message)
     except Exception as exc:

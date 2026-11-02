@@ -7,11 +7,12 @@
     "Info": {
       "description": "Response of GET /api/plugins/hermes-bots/info: the plugin code the dashboard is running.",
       "type": "object",
-      "required": ["plugin", "version", "store_schema", "latest_alert_id"],
+      "required": ["plugin", "version", "store_schema", "store_id", "latest_alert_id"],
       "properties": {
         "plugin": {"const": "hermes-bots"},
         "version": {"type": "string", "description": "Plugin version, for example 0.1.0"},
         "store_schema": {"type": "integer", "description": "Version of the shared store layout"},
+        "store_id": {"type": "string", "description": "Random id of the shared store, set when the store file is created. A value different from the one a client saw before means the store was recreated: the client's last-seen alert id no longer applies, and it reconnects with ?since=0"},
         "latest_alert_id": {"type": "integer", "minimum": 0, "description": "Highest alert id issued so far"}
       },
       "additionalProperties": false
@@ -26,7 +27,7 @@
       "required": ["type", "id", "ts", "bot", "kind", "session_id", "ref"],
       "properties": {
         "type": {"const": "alert"},
-        "id": {"type": "integer", "minimum": 1, "description": "Increasing id; reconnect with ?since=<id>. When ?since= is above the newest id, the store was recreated and the stream replays from id 1, so a client sets its last-seen id from the alerts it receives"},
+        "id": {"type": "integer", "minimum": 1, "description": "Increasing id within one store; reconnect with ?since=<id>. A ?since= above the newest id makes the stream replay every alert the store still keeps, oldest first"},
         "ts": {"type": "number", "description": "Unix time in seconds"},
         "bot": {"type": "string", "description": "Hermes profile name"},
         "kind": {"$ref": "#/$defs/AlertKind"},
@@ -41,16 +42,17 @@
     "Ping": {
       "description": "Sent on a quiet alert stream every 20 seconds.",
       "type": "object",
-      "required": ["type", "latest_alert_id"],
+      "required": ["type", "latest_alert_id", "store_id"],
       "properties": {
         "type": {"const": "ping"},
-        "latest_alert_id": {"type": "integer", "minimum": 0}
+        "latest_alert_id": {"type": "integer", "minimum": 0, "description": "The last alert id sent on this stream"},
+        "store_id": {"type": "string", "description": "The store's id, as in Info.store_id"}
       },
       "additionalProperties": false
     },
     "AlertStreamMessage": {"oneOf": [{"$ref": "#/$defs/Alert"}, {"$ref": "#/$defs/Ping"}]},
     "DeliverTarget": {
-      "description": "Cron deliver value that writes a routine's output into a chat: hbapp:session-<stored session id>/<percent-encoded routine name>. Every character outside A-Z a-z 0-9 - _ . ~ is percent-encoded, including / and ,.",
+      "description": "Cron deliver value that writes a routine's output into a chat: hbapp:session-<stored session id>/<percent-encoded routine name>. Every character outside A-Z a-z 0-9 - _ . ~ is percent-encoded, including / and ,. Routines deliver text only: attachments in the output are not delivered.",
       "type": "string",
       "pattern": "^hbapp:session-[^/,]+/[A-Za-z0-9._~%-]+$"
     },
