@@ -18,8 +18,8 @@
       "additionalProperties": false
     },
     "AlertKind": {
-      "description": "approval and question: a person is asked. resolved: that request was answered, denied or timed out (ref matches the request). finished: a long reply completed. routine: routine output was written into the chat. routine_failed: a routine reported a failure, or its output could not be written.",
-      "enum": ["approval", "question", "resolved", "finished", "routine", "routine_failed"]
+      "description": "approval and question: a person is asked. resolved: that request was answered, denied or timed out (ref matches the request). finished: a long reply completed. error: a reply failed. routine: routine output was written into the chat. routine_failed: a routine reported a failure, or its output could not be written.",
+      "enum": ["approval", "question", "resolved", "finished", "error", "routine", "routine_failed"]
     },
     "Alert": {
       "description": "One message on the /api/plugins/hermes-bots/alerts WebSocket. Carries no conversation text.",
@@ -34,13 +34,13 @@
         "session_id": {"type": "string", "description": "Stored session id of the chat"},
         "ref": {
           "type": ["string", "null"],
-          "description": "Request id for approval, question and resolved; turn id for finished; null otherwise"
+          "description": "Request id for approval, question and resolved; turn id for finished and error; null otherwise"
         }
       },
       "additionalProperties": false
     },
     "Ping": {
-      "description": "Sent on a quiet alert stream every 20 seconds, and at once when the store is recreated during the stream. A store_id different from the one the client holds means the store was recreated: the client resets its last-seen alert id, and the new store's alerts follow from the start.",
+      "description": "Sent on a quiet alert stream every 20 seconds, and at once when the store is recreated during the stream. A store_id different from the one the client holds means the store was recreated: the client reconnects with ?since=0, as for Info.store_id.",
       "type": "object",
       "required": ["type", "latest_alert_id", "store_id"],
       "properties": {

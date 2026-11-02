@@ -117,3 +117,22 @@ def test_a_delegated_subagent_turn_raises_no_finished_alert(monkeypatch):
     alerts.on_pre_llm_call(parent_session_id="s1", **child)
     alerts.on_session_end(completed=True, interrupted=False, **child)
     assert all_alerts() == []
+
+
+def test_a_failed_reply_raises_an_error_alert_at_once():
+    alerts.on_pre_llm_call(**TURN)
+    alerts.on_session_end(completed=False, failed=True, interrupted=False, **TURN)
+    assert all_alerts() == [("junior", "error", "s1", TURN["turn_id"])]
+
+
+def test_an_interrupted_reply_raises_no_error_alert():
+    alerts.on_pre_llm_call(**TURN)
+    alerts.on_session_end(completed=False, failed=True, interrupted=True, **TURN)
+    assert all_alerts() == []
+
+
+def test_a_failed_subagent_turn_raises_no_error_alert():
+    child = {**TURN, "session_id": "child", "task_id": "sa-0-1a2b3c4d", "turn_id": "child:t1"}
+    alerts.on_pre_llm_call(parent_session_id="s1", **child)
+    alerts.on_session_end(completed=False, failed=True, interrupted=False, **child)
+    assert all_alerts() == []

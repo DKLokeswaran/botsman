@@ -41,11 +41,11 @@ Hermes loads plugins per profile, so the plugin is installed into every bot's pr
 
 No `platforms:` config and no environment variables are needed.
 
-### Recommended profile settings
+### Profile settings
 
 | Setting | Value | Why |
 | --- | --- | --- |
-| `approvals.mode` | `manual` | The default, `smart`, lets a model approve commands with nobody asked, so no approval alert is raised |
+| `approvals.mode` | `manual` | Hermes's default, `smart`, lets a model approve commands with nobody asked, so no approval alert is raised. The apps set `manual` in each bot's profile when they connect |
 | `approvals.timeout` | Longer than the default 300 s | Gives time to answer from a phone before Hermes denies the request |
 | The gateway | Always running | Only the gateway runs scheduled routines; Run now works without it |
 
@@ -78,10 +78,11 @@ Delivery returns at once and queues the row in the shared store. A background wo
 | `question` | A person is asked clarifying questions | Hook request id |
 | `resolved` | That request was answered, denied or timed out | Same request id |
 | `finished` | A completed reply ran for at least 60 s (`HERMES_BOTS_FINISHED_AFTER_S`) | Turn id |
+| `error` | A reply failed | Turn id |
 | `routine` | Routine output was written into the chat | none |
 | `routine_failed` | A routine reported a failure, or its output could not be written | none |
 
-Routine runs raise no hook alerts of their own. Alerts are kept for 7 days.
+Routine runs, turns of delegated subagents and interrupted replies raise no hook alerts. Alerts are kept for 7 days.
 
 ### Alert stream
 
@@ -93,7 +94,7 @@ WS   /api/plugins/hermes-bots/alerts?ticket=<ticket>&since=<last alert id>
 - Call `/info` before opening the socket. On a dashboard that just installed the plugin, this request is what mounts the socket route.
 - Get the ticket from `POST /api/auth/ws-ticket`. It works once and expires after 30 s. The ticket can also go in the `hermes-gateway-v1` subprotocol pair, as for `/api/ws`. The socket refuses, with an HTTP 403 at the handshake, every connection `/api/ws` would refuse: one without a valid ticket, one from a refused Host or Origin, one carrying the Desktop app's `X-Hermes-Gateway-Ticket` header, and every connection while the dashboard's chat is switched off.
 - Without `since`, the stream starts after the newest alert. With it, the stream first replays every alert after that id. A `since` above the newest alert makes the stream replay every alert the store still keeps.
-- `/info` and every ping carry the store's `store_id`, a random id set when the store file is created. When it differs from the one the client saw before, the store was recreated, for example because its file was deleted or the Hermes root was rebuilt: the client's last-seen id no longer applies, and it reconnects with `since=0`. If the store is recreated while a stream is open, the stream sends a ping with the new `store_id` first and then the new store's alerts from the start, so the client resets its last-seen id when it sees the new id.
+- `/info` and every ping carry the store's `store_id`, a random id set when the store file is created. When it differs from the one the client saw before, the store was recreated, for example because its file was deleted or the Hermes root was rebuilt: the client's last-seen id no longer applies, and it reconnects with `since=0`. This applies wherever the client sees the new id, in `/info` or in a ping. If the store is recreated while a stream is open, the stream announces it at once with a ping carrying the new `store_id`.
 - A quiet stream sends `{"type": "ping", "latest_alert_id": <last id sent>, "store_id": <id>}` every 20 s.
 
 Only the launch profile's dashboard can serve the socket. It streams alerts for every bot.

@@ -5,6 +5,7 @@ Alert kinds:
 - ``question``: a person is asked clarifying questions
 - ``resolved``: an approval or question was answered, denied or timed out
 - ``finished``: a reply that ran for at least ``FINISHED_AFTER_S`` completed
+- ``error``: a reply failed
 - ``routine``: a routine's output was written into the chat
 - ``routine_failed``: a routine reported a failure, or its output could not be written
 """
@@ -127,13 +128,21 @@ def on_pre_llm_call(**kwargs) -> None:
 
 @_observer
 def on_session_end(**kwargs) -> None:
-    """Raise ``finished`` when a completed reply ran for at least ``FINISHED_AFTER_S``."""
+    """Raise ``error`` when a reply failed, or ``finished`` when it completed after at least ``FINISHED_AFTER_S``.
+
+    Only replies whose start was noted count, so subagent turns and routine runs raise neither.
+    An interrupted reply raises nothing: the person who stopped it already knows.
+    """
     turn_id = kwargs.get("turn_id")
     session_id = kwargs.get("session_id")
     if not turn_id or not session_id or _is_routine_run(kwargs):
         return
     started = _forget_turn_start(turn_id)
-    if started is not None and kwargs.get("completed") and time.time() - started >= FINISHED_AFTER_S:
+    if started is None or kwargs.get("interrupted"):
+        return
+    if kwargs.get("failed"):
+        _raise_from_hook("error", session_id, turn_id)
+    elif kwargs.get("completed") and time.time() - started >= FINISHED_AFTER_S:
         _raise_from_hook("finished", session_id, turn_id)
 
 

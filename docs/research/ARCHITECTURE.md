@@ -131,12 +131,14 @@ The plugin raises alerts from its hooks, in whichever process runs the turn, and
 | `on_human_input_request` hook, kind `clarify` | "<bot> has a question" |
 | `on_human_input_resolved` hook | clear the pending alert |
 | `on_session_end` hook with a `turn_id`, at least 60 s after that turn's `pre_llm_call` (configurable) | "<bot> finished" |
+| `on_session_end` hook with a `turn_id` and `failed` | "<bot>'s reply failed" |
 | delivery function, after writing routine output | "<bot> has a new routine result" |
 | delivery function, after writing a failure | "<bot>'s routine failed" |
 
 - The bot is the profile, read with `get_active_profile_name()` inside the hook.
-- Hooks from routine runs (`task_id` starting `cron:`) and `on_session_end` calls without a `turn_id` raise nothing.
+- Hooks from routine runs (`task_id` starting `cron:`), turns of delegated subagents (`parent_session_id` set in `pre_llm_call`), interrupted turns and `on_session_end` calls without a `turn_id` raise nothing.
 - `pre_approval_request` is not used, because it also fires for requests Hermes's `smart` mode settles with nobody asked.
+- Approval alerts need each bot's `approvals.mode` to be `manual`. The app sets it at connect, with `PUT /api/config?profile=<bot>`, when a bot's profile has another mode (FR-PLG-6). Choosing a mode per bot comes later, from the app.
 
 Alerts carry no conversation text: the bot, the kind of event, the stored session id and a time. The app fetches details when opened, and a tap deep-links into the chat.
 
@@ -145,6 +147,7 @@ Hooks run in the gateway, the dashboard and the gateway's cron workers, and ever
 - The client connects with a fresh ticket from `POST /api/auth/ws-ticket`, as for `/api/ws`.
 - Hermes does not check logins on plugin WebSocket routes (B17). Before accepting, the route runs every check `/api/ws` runs and closes the socket when one fails: it refuses every connection while the dashboard's chat is switched off, refuses the Desktop app's `X-Hermes-Gateway-Ticket` header, and calls `hermes_cli.web_server_chat._ws_auth_ok(ws)` and `_ws_request_is_allowed(ws)` for the credential and the Host and Origin headers.
 - The app calls `GET /api/plugins/hermes-bots/info` before opening the socket. That request mounts the route on a dashboard that has just installed the plugin (B17).
+- `/info` and every ping carry the store's `store_id`. When it differs from the one the app saw before, the store was recreated and its alert ids restarted: the app reconnects with `since=0`.
 
 ### Delivery
 
@@ -179,6 +182,7 @@ At connect the app checks every profile:
 |---|---|
 | Installed and enabled, version and pinned SHA on disk | `plugins.manage {action: "list", profile}` (`plugins.list` reports no versions) |
 | Version the dashboard is running | `GET /api/plugins/hermes-bots/info` |
+| Approval mode | The profile's `approvals.mode`; set to `manual` when it differs (FR-PLG-6) |
 
 A missing or outdated plugin in any profile is offered for install or update. Routines and push for that bot wait until it is done.
 

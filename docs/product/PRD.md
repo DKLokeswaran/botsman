@@ -4,9 +4,9 @@
 | --- | --- |
 | **Product name** | Hermes Bots |
 | **Document type** | Product Requirements Document (PRD) |
-| **Version** | 1.1 |
+| **Version** | 1.2 |
 | **Status** | Draft |
-| **Last updated** | 2026-10-31 |
+| **Last updated** | 2026-11-03 |
 | **Audience** | Builders implementing the Windows app, the Android app and the companion plugin |
 | **Related** | [Roadmap](./roadmap.md), [Architecture](../research/ARCHITECTURE.md), [Feasibility blockers](../research/BLOCKERS.md), [Mockups](../../mockups/README.md), [Design](../../DESIGN.md) |
 
@@ -113,6 +113,7 @@ Priority: **P0** is required at Alpha exit (MVP), **P1** at Stable / v1.0, **P2*
 | FR-PLG-3 | The plugin raises alerts from Hermes hooks and routine deliveries in every bot's profile and serves them on one authenticated WebSocket route | P0 |
 | FR-PLG-4 | The app detects a missing or outdated plugin in each bot's profile at connect, installs or updates it through `plugins.manage`, and restarts the gateway once; when the dashboard still runs older plugin code, the update screen shows the exact steps to restart it (manual for now, automated later) | P0 |
 | FR-PLG-5 | Optionally publish each alert to an ntfy topic | P1 |
+| FR-PLG-6 | At setup the app sets each bot's `approvals.mode` to `manual`, so every approval reaches the user and raises an alert; choosing a different mode per bot comes later, from the app | P0 |
 
 ### 4.3 Bots (FR-BOT)
 
@@ -309,3 +310,4 @@ Where **Decision** is filled, that ruling is final. Empty **Decision** means sti
 | --- | --- | --- |
 | 1.0 | 2026-10-30 | Draft PRD from the planning answers, approved mockups, architecture and feasibility findings |
 | 1.1 | 2026-10-31 | Companion plugin requirements per bot profile, Run now delivery, plugin update restarts |
+| 1.2 | 2026-11-03 | The app sets each bot's approval mode to manual at setup; alert for a failed reply |
