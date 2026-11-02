@@ -38,12 +38,20 @@ def snapshot(repo: Path) -> str:
 
 
 async def install(repo: Path, sha: str, profiles: list[str]) -> None:
+    """Install into each profile as the apps do: without ``force`` the first time, with it to update."""
     async with Rpc(login()) as rpc:
         for profile in profiles:
-            result = await rpc.call("plugins.manage", {
-                "action": "install", "identifier": f"file://{repo}#{SUBDIR}", "ref": sha,
-                "enable": True, "force": True, "profile": profile}, timeout=300)
+            request = {"action": "install", "identifier": f"file://{repo}#{SUBDIR}", "ref": sha,
+                       "enable": True, "profile": profile}
+            if await _has_plugin(rpc, profile):
+                request["force"] = True
+            result = await rpc.call("plugins.manage", request, timeout=300)
             print(profile, json.dumps(result)[:600])
+
+
+async def _has_plugin(rpc: Rpc, profile: str) -> bool:
+    listing = await rpc.call("plugins.manage", {"action": "list", "profile": profile})
+    return any(plugin["name"] == "hermes-bots" for plugin in listing["plugins"])
 
 
 if __name__ == "__main__":

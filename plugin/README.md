@@ -31,10 +31,10 @@ Hermes loads plugins per profile, so the plugin is installed into every bot's pr
 
 ```json
 {"action": "install", "identifier": "<git url>#plugin/hermes-bots", "ref": "<40-character commit SHA>",
- "enable": true, "force": true, "profile": "<bot>"}
+ "enable": true, "profile": "<bot>"}
 ```
 
-`force: true` is needed to update an install that is pinned to a `ref`. After an install or an update:
+An update is the same call with `"force": true` and the new `ref`, because a profile that already has the plugin refuses a second install without it, and a pinned install refuses `action: "update"`. A first install goes without `force`, so Hermes's security scan can still stop it. After an install or an update:
 
 1. Restart the gateway (`POST /api/gateway/restart`, which relies on a supervisor such as a systemd service) so that `hbapp` connects with the new code.
 2. Restart the dashboard (for example `systemctl --user restart hermes-dashboard.service`) when `GET /api/plugins/hermes-bots/info` reports an older version than `plugins.manage {action: "list"}`. Hermes has no API for this restart.
