@@ -1,93 +1,83 @@
-# Hermes Bots mockups
+# Botsman mockups
 
-Static, clickable mockups of the Hermes Bots client. They are for approval before any real client is built. They do not connect to Hermes. Sample data only.
+Static, clickable mockups of the Botsman apps. They connect to nothing and use sample data only.
 
-The look is Zoetrik, using the tokens in the shadcn/ui section of `DESIGN.md`. Orbitron, Inter, and Fragment Mono load from Google Fonts. Dark is the Zoetrik palette. Light is its Drafting Table scheme, so the app can follow the system. Mode is System, Light, or Dark, stored in this browser as `hb-theme`. A leftover `hb-flavor` value is removed on load.
+The look is Zoetrik, using the tokens in the shadcn/ui section of `DESIGN.md`. Orbitron, Inter, and Fragment Mono load from Google Fonts. Dark is the Zoetrik palette, and light is its Drafting Table scheme. Mode is System, Light, or Dark, stored in this browser as `hb-theme`.
+
+The Windows app and the web dashboard use these screens directly. The web dashboard has no tray, and shows notifications only while the site is open. The Android app is rebuilt in native views, using them as the visual reference.
 
 ## How to view
-
-From the repository root:
 
 ```bash
 python3 -m http.server 8000 --directory mockups
 ```
 
-Open `http://127.0.0.1:8000/`. The index lists every screen. Each one is shown in a phone frame (390 CSS pixels wide) and a desktop window (1280 CSS pixels wide). The two frames are separate pages. A click stays inside the frame you clicked.
+Open `http://127.0.0.1:8000/`. The index lists every screen in a phone frame (390 pixels wide) and a desktop window (1280 pixels wide). A click stays inside the frame you clicked.
 
-`mockups/app.html` is the client itself. The index loads it with `?device=phone` or `?device=desktop` and a hash for the screen. Opening `mockups/app.html` directly picks phone or desktop from the window width.
-
-Mode is on the index and again in Settings.
+`mockups/app.html` is the client itself. The index loads it with `?device=phone` or `?device=desktop` and a hash for the screen. Opened directly, it picks phone or desktop from the window width.
 
 ## Screens
 
-1. **Desktop shell and phone list.** Bots beside the chat on the desktop. Junior (the main profile) pinned first, then recent activity. Each row shows a face, name, short description, model, last-message preview, and unread, working, or needs-you when those apply. Needs you is its own list. Rooms are a separate section. On the phone the list is the home screen: tap a bot, then Back. The bot row opens that bot's chat.
-2. **Bot chat.** Markdown, a table, a code block with Copy, a collapsed thinking block, collapsed tool lines (tap for input and output), a todo list, a file diff, per-reply tokens and cost, and Retry. A routine message is in the thread, and the next message replies to it in context. Earlier routine runs are earlier messages in the same chat. A private handoff is a full-width card: one header line (sender, receiver, time) and a body that wraps when opened. Summarize is in the header.
-3. **Working turn.** Thinking stays expanded while the reply streams. One line per tool. Stop ends the turn. Steer adds a note without stopping. The queued line waits until this turn finishes. Type in the box and it offers Queue.
-4. **Attachments and a pasted image.** An image already in the thread, plus a pasted image and a file waiting in the box.
-5. **Model and reasoning.** Open from the chip on the composer. Pick a model and a reasoning effort. This chat changes only the open thread. Bot default changes the bot everywhere a chat has not picked its own.
-6. **Slash commands.** The message box is already on `/`, so the menu is open on the phone and on the desktop. Typing filters it. Arrow keys move the highlight. Enter runs the command. The `/` button opens the same menu. Summarize stays in the header and does what `/compress` does.
+1. **Desktop shell and phone list.** Bots beside the chat on the desktop. The main bot is pinned first, then recent activity. Needs you has its own list, and channels are a separate section. On the phone the list is the home screen.
+2. **Bot chat.** Markdown, a table, a code block with Copy, a collapsed thinking block, tool lines, a todo list, a file diff, per-reply tokens and cost, and Retry. A routine result is in the thread, and the next message replies to it. A line such as Junior → Nightwatch opens that bot conversation.
+3. **Working turn.** Thinking stays open while the reply streams. Stop ends the turn, Steer adds a note, and a queued message waits.
+4. **Attachments and a pasted image.**
+5. **Model and reasoning.** This chat changes only the open thread. Bot default changes the bot everywhere a chat has not picked its own.
+6. **Slash commands.** Compact, clear, skills, memory, notes, usage, and help.
 7. **Reconnecting.** A banner, then a caught-up state.
-8. **Approval.** Allow once, Allow for this chat, or Deny. The short line is the description; Full command shows the exact command. The timer is the five-minute auto-deny. The same item is in Needs you. Answering keeps your place in the thread.
-9. **Clarifying questions.** Up to five questions on one card. Each has options and a free-text line. Choosing an answer keeps the scroll position, including inside the card.
-10. **Routines for one bot.** Pause, resume, run now, edit, history. Run now appends a message to that bot's chat.
+8. **Approval.** Allow once, Allow for this chat, or Deny, with why it is asking, the full command, and the time left. The same item is in Needs you.
+9. **Clarifying questions.** Up to five questions on one card.
+10. **Routines for one bot.** Pause, resume, run now, edit, history. A routine a bot created says so.
 11. **All routines.** The same list, grouped by bot.
-12. **New routine.** Templates, schedule picker, advanced cron, delivery to the bot's chat and/or an alert.
-13. **Edit routine.** The morning briefing, ready to change.
-14. **Run history.** One row per run. Open jumps to that run's message in the bot's chat and highlights it. A failed run has no message.
-15. **Group room.** Standup has three bots in one channel. A bot addressing another bot is a normal message from that bot, with an @mention. A private handoff that never entered a room is not listed here.
+12. **New routine.** Templates, schedule picker, advanced cron, delivery, and the memory toggle, off by default.
+13. **Edit routine.**
+14. **Run history.** Open jumps to that run's message and highlights it.
+15. **Channel.** Standup has three bots. A bot replies only when mentioned or asked.
 16. **Usage.** Cost on each reply, a total on the chat, and a 14-day dashboard by bot.
-17. **Bot info and avatar.** Upload a photo or choose a mark. Name and description are shown, not edited.
-18. **Servers.** Add a server, switch server. Mode lives here too.
-19. **Notifications.** On the phone, Background connection is the default: the app keeps its own connection to the server and shows its setup (battery, always-on VPN, phone maker guide). ntfy is the optional alternative, with server, topic, and access token. On Windows the status line is the app's own tray. A sample alert opens Junior's chat.
-20. **Login.** Shown when the session expires, with the username already filled in.
-21. **Update available.** Install, or Not now.
+17. **Bot info.** Edit name and description, choose an avatar, and open memory, notes, settings, and routines. Delete marks the bot as deleted on the server and removes it from the apps. The main bot can restore it.
+18. **Servers.** Add a server at any HTTPS address, switch server, and set the mode.
+19. **Notifications.** On the phone, the background connection with its setup checklist. On Windows, the tray.
+20. **New bot.** Name, description, purpose, default model, and a folder that defaults to `~/.botsman/workspaces/<id>`, with free space on the server. Unsafe paths are refused.
+21. **Memory.** `USER_PROFILE.md`, `USER_MEMORY.md`, `BOT_PROFILE.md`, and `BOT_MEMORY.md` with live character counts, and pending edits to confirm or reject.
+22. **Notes.** Keyword search and a list of a bot's notes.
+23. **One note.** Edit, save, or delete.
+24. **Bot settings.** Permission mode, approval wait, network, connections, and skills. Botsman and server skills start off, and a bot's own skills are always on.
+25. **Bot settings for the main bot.** The same, plus the server shell switch, which is off by default, and adding connections.
+26. **One bot chat.** Opened from its line in a bot's chat, and read-only until you step in. There is no separate list.
+27. **A paused bot chat.** Pauses after 10 messages without you, and the line says Paused.
+28. **Model providers.** Every provider and its status, with Connect, Replace, and Remove. Saved keys and sign-ins can't be viewed.
+29. **Signing in to a provider.** An API key or a browser sign-in with a pasted address or code. GitHub Copilot shows a code. Anthropic's Claude subscription option finds an existing Claude Code login on the server, or shows the command to sign in, with an optional program path, login folder, and Usage label.
+30. **Restoring a deleted bot.** The main bot's card, with Restore or Keep deleted.
+31. **Subagent work.** One line alongside the tool lines, which opens to the task and the work so far.
+32. **First-run setup.** Server and owner password, a model provider, the main bot's name and server shell, and how alerts work.
+33. **Login.** Shown when a session expires, with the username filled in.
+34. **Update available.** Install, or Not now.
 
-## What a click does
+## Sample data
 
-The sample roster is Junior (main), Nightwatch, Ledger, Atlas, Quartermaster, and Scribe, plus the Standup and House rooms. Ledger is waiting on an approval. Atlas is waiting on questions. Nightwatch is mid-reply.
+The roster is Junior (main), Nightwatch, Ledger, Atlas, Quartermaster, and Scribe, plus the Standup and House channels. Ledger is waiting on an approval, Atlas on questions, and Junior and Nightwatch on memory confirmations. Nightwatch is mid-reply. Model names are samples.
 
-Sending a message adds it to the thread and appends a short sample reply. Run now on a routine appends one message to that bot's chat and adds a history row that points at it. Stop settles Nightwatch's turn. The approval timer counts down and, at zero, denies on its own. Choosing an option, expanding a tool, or retrying a reply does not jump the thread back to the top. Upload a photo uses a file on this device only. Nothing is sent anywhere.
+## Decisions in these screens
 
-Typing `/` opens the command menu. It filters on the command name and the hint, and the arrow keys move through it. The commands are the Hermes ones that do not already have a control: `/compress` (same as Summarize), `/clear` (reset this chat's context), `/skills`, `/personality`, `/usage` (this chat, not the dashboard), `/undo`, and `/help`. Left off on purpose, because the screen already does them: model and reasoning (the chip), Stop, routines, and Retry on each finished reply.
-
-## Decisions already made in these screens
-
-- Phone home is the bot list. Desktop home is Junior's chat, with the list still visible.
-- Each bot has one chat. Every routine run posts into it without starting a reply. History never creates a chat per run.
-- Run history is outcomes. Open scrolls to the message and highlights it.
-- Approval offers Allow once, Allow for this chat, and Deny. There is no always-allow.
-- The approval card shows the time left until the five-minute auto-deny.
-- Clarifying questions are one card. They are sent together. Answering does not reset scroll.
-- While the app is open, Needs you is the sidebar list, the badges, and the inline cards.
-- Alerts when the app is closed: Android keeps its own background connection to the server by default, and ntfy is optional. Windows shows the app's own tray notification for the same events. A tap or click opens the chat.
-- Switching server opens sign-in again. The username stays filled in.
-- Chats from other clients are not listed.
-- Bot name, description, and tools are not editable. The avatar is. Creating a bot is not on screen.
-- A room is one shared channel. A bot addressing another bot is a normal message, optionally with an @mention. The only separate treatment for bot-to-bot traffic is a private handoff outside any room: a full-width collapsible card in each bot's chat, one header line with "Junior → Nightwatch" and the time.
+- Phone home is the bot list. Desktop home is the main bot's chat, with the list still visible.
+- Each bot has one chat with the owner. Every routine run posts into it without starting a reply.
+- Approvals have no always-allow.
+- Clarifying questions are one card, sent together.
+- Switching server opens sign-in again, with the username filled in.
 - Cost sits under every finished reply, and the chat header shows the thread total.
-- Reading width is about 720 pixels. The phone has an Android status bar. The desktop window has a caption bar.
-- Model names in the picker are samples.
-- Zoetrik is the only look, with the tokens from the shadcn/ui section of `DESIGN.md`: orange primary buttons, Orbitron headings, Inter labels and body, an orange focus ring, square tags and avatars, and 4px buttons, cards and inputs. Light uses the Drafting Table scheme; its green, cyan and mint are darkened so they read on the paper background. System follows the device.
-
-## Changes after the second review
-
-- The slash menu is back for Hermes commands that have no obvious control. Model, Stop, routines, and Retry stay as controls. Summarize stays in the header.
-- Group rooms no longer label lines "Between bots". A bot talking to a bot is a normal room message, with an @mention.
-- A private handoff is a full-width card. The header is one line. The body wraps. The sample Junior → Nightwatch note starts open so the wrap is visible.
-- Honest Terminal and the first monochrome look are gone, including their fonts, switcher, and stored flavor value. Mode is the only appearance control.
+- Reading width is about 720 pixels.
+- Zoetrik is the only look.
 
 ## Open design questions
 
-1. Is the phone home the bot list, with Junior opened only after a tap? Desktop already opens Junior.
-2. Is highlighting the run's message enough, or should the history row also quote the message?
-3. Is "Allow for this chat" the right label for the session choice?
-4. Should the five-minute countdown be visible the whole time, or only near the end?
-5. Should the five questions stay one scrolling card, or become one question at a time?
-6. While the app is open, are the Needs you list and the inline cards enough, or do you also want a toast?
-7. With ntfy, is one topic right, or do you want a topic per bot?
-8. When you switch server, is a fresh password required?
-9. Should Discord and CLI history stay completely absent, with no import entry?
-10. When a bot is created on the server, is it enough that it appears on the next load of the list, with no toast?
-11. Should a private handoff start collapsed, or open, as the Nightwatch sample does?
-12. Is a cost line under every reply too noisy?
-13. Steer adds a note and does not stop the turn. Stop ends it. A queued message waits. Is that the right trio?
+The mockup behaviour applies until one of these is decided.
+
+1. Should the phone open on the bot list, with the main bot opened only after a tap?
+2. Is highlighting a run's message enough, or should the history row also quote it?
+3. Is "Allow for this chat" the right label?
+4. Should the approval countdown be visible the whole time, or only near the end?
+5. Should clarifying questions stay one scrolling card, or become one at a time?
+6. While the app is open, are Needs you and the inline cards enough, or is a toast also wanted?
+7. When you switch server, is a fresh password required?
+8. Is a cost line under every reply too noisy?
+9. Steer adds a note, Stop ends the turn, and a queued message waits. Is that the right trio?

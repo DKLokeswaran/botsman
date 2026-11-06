@@ -1,123 +1,35 @@
-# Hermes Bots — Product roadmap
+# Botsman roadmap
 
-| Field | Value |
-| --- | --- |
-| **Product** | Hermes Bots |
-| **Document type** | Product roadmap |
-| **Version** | 1.1 |
-| **Status** | Active |
-| **Last updated** | 2026-10-31 |
-| **Related** | [PRD](./PRD.md) |
-
----
-
-## Release model
-
-### Phases
-
-| Phase | Intent |
-| --- | --- |
-| **Alpha** | Initial development. Goal: the MVP assistant loop (PRD §9) on both Windows and Android. Builds may be unusable until Alpha exit. |
-| **Beta** | Add the rest of the v1 features, tests and hardening. Goal: Stable / v1.0. |
-| **Post-stable** | After v1.0: new features and Hermes surfaces, as prioritized. |
-
-### Release checkpoints
-
-| Checkpoint | Meaning |
-| --- | --- |
-| **Alpha exit** | PRD §9 met on both apps; Beta starts |
-| **Stable / v1.0** | Every P1 requirement in the PRD ships on both apps; the user can move fully from Discord |
-
-Windows and Android advance together through every milestone. The companion plugin leads, because both apps depend on it.
-
-```mermaid
-flowchart TD
-    alpha["Alpha<br/>plugin + MVP assistant loop"]
-    beta["Beta<br/>rest of v1, tests, hardening"]
-    post["Post-stable<br/>Pages, Library, more Hermes surfaces"]
-    alpha -- "Alpha exit" --> beta
-    beta -- "Stable / v1.0" --> post
-```
-
----
+The server comes first. After that, Windows and Android move through the same milestones together.
 
 ## Alpha
 
-**Goal:** The assistant loop: bots, one chat each, streaming replies, approvals and questions, routines posting into the chat, and push with the app closed.
+**M1. Server core.** One Node process that hosts bots on Pi Durable: bot creation, one SQLite file per bot, login, model provider keys and sign-ins, the app protocol, streaming chat, stop, steer, queue, and catch-up after a reconnect. Includes the sandbox for each bot with Stop closing any process left running, approvals, the four memory files with confirmations, notes, and keyword search.
 
-**Scope source of truth:** [PRD](./PRD.md) P0 requirements and §9 acceptance criteria.
+**M2. Apps.** It starts by installing with pnpm 12, building and launching the Windows app on Windows, and building the Android APK and opening it on a phone or emulator. Then come the `protocol`, `client-core`, `pc-ui`, and token packages, the Windows app, the web dashboard on the same screens, and the Android app: first-run setup, bot list, chat, approvals, memory, notes, bot info, bot settings, model providers, usage, and alerts through the tray and the Android foreground service.
 
-| Milestone | Focus |
-| --- | --- |
-| **M1 – Companion plugin** | `hbapp` delivery platform for scheduled runs and Run now (header and footer removed, routine framing, turn lease for running replies), push hooks, shared alert store, alert WebSocket route with Hermes's credential and Origin checks, `/info` version route, works in every bot's profile, tests against a Hermes test instance |
-| **M2 – Foundations** | Both app shells; Android signing key and Tauri update key kept as GitHub secrets; release builds on every tagged release and in-app updates from them; client types generated from the Hermes contract; Zoetrik design tokens from DESIGN.md; login, reconnect and version check; plugin detection and install from the app; at connect, each bot's approval mode set to manual (FR-PLG-6) |
-| **M3 – Bots and chat** | Bot list with row details and ordering; one chat per bot, recorded in the bot's profile `ui_meta` so alerts come only from it (FR-CHAT-1); streaming, markdown, copy, stop; routine messages; read state synced across devices |
-| **M4 – Approvals and questions** | Inline approval and question cards, Needs you list, clearing across devices |
-| **M5 – Routines** | List, create, edit, pause, resume, run now, delete; schedule picker with cron; delivery to chat and alert |
-| **M6 – Push** | Android foreground service with its setup screen; Windows tray and notifications, including notification clicks and the unsigned-installer check; alert toggles |
-
-**Alpha exit:** PRD §9 met on both apps. Starts Beta. Not Stable / v1.0.
-
-**Not required for Alpha exit:** every P1 requirement, ntfy mode, rooms, usage, multiple servers.
-
----
+Alpha is done when the owner uses it daily for chat, shell work, approvals, and memory on both apps.
 
 ## Beta
 
-**Goal:** Ship every P1 requirement on both apps and harden the product for daily use.
+**M3. Routines.** Scheduling, separate conversations for runs, posting results into chat, the memory toggle, and run history.
 
-### v1 features
+**M4. Tools.** Skills, web tools, MCP connections, attachments, clarifying questions, and subagent work in chat. Also the [Claude subscription provider](../decisions/permissions.md#claude-subscription), starting with a test of how Pi recovers from a crash during a held tool call, and a check on a real login that resuming a session picks up a changed system prompt. Until then, Anthropic connects with an API key.
 
-| Area | Features |
-| --- | --- |
-| **Chat** | Thinking and tool lines; todo list and file diffs; steer and queue; retry; attachments and pasted images; slash commands; model and reasoning per chat; Summarize; search within the chat; private handoff cards |
-| **Routines** | Run history with jump-to-message; templates |
-| **Bots** | Bot info; custom avatars synced across devices |
-| **Rooms** | Shared channels with several bots and @mentions |
-| **Usage** | Cost per reply and per chat; 14-day dashboard by bot |
-| **Push** | Android ntfy mode |
-| **Connection** | Several servers and switching |
+## v1
 
-### Quality and readiness
+**M5. Main bot and bot conversations.** The main bot's tools for changing other bots, `host_bash` and its switch in both apps, with tests that it stays off when switched off and that other bots can't reach it, requests from other bots to the main bot, bot-to-bot conversations, the loop limit, and channels.
 
-- Tests for the plugin, the generated clients and both apps, run against a Hermes test instance
-- Contract and plugin checks run before every Hermes upgrade
-- Multi-day soak of the Android foreground service, including reboots and app updates
-- Installer and APK signing settled
-- Open questions in PRD §10 decided
+v1 is done when every requirement in the [PRD](PRD.md) is met on both apps, and the owner has moved their daily bots onto it.
 
-### Stable / v1.0 means
+## After v1
 
-- Every P1 requirement in the PRD ships on Windows and Android with the same behaviour
-- The user chats with their bots on both phone and Windows and gets notifications reliably
-- No known P0 bugs; remaining issues are documented and non-blocking
-
----
-
-## Post-stable
-
-### Likely
-
-| Item | Intent |
-| --- | --- |
-| **Pages** | Grok Bot's Pages, on both apps |
-| **Per-bot Library** | Grok Bot's per-bot Library, on both apps |
-
-### Considered (not committed)
-
-| Theme | Notes |
-| --- | --- |
-| **Bot management** | Create and edit bots (profiles) from the app |
-| **Notifications** | Desktop-first notification routing; avatar as status |
-| **Approvals** | Always allow |
-| **Chat extras** | Reactions, edit and resend, voice input, read aloud, export, search across all bots |
-| **Hermes surfaces** | Bot memory, skills, tools, MCP servers, bot settings, background processes, files, projects, logs |
-
----
-
-## Document history
-
-| Version | Date | Notes |
-| --- | --- | --- |
-| 1.0 | 2026-10-30 | Draft roadmap: Alpha (MVP assistant loop), Beta (rest of v1), Post-stable |
-| 1.1 | 2026-10-31 | M1 scope from the plugin spike |
+- Key service: `http_request` with named secrets, per-bot grants, and SSH agent signing
+- Vector search over notes, with a local embedding model
+- Third-party memory providers
+- UnifiedPush, offered alongside the foreground service
+- Google Play release, which needs a foreground service review
+- Windows code signing
+- Voice input and read aloud
+- Pages and a per-bot library
+- Open-source release

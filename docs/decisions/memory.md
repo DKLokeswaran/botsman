@@ -1,0 +1,99 @@
+# Memory and notes
+
+## The four files
+
+Each level has two files. The owner writes the `PROFILE` file, and a bot writes the `MEMORY` file.
+
+| File | Level | Written by | Limit |
+| --- | --- | --- | --- |
+| `USER_PROFILE.md` | Shared by all bots | The owner | 4,000 characters |
+| `USER_MEMORY.md` | Shared by all bots | The main bot, with confirmation | 2,000 characters |
+| `BOT_PROFILE.md` | One bot | The owner | 6,000 characters |
+| `BOT_MEMORY.md` | One bot | That bot, with confirmation | 4,000 characters |
+
+`BOT_PROFILE.md` holds only the bot's role and instructions. That is about 16,000 characters in total, or roughly 4,000 tokens per request. The owner can view and edit all four files in the app.
+
+No bot can write a `PROFILE` file, and that includes the main bot.
+
+Only the main bot writes `USER_MEMORY.md`. If the owner tells another bot something worth keeping, that bot messages the main bot to record it. This means a bot tricked by a malicious page can't plant facts that every bot then trusts, and two bots never write the same file at once.
+
+When a bot-written file is full, the write fails with the current usage, and the bot has to trim it.
+
+## Confirmation
+
+Every bot edit to a memory file asks the owner, in every permission mode. Three things make this work:
+
+- **Files sit outside the bot's folder.** Bots change them only through the memory tool. A shell command can't reach them.
+- **An edit becomes a proposal.** The tool replies that the edit awaits confirmation, and the bot carries on. A routine or bot exchange never stalls on the owner.
+- **The answer arrives with the next message.** A proposal shows the conversation it came from, so a bad fact can be traced.
+
+Notes are not covered by this. A bot tracking its projects would otherwise ask constantly.
+
+## Keeping the prompt cache
+
+Model providers build the cache in order: tools, then system prompt, then messages. A change to the system prompt invalidates everything after it, which loses the cached chat. Bots have endless chats, so this matters.
+
+While the cache is alive, Botsman keeps the memory section of the prompt frozen and sends changes as messages:
+
+| Change | What happens |
+| --- | --- |
+| The owner edits `USER_PROFILE.md` | Every bot gets the change with its next incoming message |
+| The owner edits `BOT_PROFILE.md` | That bot gets the change with its next incoming message |
+| The main bot's edit to `USER_MEMORY.md` is confirmed | Every other bot gets the change with its next incoming message |
+| A bot's edit to its own `BOT_MEMORY.md` is confirmed | That bot gets the change with its next incoming message |
+
+The change text is stored as part of that message, so the same bytes go out on every later request and the cache stays valid. The apps don't display it. Nothing is added to idle conversations.
+
+### Rewriting the prompt
+
+Two events leave nothing in the cache to protect, so the server rewrites the frozen section with the current files and sends no change text:
+
+- The first message after the cache has expired, such as when the owner returns to a bot after a break.
+- Compaction.
+
+Every model runs with Pi's `supportsMidConvoSystemMessages` setting off, so a request has one system prompt.
+
+The server judges expiry from the time of the bot's last request and the provider's cache lifetime. A wrong guess costs one cache rebuild.
+
+On a Claude subscription, the new prompt goes in when the `claude` process next starts. See [Claude subscription](permissions.md#claude-subscription).
+
+Pi's default on current models keeps the old prompt and adds the update after it. With the setting off, the request has only the new prompt, at the top. We checked this by inspecting the requests Pi sends, but not yet in a full bot conversation.
+
+### How other products handle this
+
+| Product | Approach |
+| --- | --- |
+| Hermes | Freezes memory at session start, and refreshes at compression. Long sessions go stale ([#66025](https://github.com/NousResearch/hermes-agent/issues/66025)). |
+| OpenClaw | On some routes, pins the system prompt and sends changes as instruction messages after the current turn |
+
+## Saving before compaction
+
+Botsman controls compaction through Pi's settings and its manual `compact()` call. When a chat nears the limit, the server gives the bot one turn to save what matters, then starts compaction. Pi's automatic compaction stays on as the safety net, for example when a provider rejects a request as too long.
+
+In that turn the bot writes to its notes, and proposes any `BOT_MEMORY.md` changes for confirmation.
+
+## Notes
+
+Notes are plain Markdown files that hold what doesn't fit a small file, such as the projects a developer bot tracks. They live in `bots/<id>/notes/`, outside the bot's folder, so `ls` and `grep -r` in that folder never spend tokens on them. They reach the model only when the bot opens one.
+
+One `memory` tool does all of this. It searches, reads, and writes notes, and proposes edits to the memory files. Hermes has a `memory` tool too, and OpenClaw has `memory_search` and `memory_get`.
+
+This has two costs. A bot can't run shell scripts over its notes, and folder snapshots don't cover them.
+
+`BOT_MEMORY.md` can point to them, for example "project status lives in notes".
+
+SQLite holds only the search index, an FTS5 table that can be rebuilt from the files at any time. Before each search, the server re-indexes any file that changed, so no file watcher is needed.
+
+## Search later
+
+Vector search goes behind the same `memory` tool. The cost in money is small, and most of the work is keeping the index current.
+
+| Cost | Figure |
+| --- | --- |
+| API embeddings | About $0.01 for 1,000 notes of 500 tokens each, at $0.02 per million tokens |
+| Local model (`bge-small`, quantized) | 55 ms per chunk, about 130 MB more RAM, a 34 MB model, about 475 MB of packages |
+| Storage (`sqlite-vec` 0.1.9) | 10,000 chunks: 15 MB and 10 ms a search at 384 dimensions, 61 MB and 35 ms at 1,536 |
+
+Local figures were measured on a 6-core machine, with random vectors for the search test. `pi-ai` has no embedding support, so this is ours to build. A local model is the first choice: no extra key, and notes stay on the server.
+
+Third-party memory providers can fit the same interface, or arrive through MCP. Hermes runs one external provider alongside its built-in files, and OpenClaw combines keyword and vector search in SQLite.

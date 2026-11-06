@@ -1,0 +1,41 @@
+# Conversations
+
+## What each one gets
+
+| Conversation | Files | History it sees | Where the result goes |
+| --- | --- | --- | --- |
+| The owner and a bot | All 4 | That chat | That chat |
+| Routine, memory off (default) | None | None, only its prompt | Posted into the bot's chat |
+| Routine, memory on | All 4 | None, only its prompt | Posted into the bot's chat |
+| Bot to bot | Each bot's own 4 files | That pair's conversation | Back to the conversation that asked |
+| Channel | Each bot's own 4 files | That channel | The channel |
+| Main bot changing a bot | Its own 4 files | Its current chat | The owner's approval, then that chat |
+
+## Rules
+
+- **The owner's chats are private from other bots.** A bot never sees the owner's chat with another bot, so a message to another bot has to explain itself. The main bot is the exception. It can read any chat through a tool, and it is never loaded automatically.
+- **Bots don't get each other's files by talking.** Only the main bot can open another bot's files or notes, through a tool.
+- **Other conversations don't spill into the owner's chat.** To carry something over, a bot writes it to memory or notes, or posts a result if the owner asked for one.
+- **Messages from bots and channels are information, not commands.** Anything a bot proposes for memory because of one shows its source.
+
+## Routines
+
+A routine runs in a fresh conversation, with the bot's model and tools. Its final result is written into the bot's chat as a message the model sees. Posting starts no reply, and later replies have the result in context. If a reply is running, the post joins at the next turn boundary.
+
+## Bot to bot
+
+A bot sends a message with a tool, and the other bot replies in that pair's conversation. The reply returns to the conversation that asked.
+
+- Each pair has one conversation, which the owner can read and step into.
+- A line in each bot's chat with the owner, such as Junior → Nightwatch, opens that conversation, and says when it is paused. The line is display-only and adds nothing to the context. This is the only way in, because the apps have no separate list of bot conversations.
+- An exchange pauses after 10 messages without the owner, and raises an alert. Two bots could otherwise reply to each other forever.
+- Approvals from these exchanges go to the owner, and name the bots involved.
+
+## Channels
+
+A channel holds several bots and the owner. Each bot has its own Pi conversation for each channel.
+
+- Every member receives every message as context, without it costing a model turn.
+- A bot replies only when mentioned, or when the owner asks.
+
+If every bot answered every message, five bots would produce five replies each time, and each of those would wake the others.

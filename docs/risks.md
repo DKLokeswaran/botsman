@@ -1,0 +1,35 @@
+# Risks
+
+| Risk | What could happen | What we do |
+| --- | --- | --- |
+| Pi Durable changes | It's experimental, and breaks its API in minor releases (34 breaking changes in 1.5.0) | Pin the exact version. Only the `engine` and `events` modules touch it. Upgrade on purpose. |
+| Stored data after an upgrade | A rollback can leave data unreadable | Back up before every upgrade |
+| Pi's small team | Two core maintainers do most commits | Our protocol and storage plan keep the apps independent of Pi |
+| One process, one host | A crash stops every bot, and SQLite can lose the newest commit on power loss | Pi recovers on restart, and nightly backups cover the rest |
+| Crash during an approval wait | Each crash counts toward `restartLimit` | Raise the limit |
+| Android app killers | Xiaomi, OnePlus, Huawei, and Samsung may stop the foreground service | Catch-up on reconnect, per-brand setup steps, and UnifiedPush after v1 |
+| Google Play review | An always-on `specialUse` service may be rejected | Only applies when publishing there. A Play build can ship UnifiedPush only. |
+| Two sets of screens | Windows and Android drift apart | Shared hooks and tokens, a shared event recording, and a repo rule that a UI change covers both apps |
+| Young Android chat libraries | `react-native-enriched-markdown` is at 1.1. Legend List can let a single message slide under the keyboard in inverted chat setups, still reported in October 2026 ([#1427](https://github.com/kirillzyusko/react-native-keyboard-controller/issues/1427)). | FlashList is the list fallback. Markdown sits behind one component. |
+| Text selection on Android | Selection stops at tables and scrollable code blocks | Long-press copies the whole block, and "Copy as Markdown" is built in |
+| Prompt injection | A web page or another bot's message steers a bot | The sandbox limits the damage. Only the main bot writes `USER_MEMORY.md`, and no bot writes a `PROFILE` file. Memory edits ask. Bot messages are information, not commands. |
+| `host_bash` | With it on, a hijacked main bot can ask to run commands with the owner's full access: files, Docker, `sudo`, and keys. No sandbox applies, so the approval mode is the only protection, and a classifier can be wrong. | Off by default, only the owner turns it on, and only the main bot has it. |
+| Data leaving over the network | A confined bot sends data out | A per-bot network toggle. This remains a real gap while the network is on. |
+| Local services | A bot with network on shares the host's network, so it can reach localhost services, Tailscale devices, and Docker networks. Anything without a login is exposed. | Accepted for v1. OpenClaw and Hermes run on the host's network by default. A bot that doesn't need the web can have network off. |
+| Classifier misses | Smart mode allows a harmful action. Anthropic measured a 17% miss rate on its own. | The boundary still holds. Any uncertainty asks the owner. Manual is the default. |
+| Keys on the server | Anyone who takes over the server gets every key, and the rest of that user's account | Sandboxes hide them from bots. Encryption protects backups. |
+| Sandbox set up wrong | The server runs as the owner, so one wrong path in an allow list could show a bot the owner's files | One module builds the list, nothing is shared by default, and tests check that sensitive paths stay hidden |
+| Sandbox escape | Sandboxes share the host's kernel, and kernel features such as `io_uring` stay reachable, so a kernel bug could let a bot out | Keep the host updated. Block new privileges in every sandbox. |
+| Hosts that restrict sandboxes | Ubuntu 24.04 and later restrict user namespaces, so `bwrap` fails without a profile. The profile lets any program on the host get a user namespace through `/usr/bin/bwrap`. | Setup checks this and explains the two root steps. Bots don't run unsandboxed. The restriction stays on for everything else. |
+| Sandbox tested on one setup | It has only run on Ubuntu 24.04, kernel 6.8, x86-64, with Pi's faux model provider. A real model, a reboot, arm64, or another distro could behave differently. | Tested behaviour is recorded in [permissions](decisions/permissions.md#what-has-been-tested). |
+| Provider terms on sign-ins | Anthropic's [terms](https://code.claude.com/docs/en/legal-and-compliance) bar third-party apps from offering Claude login or routing requests through plan credentials, and its [SDK note](https://code.claude.com/docs/en/agent-sdk/overview) bars offering "claude.ai login or rate limits" in other products. It can enforce without notice. | Unmodified Claude Code, Anthropic's own sign-in, and no stored credentials. API key stays the default, and the form states the risk. Ask Anthropic before publishing. |
+| Claude subscription crash recovery | A held tool call dies with the `claude` process, and Claude's session is a second history to reconcile | Test Pi's recovery first when building the provider. API keys through Pi don't have this gap. |
+| Claude Code on the server | Each active chat holds a process. An owner's own `claude` updates independently, about six releases a week, and the SDK pins a different version. | Stop idle processes. The bundled copy is the default, and an owner's own copy gets a minimum version check. |
+| Owner-chosen bot folders | A bot gets read-write on its whole folder, so a bad path could expose the owner's files. A second disk has not been tested. | The server refuses `/`, the home folder, sensitive folders, Botsman's data, and other bots' folders. |
+| Shared `~/.agents` | Anything the owner later puts there becomes readable by every bot, even with its skill toggle off | The folder holds only skills today, and bots can't write to it. |
+| Usage label | `CLAUDE_CODE_ENTRYPOINT` is undocumented, and setting it to Botsman could affect the owner's account | Default stays on the SDK's label, and the form states the risk. Ask Anthropic before publishing. |
+| Apps not yet run | No APK has been built with pnpm 12. Sample APKs built with pnpm 10 and Bun have not been opened on a device, and nothing has been built on Windows itself. | The first checks in M2. A failure on Android more likely means replacing a library. |
+| pnpm 12 is new | It is a Rust rewrite from 2026-08-26, with no public reports for Expo, React Native, or Tauri | Pin the exact version. pnpm 11 has the same commands, settings, and lockfile format, and is the fallback, with support until 2027-04-30. |
+| Runaway bot | With no process or memory limits in v1, one bot can slow or stop the whole server | Restart the server. A user scope from `systemd-run` can add limits without root if this becomes a problem. |
+| Deleted bots keep their data | Disk use grows, and deleted data stays in backups | Erase by hand on the server. An in-app erase can follow if needed. |
+| Reliance on HTTPS setup | A self-hoster exposes the server badly | The server refuses plain HTTP, and rate-limits login |

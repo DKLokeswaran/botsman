@@ -1,6 +1,0 @@
-name: hermes-bots
-label: Hermes Bots
-kind: platform
-version: 0.1.0
-description: Companion plugin for the Hermes Bots apps. Delivers routine output into a bot's chat without starting a turn, and raises alerts for the apps.
-author: hermes-bots

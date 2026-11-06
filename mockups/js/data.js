@@ -6,12 +6,12 @@ const HB = {
   models: ["Haiku 4.5", "Sonnet 4.5", "Opus 4.5", "GPT-5", "Gemini 2.5 Pro"],
   efforts: ["Low", "Medium", "High", "Extra high"],
   commands: [
-    { name: "compress", hint: "Summarize this chat into the context" },
+    { name: "compact", hint: "Summarize this chat into the context" },
     { name: "clear", hint: "Clear this chat's context" },
     { name: "skills", hint: "Skills this bot can use" },
-    { name: "personality", hint: "How this bot speaks" },
+    { name: "memory", hint: "Open this bot's memory files" },
+    { name: "notes", hint: "Open this bot's notes" },
     { name: "usage", hint: "Tokens and cost for this chat" },
-    { name: "undo", hint: "Undo the last turn" },
     { name: "help", hint: "Commands in this chat" }
   ],
   marks: ["junior", "atlas", "ledger", "quartermaster", "scribe", "nightwatch", "diamond", "waves"],
@@ -20,7 +20,7 @@ const HB = {
       id: "junior",
       name: "Junior",
       description: "Everyday assistant",
-      about: "Everyday assistant. The main profile. Routines land in this chat.",
+      about: "Everyday assistant. The main bot. Routines land in this chat.",
       model: "Sonnet 4.5",
       effort: "High",
       mark: "junior",
@@ -129,14 +129,17 @@ const HB = {
     }
   ],
   servers: [
-    { id: "devbox", name: "devbox", host: "100.101.102.10", port: 9119 },
-    { id: "laptop", name: "laptop", host: "100.101.102.21", port: 9119 }
+    { id: "devbox", name: "devbox", host: "devbox.example.ts.net", port: 443 },
+    { id: "laptop", name: "laptop", host: "bots.example.com", port: 443 }
   ],
   notifications: [
     { id: "routine-ok", label: "A routine finished" },
     { id: "routine-fail", label: "A routine failed" },
     { id: "approval", label: "An approval is waiting" },
     { id: "question", label: "A question is waiting" },
+    { id: "memory", label: "A memory edit is waiting" },
+    { id: "mention", label: "You were mentioned in a channel" },
+    { id: "created", label: "A bot created a routine or skill" },
     { id: "long", label: "A long reply finished" },
     { id: "errors", label: "Errors" }
   ],
@@ -435,7 +438,7 @@ HB.threads["junior:main"] = [
       "<tr><td>Thu 06:30</td><td>Gym</td></tr>" +
       "</tbody></table></div>",
     diff: {
-      file: "notes/household.md",
+      file: "Note: household.md",
       lines: [
         { t: "del", s: "Gym: Tue 18:30" },
         { t: "add", s: "Gym: Thu 06:30" },
@@ -448,17 +451,17 @@ HB.threads["junior:main"] = [
     id: "j-user2",
     role: "user",
     time: "7:05",
-    text: "Show the one-liner you used to update the note."
+    text: "Show the command you used to find the clash."
   },
   {
     id: "j-code",
     role: "assistant",
     who: "junior",
     time: "7:05",
-    text: "This only updates the note. The calendar write already happened.",
+    text: "This searches the calendar export in my folder.",
     code: {
       lang: "bash",
-      text: "printf '%s\\n' 'Gym: Thu 06:30' >> ~/notes/household.md"
+      text: "grep -n 'Thu' exports/calendar.txt"
     },
     usage: { tokens: 210, cost: 0.01 }
   }
@@ -530,6 +533,16 @@ HB.threads["nightwatch:main"] = [
       streaming: true,
       text: "Run 1842 is the latest on main. 1831 was the last success. The job name is migrate. I want the failed step before I guess."
     },
+    subagents: [
+      {
+        id: "n-s1",
+        name: "Log reader",
+        status: "Working",
+        running: true,
+        task: "Read the failed step of run 1842 and report the first error.",
+        work: "Opened the migrate step. Reading the last 200 lines."
+      }
+    ],
     tools: [
       {
         id: "n-t1",
@@ -583,6 +596,7 @@ HB.threads["ledger:main"] = [
 ];
 
 HB.threads["atlas:main"] = [
+  { id: "a-hand", role: "handoff", from: "atlas", to: "scribe", time: "Sun" },
   { id: "a1", role: "user", time: "7:10", text: "Write the migration memo." },
   {
     id: "a2",
@@ -703,5 +717,115 @@ HB.roomsLog = {
 HB.approval = {
   title: "Merge pull request #482",
   description: "Squash-merge pull request 482 and delete its branch.",
-  command: "gh pr merge 482 --squash --delete-branch"
+  command: "gh pr merge 482 --squash --delete-branch",
+  reason: "Asking because this command acts outside Ledger's folder. Ledger's approval wait is 1 hour."
 };
+
+HB.files = {
+  user: {
+    USER_PROFILE: "Lokeswaran. Based in India, IST.\nPrefers short answers that name the next step.\nMornings are for deep work. No meetings before 11.",
+    USER_MEMORY: "- Gym is Thursday 06:30.\n- Pays the rent on the 1st."
+  },
+  bots: {
+    junior: {
+      BOT_PROFILE: "You are Junior, the main bot and everyday assistant.\nKeep the calendar and the to-do list. Coordinate the other bots.",
+      BOT_MEMORY: "- The dentist is the only fixed point this week.\n- The memo for Atlas is still unsent."
+    },
+    nightwatch: {
+      BOT_PROFILE: "You are Nightwatch. You watch deploys and server health.\nReport what broke, then what you would do. Do not change production without approval.",
+      BOT_MEMORY: "- Project status lives in notes.\n- Staging migrations fail first when a column changes."
+    },
+    ledger: {
+      BOT_PROFILE: "You are Ledger. You handle money, invoices, and subscriptions.\nNever pay anything without asking.",
+      BOT_MEMORY: "- The electricity bill is due on Friday."
+    }
+  }
+};
+HB.memoryProposals = [
+  { id: "mp1", bot: "nightwatch", file: "BOT_MEMORY", add: "Run 1842 failed because staging rejected the new column.", source: "Your chat · 7:40" },
+  { id: "mp2", bot: "junior", file: "USER_MEMORY", add: "Pays the electricity bill before the due date, never on it.", source: "Message from Ledger · 6:41" }
+];
+HB.notes = {
+  nightwatch: [
+    { id: "billing", name: "billing-service.md", updated: "Today · 7:12", text: "Migration to the new billing tables.\n\nStatus: staging blocked on run 1842.\nNext: fix the column default, then rerun migrate." },
+    { id: "mobile", name: "mobile-app.md", updated: "Yesterday", text: "Release 2.4 is waiting on the store review.\n\nKeep an eye on crash reports after rollout." },
+    { id: "runbook", name: "deploy-runbook.md", updated: "12 Oct", text: "1. Check the last green run.\n2. Run migrate on staging.\n3. Promote." }
+  ],
+  junior: [
+    { id: "house", name: "house-move.md", updated: "Sun", text: "Quotes from two movers. Decide by the 30th." }
+  ]
+};
+HB.botChats = [
+  {
+    id: "junior-nightwatch", a: "junior", b: "nightwatch", topic: "Run 1842", time: "7:41",
+    messages: [
+      { id: "c1", role: "bot", who: "junior", time: "7:33", text: "Read the failed deploy log for run 1842 and say what broke." },
+      { id: "c2", role: "bot", who: "nightwatch", time: "7:41", text: "Run 1842 failed in the migrate step. Staging rejected the new column. I am reading the rest of the log." }
+    ]
+  },
+  {
+    id: "junior-ledger", a: "junior", b: "ledger", topic: "Electricity bill", time: "6:41",
+    messages: [
+      { id: "c3", role: "bot", who: "junior", time: "6:40", text: "Check the electricity bill before Friday. Don't pay it." },
+      { id: "c4", role: "bot", who: "ledger", time: "6:41", text: "It is due on Friday and matches last month. I asked you to record that the bill gets paid before the due date." }
+    ]
+  },
+  {
+    id: "atlas-scribe", a: "atlas", b: "scribe", topic: "Memo draft", time: "Sun", paused: true,
+    messages: [
+      { id: "c5", role: "bot", who: "atlas", time: "Sun", text: "Here is the research for the memo. Can you draft the opening?" },
+      { id: "c6", role: "bot", who: "scribe", time: "Sun", text: "Draft attached. The second claim needs a source." },
+      { id: "c7", role: "bot", who: "atlas", time: "Sun", text: "Sourced. Tighten the last paragraph?" }
+    ]
+  }
+];
+HB.mcp = [
+  { id: "calendar", name: "Calendar", detail: "Read and add events" },
+  { id: "github", name: "GitHub", detail: "Repositories, runs, and pull requests" },
+  { id: "mail", name: "Mail", detail: "Read and draft email" }
+];
+HB.skills = [
+  { id: "summarize", name: "Summarize", detail: "Shared Botsman skill", source: "botsman" },
+  { id: "pdf", name: "Read PDFs", detail: "Shared Botsman skill", source: "botsman" },
+  { id: "release-notes", name: "Write release notes", detail: "In ~/.agents/skills", source: "server" },
+  { id: "sql-review", name: "Review SQL", detail: "In ~/.agents/skills", source: "server" }
+];
+HB.botSkills = {
+  nightwatch: [{ id: "triage", name: "Triage a failed run", detail: "Steps for reading a failed deploy." }]
+};
+HB.botCfg = {
+  junior: { mode: "manual", mcp: { calendar: true, github: true, mail: true }, skills: { summarize: true, pdf: true } },
+  nightwatch: { mode: "smart", wait: "8 hours", mcp: { github: true }, skills: { summarize: true } },
+  ledger: { mode: "manual", mcp: { mail: true }, skills: { pdf: true } }
+};
+HB.deletedBots = [
+  {
+    id: "courier", name: "Courier", description: "Parcels and deliveries", about: "You are Courier. You track parcels.",
+    model: "Haiku 4.5", effort: "Low", mark: "waves", pinned: false, activity: 10, time: "12 Oct",
+    preview: "", unread: 0, working: false, needs: null, queue: [], deleted: true
+  }
+];
+HB.providers = [
+  { name: "Anthropic", auth: "key", saved: "12 Oct" },
+  { name: "OpenCode Go", auth: "key", saved: "30 Oct" }
+];
+HB.providerNames = ["Anthropic", "OpenAI", "OpenRouter", "OpenCode Go", "GitHub Copilot"];
+HB.providerAuth = {
+  "Anthropic": ["key", "claude"],
+  "OpenAI": ["key", "signin"],
+  "OpenRouter": ["key", "signin"],
+  "OpenCode Go": ["key"],
+  "GitHub Copilot": ["device"]
+};
+HB.authLabels = { key: "API key", claude: "Claude subscription" };
+HB.authStatus = { key: "API key saved · ", claude: "Claude Code login · " };
+HB.authActions = { key: "Save key", claude: "Check login" };
+HB.serverDisks = [
+  { path: "/", free: "147 GB" },
+  { path: "/mnt/data", free: "1.8 TB" }
+];
+HB.providerNotes = {
+  "Anthropic": "Anthropic's terms restrict subscription use in other apps, and it can act on your account without notice. An API key is the supported way."
+};
+HB.routines.forEach(function (r) { r.memory = r.id === "morning"; });
+HB.routines.filter(function (r) { return r.bot === "nightwatch"; }).slice(0, 1).forEach(function (r) { r.createdBy = "nightwatch"; });
