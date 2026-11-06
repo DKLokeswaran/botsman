@@ -1,7 +1,12 @@
-# Hermes Bots
+# Botsman
 
-Hermes Bots is a Grok Bot-style client for a self-hosted Hermes Agent, built as a Windows app (Tauri) and an Android app (Kotlin with Jetpack Compose). It talks to stock Hermes through the dashboard API, plus one companion Hermes plugin that ships in this repo. The architecture is in `docs/research/ARCHITECTURE.md`.
+Botsman is a self-hosted personal assistant. A TypeScript server built on Pi Durable runs the bots. A Windows app (Tauri and React), a web dashboard on the same screens, and an Android app (Expo and React Native) are the clients. The architecture is in `docs/decisions/overview.md`.
 
-## Instruction
+## Instructions
 
-Make every change, whether a new feature, a bug fix or anything else, with care that the Windows and Android apps stay in parity.
+Make every change, whether a new feature, a bug fix, or anything else, with care that the Windows and Android apps stay in parity.
+
+- Put logic in the shared `protocol` and `client-core` packages. Screens hold no logic of their own.
+- A UI change is finished only when it is on both apps.
+- Only one internal server module may import Pi Durable. Pin Pi to an exact version.
+- Record every decision or applied default in the affected docs, in the same change.

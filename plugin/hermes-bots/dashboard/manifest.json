@@ -1,8 +1,0 @@
-{
-  "name": "hermes-bots",
-  "label": "Hermes Bots",
-  "description": "Alert stream and version route for the Hermes Bots apps.",
-  "version": "0.1.0",
-  "api": "plugin_api.py",
-  "tab": {"hidden": true}
-}

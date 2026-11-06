@@ -29,6 +29,7 @@
 
   const bots = HB.bots.map(function (b) { return Object.assign({}, b, { queue: (b.queue || []).slice() }); });
   const rooms = HB.rooms.map(function (r) { return Object.assign({}, r); });
+  const deletedBots = HB.deletedBots.map(function (b) { return Object.assign({}, b); });
   const routines = HB.routines.map(function (r) {
     return Object.assign({}, r, { days: (r.days || []).slice(), runs: r.runs.map(function (x) { return Object.assign({}, x); }) });
   });
@@ -41,6 +42,17 @@
     roomLogs[k] = HB.roomsLog[k].map(function (m) { return Object.assign({}, m); });
   });
 
+  const files = { user: Object.assign({}, HB.files.user), bots: JSON.parse(JSON.stringify(HB.files.bots)) };
+  const notes = JSON.parse(JSON.stringify(HB.notes));
+  const botChats = JSON.parse(JSON.stringify(HB.botChats));
+  const LIMITS = { USER_PROFILE: 4000, USER_MEMORY: 2000, BOT_PROFILE: 6000, BOT_MEMORY: 4000 };
+  const FILE_INFO = {
+    USER_PROFILE: "About you, for every bot. Only you write this.",
+    USER_MEMORY: "What the bots have learned about you. Only the main bot writes this, and every edit asks you first. Other bots ask the main bot to record things.",
+    BOT_PROFILE: "This bot's purpose and instructions. Only you write this.",
+    BOT_MEMORY: "What this bot keeps for itself. Every edit it makes asks you first."
+  };
+
   const state = {
     faces: {},
     overrides: {},
@@ -50,7 +62,6 @@
     attachments: [],
     replyTo: null,
     steer: "",
-    openHandoff: { "j-hand-night": true, "n-hand": true },
     slashIndex: 0,
     highlight: null,
     highlightBot: null,
@@ -58,7 +69,7 @@
     openTool: {},
     approvalOpen: false,
     approvalChoice: null,
-    approvalLeft: 4 * 60 + 47,
+    approvalLeft: 47 * 60 + 12,
     clarify: {},
     clarifySent: false,
     confirmDelete: null,
@@ -67,16 +78,26 @@
     view: "",
     reconnect: null,
     menu: false,
-    pushMode: "service",
-    ntfyUrl: "https://ntfy.sh",
-    ntfyTopic: "hermes-bots-7f3k2q",
-    ntfyToken: "",
+    proposals: HB.memoryProposals.map(function (p) { return Object.assign({}, p); }),
+    memFile: {},
+    memSaved: null,
+    memError: "",
+    noteQuery: "",
+    noteSaved: false,
+    stepIn: {},
+    stepText: "",
+    botCfg: {},
+    newBot: { name: "", description: "", purpose: "", model: HB.models[1], folder: "", error: "" },
+    addMcp: { name: "", url: "", error: "" },
+    providers: HB.providers.map(function (p) { return Object.assign({}, p); }),
+    addKey: { open: null, provider: HB.providerNames[0], method: "key", key: "", callback: "", claudePath: "", claudeDir: "", usageLabel: "Default", error: "" },
+    setup: { step: 0, url: "", password: "", provider: HB.providerNames[0], method: "key", key: "", callback: "", claudePath: "", claudeDir: "", usageLabel: "Default", main: "Junior", hostShell: false, error: "" },
     notif: {},
     loginUser: HB.user,
     loginPass: "",
     loginError: "",
     pendingServer: null,
-    addServer: { name: "", host: "", port: "9119", error: "" },
+    addServer: { name: "", host: "", port: "443", error: "" },
     installed: false,
     retrying: null,
     retried: {},
@@ -114,7 +135,10 @@
     return h + ":" + String(m).padStart(2, "0");
   }
   function botBy(id) { return bots.filter(function (b) { return b.id === id; })[0] || null; }
-  function botName(id) { const b = botBy(id); return b ? b.name : "Bot"; }
+  function botName(id) {
+    const b = botBy(id) || deletedBots.filter(function (d) { return d.id === id; })[0];
+    return b ? b.name : "Bot";
+  }
   function orderedBots() {
     return bots.filter(function (b) { return b.pinned; }).concat(
       bots.filter(function (b) { return !b.pinned; }).sort(function (a, b) { return b.activity - a.activity; })
@@ -202,13 +226,16 @@
   function showNeeds(b) {
     if (b.needs === "approval" && !state.approvalChoice) return true;
     if (b.needs === "question" && !state.clarifySent) return true;
-    return false;
+    return state.proposals.some(function (p) { return p.bot === b.id; });
   }
   function needsItems() {
     const out = [];
     orderedBots().forEach(function (b) {
       if (b.needs === "approval" && !state.approvalChoice) out.push({ bot: b, kind: "approval" });
       if (b.needs === "question" && !state.clarifySent) out.push({ bot: b, kind: "question" });
+      state.proposals.filter(function (p) { return p.bot === b.id; }).forEach(function (p) {
+        out.push({ bot: b, kind: "memory", proposal: p });
+      });
     });
     return out;
   }
@@ -244,7 +271,7 @@
     return {
       mode: "new", id: null, bot: bot || "junior", name: "", prompt: "", freq: "weekdays",
       time: "07:00", onceDate: "2026-10-27", days: [1, 2, 3, 4, 5], cron: "0 7 * * 1-5",
-      cronDirty: false, cronOn: false, chat: true, ntfy: true, error: ""
+      cronDirty: false, cronOn: false, chat: true, ntfy: true, memory: false, error: ""
     };
   }
   function formFrom(id) {
@@ -254,7 +281,7 @@
       mode: "edit", id: j.id, bot: j.bot, name: j.name, prompt: j.prompt, freq: j.freq,
       time: j.time, onceDate: j.onceDate || "2026-10-27", days: (j.days || []).slice(),
       cron: j.cron || toCron(j), cronDirty: !!j.cronDirty, cronOn: !!j.cronDirty || j.freq === "cron",
-      chat: !!j.chat, ntfy: !!j.ntfy, error: ""
+      chat: !!j.chat, ntfy: !!j.ntfy, memory: !!j.memory, error: ""
     };
   }
   function onRoute() {
@@ -277,6 +304,11 @@
       if (!threads["junior:attach"]) threads["junior:attach"] = JSON.parse(JSON.stringify(HB.attachThread));
     } else state.attachments = [];
     state.replyTo = null;
+    state.memSaved = null;
+    state.memError = "";
+    state.noteSaved = false;
+    state.noteQuery = "";
+    state.confirmDelete = null;
     const a = route.parts[0], b = route.parts[1], c = route.parts[2];
     if (!(a === "chat" && b === state.highlightBot && state.highlight)) {
       state.highlight = null;
@@ -299,9 +331,13 @@
     const a = route.parts[0], b = route.parts[1], c = route.parts[2];
     const phone = device() === "phone";
     const home = homeHash();
-    if (!a || a === "bots" || a === "login" || a === "update") return null;
+    if (!a || a === "bots" || a === "login" || a === "update" || a === "setup") return null;
     if (a === "chat" || a === "room") return phone ? "#/bots" : null;
-    if (a === "bot") return "#/chat/" + b;
+    if (a === "bot") return b === "new" ? home : "#/chat/" + b;
+    if (a === "memory" || a === "bot-settings") return "#/bot/" + b;
+    if (a === "notes") return c ? "#/notes/" + b : "#/bot/" + b;
+    if (a === "convo") return "#/chat/" + (route.q.get("from") || b.split("-")[0]);
+    if (a === "providers") return "#/settings";
     if (a === "routines" && b) return "#/chat/" + b;
     if (a === "routines") return home;
     if (a === "routine" && b === "new") {
@@ -320,7 +356,7 @@
     const a = route.parts[0];
     if (name === "routines") return a === "routines" && !route.parts[1];
     if (name === "usage") return a === "usage";
-    if (name === "settings") return a === "settings" || a === "notifications";
+    if (name === "settings") return a === "settings" || a === "notifications" || a === "providers";
     return false;
   }
 
@@ -355,13 +391,17 @@
   }
   function roomRow(r) {
     const on = route.parts[0] === "room" && route.parts[1] === r.id;
-    const names = r.members.map(botName).join(", ");
+    const names = r.members.filter(botBy).map(botName).join(", ");
     return '<button type="button" class="room-row' + (on ? " on" : "") + '" data-act="nav" data-to="#/room/' + r.id + '">' +
       roomAvatar() +
       '<span class="bot-mid"><span class="bot-name">' + esc(r.name) + '</span><span class="bot-sub">' + esc(names) + '</span><span class="bot-preview">' + esc(r.preview) + "</span></span><span></span></button>";
   }
   function needRow(item) {
     const b = item.bot;
+    if (item.kind === "memory") {
+      return '<button type="button" class="need-row" data-act="nav" data-to="#/memory/' + b.id + '"><i class="work-dot"></i><span class="need-mid"><span class="need-k">' + esc(b.name) + " · Memory edit</span>" +
+        '<span class="need-sub">' + esc(item.proposal.file) + ".md: " + esc(item.proposal.add) + "</span></span></button>";
+    }
     const label = item.kind === "approval" ? "Approval" : "Question";
     const sub = item.kind === "approval" ? HB.approval.title : HB.questions[0].prompt;
     const timer = item.kind === "approval" ? '<span class="bot-time" id="need-timer">' + clock(state.approvalLeft) + "</span>" : "";
@@ -369,10 +409,11 @@
   }
   function sidebar() {
     const needs = needsItems();
-    return '<aside class="sidebar"><div class="side-top"><div class="wordmark">Hermes Bots</div></div>' +
+    return '<aside class="sidebar"><div class="side-top"><div class="wordmark">Botsman</div></div>' +
       (needs.length ? '<div style="padding:0 8px"><div class="side-label">Needs you</div>' + needs.map(needRow).join("") + "</div>" : "") +
       '<div class="side-scroll"><div class="side-label">Bots</div>' + orderedBots().map(botRow).join("") +
-      '<div class="side-label">Rooms</div>' + rooms.map(roomRow).join("") + "</div>" +
+      '<button type="button" class="text-btn new-bot" data-act="nav" data-to="#/bot/new">New bot</button>' +
+      '<div class="side-label">Channels</div>' + rooms.map(roomRow).join("") + "</div>" +
       '<div class="side-foot">' +
       '<button type="button" class="foot-btn' + (footOn("routines") ? " on" : "") + '" data-act="nav" data-to="#/routines">Routines</button>' +
       '<button type="button" class="foot-btn' + (footOn("usage") ? " on" : "") + '" data-act="nav" data-to="#/usage">Usage</button>' +
@@ -381,13 +422,14 @@
   }
   function listPage() {
     const needs = needsItems();
-    return '<div class="list-page pane"><div class="list-head"><div class="wordmark">Hermes Bots</div></div>' +
+    return '<div class="list-page pane"><div class="list-head"><div class="wordmark">Botsman</div></div>' +
       '<div class="phone-links"><button type="button" data-act="nav" data-to="#/routines">Routines</button>' +
       '<button type="button" data-act="nav" data-to="#/usage">Usage</button>' +
       '<button type="button" data-act="nav" data-to="#/settings">Settings</button></div>' +
       (needs.length ? '<div class="list-block"><div class="side-label">Needs you</div>' + needs.map(needRow).join("") + "</div>" : "") +
-      '<div class="list-block"><div class="side-label">Bots</div>' + orderedBots().map(botRow).join("") + "</div>" +
-      '<div class="list-block"><div class="side-label">Rooms</div>' + rooms.map(roomRow).join("") + "</div></div>";
+      '<div class="list-block"><div class="side-label">Bots</div>' + orderedBots().map(botRow).join("") +
+      '<button type="button" class="text-btn new-bot" data-act="nav" data-to="#/bot/new">New bot</button></div>' +
+      '<div class="list-block"><div class="side-label">Channels</div>' + rooms.map(roomRow).join("") + "</div></div>";
   }
 
   function backBtn() {
@@ -423,13 +465,14 @@
       '<button type="button" class="text-btn" data-act="copy-msg" data-id="' + m.id + '">Copy</button></div></div></div>';
   }
   function handoffMessage(m) {
-    const open = !!state.openHandoff[m.id];
+    if (!botBy(m.from) || !botBy(m.to)) return "";
+    const id = m.from + "-" + m.to;
+    const chat = chatById(id);
+    const from = route.parts[0] === "chat" ? "?from=" + route.parts[1] : "";
     return '<div class="handoff-msg">' +
-      '<button type="button" class="handoff" data-act="handoff" data-id="' + m.id + '" aria-expanded="' + (open ? "true" : "false") + '">' +
+      '<button type="button" class="handoff" data-act="nav" data-to="#/convo/' + esc(id + from) + '">' +
       '<span class="route">' + esc(botName(m.from)) + " → " + esc(botName(m.to)) + "</span>" +
-      '<span class="when">' + esc(m.time || "") + "</span></button>" +
-      (open ? '<div class="handoff-body">' + esc(m.text) + "</div>" : "") +
-      "</div>";
+      '<span class="when">' + esc(m.time || "") + (chat && chat.paused ? " · Paused" : "") + " · Open</span></button></div>";
   }
   function roomBotMessage(m) {
     let text = m.text || "";
@@ -458,6 +501,15 @@
       }
       return block;
     }).join("");
+    const subs = (m.subagents || []).map(function (s) {
+      const opened = toolOpen(s.id);
+      let block = '<button type="button" class="tool" data-act="tool" data-id="' + s.id + '">' +
+        (s.running ? '<i class="work-dot pulse"></i>' : "") + (opened ? "▾ " : "▸ ") + "Subagent · " + esc(s.name) + " · " + esc(s.status) + "</button>";
+      if (opened) {
+        block += '<div class="tool-body"><div class="kv">Task</div>' + esc(s.task) + '<div class="kv">Work so far</div>' + esc(s.work) + "</div>";
+      }
+      return block;
+    }).join("");
     const todos = m.todos && m.todos.length ? '<div class="todos">' + m.todos.map(function (td) {
       return '<div class="todo' + (td.done ? " done" : "") + '"><span class="box' + (td.done ? " on" : "") + '">' + (td.done ? svg(IC.check, 12) : "") + "</span><span>" + esc(td.text) + "</span></div>";
     }).join("") + "</div>" : "";
@@ -478,7 +530,7 @@
     }
     return '<div class="msg msg-assistant">' + avatar(m.who, { sm: true }) + "<div>" +
       '<div class="who">' + esc(botName(m.who)) + " <span>" + esc(m.time || "") + "</span></div>" +
-      think + tools + todos + body + diff + code + usage + "</div></div>";
+      think + tools + subs + todos + body + diff + code + usage + "</div></div>";
   }
   function renderMessage(m, list) {
     let html;
@@ -499,11 +551,22 @@
     }
     return '<div class="card alert"><span class="timer" id="approval-timer">Auto-denies in ' + clock(state.approvalLeft) + '</span>' +
       '<div class="kicker">Needs you</div><h3>' + esc(HB.approval.title) + "</h3><p>" + esc(HB.approval.description) + "</p>" +
+      '<p class="need-k">' + esc(HB.approval.reason) + "</p>" +
       '<button type="button" class="text-btn" data-act="approval-expand">' + (state.approvalOpen ? "Hide command" : "Full command") + "</button>" +
       (state.approvalOpen ? '<pre class="cmd">' + esc(HB.approval.command) + "</pre>" : "") +
       '<div class="choices"><button type="button" class="choice primary" data-act="approve" data-id="once">Allow once</button>' +
       '<button type="button" class="choice" data-act="approve" data-id="chat">Allow for this chat</button>' +
       '<button type="button" class="choice" data-act="approve" data-id="deny">Deny</button></div></div>';
+  }
+  function restoreCard() {
+    const target = deletedBots.filter(function (b) { return b.id === "courier"; })[0];
+    if (!target) return '<div class="card"><div class="settled">Restored · Courier</div></div>';
+    if (state.restoreDeclined) return '<div class="card"><div class="settled">Kept deleted · ' + esc(target.name) + "</div></div>";
+    return '<div class="card alert"><div class="kicker">Needs you</div><h3>Restore ' + esc(target.name) + "?</h3>" +
+      "<p>Its chat, memory, notes, and folder come back as they were. Its routines stay paused until you resume them.</p>" +
+      '<p class="need-k">Deleted ' + esc(target.time) + ". Restoring needs your approval, like any change the main bot makes to another bot.</p>" +
+      '<div class="choices"><button type="button" class="choice primary" data-act="restore-bot" data-id="' + target.id + '">Restore</button>' +
+      '<button type="button" class="choice" data-act="restore-no">Keep deleted</button></div></div>';
   }
   function clarifyCard() {
     if (state.clarifySent) {
@@ -545,7 +608,7 @@
       }).join("") + "<h4>Reasoning effort</h4>" +
       HB.efforts.map(function (m) {
         return '<button type="button" class="row" data-act="pick-effort" data-id="' + esc(m) + '">' + (m === curEffort ? "● " : "○ ") + esc(m) + "</button>";
-      }).join("") + "</div>";
+      }).join("") + '<button type="button" class="row" data-act="nav" data-to="#/providers">Connect a provider</button></div>';
   }
   function attachRow() {
     if (!state.attachments.length) return "";
@@ -628,6 +691,8 @@
       return '<button type="button" class="text-btn" data-act="menu">More</button>' +
         (state.menu ? '<div class="sheet"><button type="button" data-act="summarize" data-id="' + bot.id + '">Summarize</button>' +
           '<button type="button" data-act="nav" data-to="#/bot/' + bot.id + '">Bot info</button>' +
+          '<button type="button" data-act="nav" data-to="#/memory/' + bot.id + '">Memory</button>' +
+          '<button type="button" data-act="nav" data-to="#/notes/' + bot.id + '">Notes</button>' +
           '<button type="button" data-act="nav" data-to="#/routines/' + bot.id + '">Routines</button>' +
           '<button type="button" data-act="nav" data-to="#/usage">Usage</button>' +
           '<button type="button" data-act="nav" data-to="#/settings">Settings</button></div>' : "");
@@ -648,7 +713,9 @@
     if (bot.working) bits.push("Working…");
     let cards = "";
     if (bot.id === "ledger") cards += approvalCard();
+    if (bot.pinned && state.view === "restore") cards += restoreCard();
     if (bot.id === "atlas") cards += clarifyCard();
+    state.proposals.filter(function (p) { return p.bot === bot.id; }).forEach(function (p) { cards += proposalCard(p); });
     return '<div class="column"><div class="topbar">' + backBtn() + avatar(bot.id) +
       '<div class="topbar-text"><strong>' + esc(bot.name) + "</strong><span>" + esc(bits.join(" · ")) + "</span></div>" +
       chatActions(bot) + "</div>" + bannerHtml() +
@@ -657,8 +724,8 @@
   }
   function roomColumn(roomId) {
     const room = rooms.filter(function (r) { return r.id === roomId; })[0];
-    if (!room) return column("Room", "", '<div class="pane"><div class="empty">That room is gone.</div></div>');
-    const names = room.members.map(botName).join(", ");
+    if (!room) return column("Channel", "", '<div class="pane"><div class="empty">That channel is gone.</div></div>');
+    const names = room.members.filter(botBy).map(botName).join(", ");
     const list = roomLogs[room.id] || [];
     return '<div class="column"><div class="topbar">' + backBtn() + roomAvatar() +
       '<div class="topbar-text"><strong>' + esc(room.name) + "</strong><span>" + esc(names) + "</span></div></div>" +
@@ -668,8 +735,9 @@
 
   function routineCard(job) {
     return '<div class="r-card"><div class="bot-line"><h3>' + esc(job.name) + "</h3>" +
-      (job.paused ? '<span class="paused-tag">Paused</span>' : "") + "</div>" +
-      '<div class="meta">' + esc(schedLabel(job)) + "<br>" + esc(deliverLabel(job)) + "</div>" +
+      (job.paused ? '<span class="paused-tag">Paused</span>' : "") +
+      (job.createdBy ? '<span class="tag">Created by ' + esc(botName(job.createdBy)) + "</span>" : "") + "</div>" +
+      '<div class="meta">' + esc(schedLabel(job)) + "<br>" + esc(deliverLabel(job)) + " · Memory " + (job.memory ? "on" : "off") + "</div>" +
       '<div class="r-actions">' +
       '<button type="button" class="ghost" data-act="pause" data-id="' + job.id + '">' + (job.paused ? "Resume" : "Pause") + "</button>" +
       '<button type="button" class="ghost" data-act="run-now" data-id="' + job.id + '">Run now</button>' +
@@ -740,7 +808,9 @@
       '<div class="field" style="margin-top:12px"><div class="lbl">Deliver to</div><div class="checks">' +
       '<button type="button" class="check" data-act="deliver" data-id="chat"><span class="toggle' + (f.chat ? " on" : "") + '"><i></i></span> This bot\'s chat</button>' +
       '<button type="button" class="check" data-act="deliver" data-id="ntfy"><span class="toggle' + (f.ntfy ? " on" : "") + '"><i></i></span> Alert</button></div>' +
-      '<p class="need-k">An alert is a Hermes Bots notification. On the phone it comes from the app\'s own background connection, or from ntfy if you chose it. On Windows it is a tray notification.</p></div>' +
+      '<p class="need-k">An alert is a Botsman notification. On the phone it comes from the app\'s own background connection. On Windows it is a tray notification.</p></div>' +
+      '<div class="field"><div class="lbl">Memory</div><button type="button" class="check" data-act="form-memory"><span class="toggle' + (f.memory ? " on" : "") + '"><i></i></span> Load the memory files</button>' +
+      '<p class="need-k">Off means this routine runs with its instructions only. On loads USER_PROFILE.md, USER_MEMORY.md, BOT_PROFILE.md, and BOT_MEMORY.md.</p></div>' +
       (f.error ? '<div class="err">' + esc(f.error) + "</div>" : "") +
       '<div class="choices"><button type="button" class="primary" data-act="save-routine">Save</button>' +
       '<button type="button" class="ghost" data-act="nav" data-to="' + (backTarget() || "#/routines") + '">Cancel</button></div>' +
@@ -759,14 +829,20 @@
     return column(job.name, schedLabel(job), '<div class="pane"><div class="page"><p class="lede">Every run posts into this bot\'s chat. Open jumps to that message.</p>' + rows + "</div></div>");
   }
 
+  function usageRows() {
+    const live = HB.usageByBot.filter(function (p) { return botBy(p[0]); }).map(function (p) { return [botName(p[0]), p[1]]; });
+    const gone = HB.usageByBot.filter(function (p) { return !botBy(p[0]); }).reduce(function (sum, p) { return sum + p[1]; }, 0);
+    return gone ? live.concat([["Deleted bots", gone]]) : live;
+  }
   function usageView() {
     const max = Math.max.apply(null, HB.usageDays);
-    const maxBot = Math.max.apply(null, HB.usageByBot.map(function (x) { return x[1]; }));
+    const rows = usageRows();
+    const maxBot = Math.max.apply(null, rows.map(function (x) { return x[1]; }));
     const bars = HB.usageDays.map(function (v) {
       return '<i class="bar" style="height:' + Math.max(4, Math.round(v / max * 100)) + '%"></i>';
     }).join("");
-    const byBot = HB.usageByBot.map(function (pair) {
-      return '<div class="u-row"><div>' + esc(botName(pair[0])) + '<div class="meter"><i style="width:' + Math.round(pair[1] / maxBot * 100) + '%"></i></div></div><span>' + money(pair[1]) + "</span></div>";
+    const byBot = rows.map(function (pair) {
+      return '<div class="u-row"><div>' + esc(pair[0]) + '<div class="meter"><i style="width:' + Math.round(pair[1] / maxBot * 100) + '%"></i></div></div><span>' + money(pair[1]) + "</span></div>";
     }).join("");
     const body = '<div class="pane"><div class="page"><h2>October</h2><p class="lede">$18.40 across the last 14 days, ending 27 Oct.</p>' +
       '<div class="bars">' + bars + '</div><div class="bar-labels"><span>14 Oct</span><span>27 Oct</span></div>' +
@@ -782,17 +858,32 @@
       return '<button type="button" class="mark-btn' + (on ? " on" : "") + '" data-act="mark" data-bot="' + bot.id + '" data-id="' + id + '" aria-label="' + id + '">' +
         '<span class="av">' + svg(MARK[id], 22) + "</span></button>";
     }).join("");
+    const links = [
+      ["Memory", "#/memory/" + bot.id, "The four files this bot loads"],
+      ["Notes", "#/notes/" + bot.id, notesFor(bot.id).length + " notes"],
+      ["Bot settings", "#/bot-settings/" + bot.id, "Permissions, network, connections, skills"],
+      ["Routines", "#/routines/" + bot.id, "Scheduled runs"]
+    ].map(function (l) {
+      return '<button type="button" class="set-row wide" data-act="nav" data-to="' + l[1] + '"><span><b>' + esc(l[0]) + '</b><span class="sub block">' + esc(l[2]) + "</span></span><span>›</span></button>";
+    }).join("");
+    const remove = bot.pinned ? '<p class="need-k">The main bot cannot be deleted.</p>' :
+      (state.confirmDelete === "bot:" + bot.id
+        ? '<span class="confirm">Delete ' + esc(bot.name) + '? It leaves the apps, and its data stays on the server. The main bot can restore it.<button type="button" class="text-btn" data-act="delete-bot" data-id="' + bot.id + '">Delete</button><button type="button" class="text-btn" data-act="delete-no">Cancel</button></span>'
+        : '<button type="button" class="ghost" data-act="delete-ask" data-id="bot:' + bot.id + '">Delete bot</button>');
     const body = '<div class="pane"><div class="page"><div class="hero">' + avatar(bot.id, { lg: true }) +
       '<button type="button" class="primary" data-act="pick-avatar">Upload a photo</button>' +
       '<input id="avatar-in" type="file" accept="image/*" hidden></div>' +
       '<div class="lbl">Or choose</div><div class="marks">' + marks + "</div>" +
-      '<div class="static-row"><b>' + esc(bot.name) + "</b><span>" + esc(bot.about) + "</span></div>" +
+      '<div class="field"><label for="bot-name">Name</label><input id="bot-name" data-field="bot:name" value="' + esc(bot.name) + '"></div>' +
+      '<div class="field"><label for="bot-desc">Description</label><input id="bot-desc" data-field="bot:description" value="' + esc(bot.description) + '"></div>' +
       '<div class="static-row"><b>Model default</b><span>' + esc(bot.model) + " · " + esc(bot.effort) + "</span></div>" +
-      '<p class="need-k">Change the model from the chip on the message box. That can apply to this chat, or to the bot\'s default. The face updates everywhere this bot appears.</p></div></div>';
+      '<p class="need-k">Change the model from the chip on the message box. That can apply to this chat, or to the bot\'s default. The face updates everywhere this bot appears.</p>' +
+      links + '<div style="margin-top:12px">' + remove + "</div></div></div>";
     return column(bot.name, "Bot info", body);
   }
   function settingsView() {
     const theme = localStorage.getItem("hb-theme") || "system";
+    const providerCount = state.providers.length;
     const seg = ["system", "light", "dark"].map(function (k) {
       const label = k === "system" ? "System" : k === "light" ? "Light" : "Dark";
       return '<button type="button" class="' + (theme === k ? "on" : "") + '" data-act="theme" data-id="' + k + '">' + label + "</button>";
@@ -803,18 +894,19 @@
         (cur ? '<span class="tag">Connected</span>' : '<button type="button" class="ghost" data-act="use-server" data-id="' + s.id + '">Use this server</button>') + "</div>";
     }).join("");
     const add = state.addServer;
-    const body = '<div class="pane"><div class="page"><h2>Servers</h2><p class="lede">Tailscale only. Switching signs you in again. The username stays filled in.</p>' + rows +
+    const body = '<div class="pane"><div class="page"><h2>Servers</h2><p class="lede">Any HTTPS address. Switching signs you in again. The username stays filled in.</p>' + rows +
       '<div class="group-label">Add a server</div>' +
       '<div class="field"><label for="sv-name">Name</label><input id="sv-name" data-field="add:name" value="' + esc(add.name) + '" placeholder="studio"></div>' +
-      '<div class="field"><label for="sv-host">Address</label><input id="sv-host" data-field="add:host" value="' + esc(add.host) + '" placeholder="100.x.x.x" spellcheck="false"></div>' +
+      '<div class="field"><label for="sv-host">Address</label><input id="sv-host" data-field="add:host" value="' + esc(add.host) + '" placeholder="bots.example.com" spellcheck="false"></div>' +
       '<div class="field"><label for="sv-port">Port</label><input id="sv-port" data-field="add:port" value="' + esc(add.port) + '" inputmode="numeric"></div>' +
       (add.error ? '<div class="err">' + esc(add.error) + "</div>" : "") +
       '<button type="button" class="primary" data-act="add-server">Add server</button>' +
       '<div class="group-label">Mode</div><div class="seg" style="margin-bottom:12px">' + seg + "</div>" +
-      '<div class="set-row"><div><b>Notifications</b><div class="sub">Phone: this app\'s background connection, or ntfy. Windows: this app\'s tray.</div></div><button type="button" class="text-btn" data-act="nav" data-to="#/notifications">Open</button></div>' +
-      '<div class="set-row"><div><b>Hermes Bots ' + esc(version()) + '</b><div class="sub">' + (state.installed ? "Up to date" : "Update available · " + HB.nextVersion) + "</div></div>" +
+      '<div class="set-row"><div><b>Model providers</b><div class="sub">' + providerCount + ' connected</div></div><button type="button" class="text-btn" data-act="nav" data-to="#/providers">Open</button></div>' +
+      '<div class="set-row"><div><b>Notifications</b><div class="sub">Phone: this app\'s background connection. Windows: this app\'s tray.</div></div><button type="button" class="text-btn" data-act="nav" data-to="#/notifications">Open</button></div>' +
+      '<div class="set-row"><div><b>Botsman ' + esc(version()) + '</b><div class="sub">' + (state.installed ? "Up to date" : "Update available · " + HB.nextVersion) + "</div></div>" +
       (state.installed ? "" : '<button type="button" class="ghost" data-act="nav" data-to="#/update">View</button>') + "</div>" +
-      '<p class="need-k">API keys stay on the server. This app does not show them.</p></div></div>';
+      "</div></div>";
     return column("Settings", currentServer().name, body);
   }
   function notifView() {
@@ -823,33 +915,21 @@
       const on = !!state.notif[n.id];
       return '<button type="button" class="set-row" data-act="notif" data-id="' + n.id + '"><span>' + esc(n.label) + '</span><span class="toggle' + (on ? " on" : "") + '"><i></i></span></button>';
     }).join("");
-    const sample = '<button type="button" class="note-card" data-act="open-run" data-bot="junior" data-msg="j-brief"><b>Hermes Bots</b>Junior has a new routine result<span>' +
+    const sample = '<button type="button" class="note-card" data-act="open-run" data-bot="junior" data-msg="j-brief"><b>Botsman</b>Junior has a new routine result<span>' +
       (phone ? "Tap opens Junior's chat" : "Tray notification · opens Junior's chat") + "</span></button>";
     const body = '<div class="pane"><div class="page">' + (phone ? phonePush() : desktopPush()) + sample + toggles + "</div></div>";
-    return column("Notifications", phone ? (state.pushMode === "ntfy" ? "ntfy" : "Background connection") : "Windows tray", body);
+    return column("Notifications", phone ? "Background connection" : "Windows tray", body);
   }
   function desktopPush() {
-    return "<h2>Tray</h2><p class=\"lede\">Hermes Bots stays in the tray, keeps its connection to the server, and posts its own notifications. A click opens the chat.</p>" +
+    return "<h2>Tray</h2><p class=\"lede\">Botsman stays in the tray, keeps its connection to the server, and posts its own notifications. A click opens the chat.</p>" +
       '<div class="set-row"><div><b>Status</b><div class="sub">Windows tray · connected to ' + esc(currentServer().name) + "</div></div></div>";
   }
   function phonePush() {
-    const ntfy = state.pushMode === "ntfy";
-    const seg = [["service", "Background connection"], ["ntfy", "ntfy"]].map(function (m) {
-      return '<button type="button" class="' + (state.pushMode === m[0] ? "on" : "") + '" data-act="push-mode" data-id="' + m[0] + '">' + m[1] + "</button>";
-    }).join("");
-    const head = '<h2>Alerts when the app is closed</h2><div class="seg" style="margin-bottom:12px">' + seg + "</div>";
-    if (!ntfy) {
-      return head + '<p class="lede">Hermes Bots keeps its own connection to ' + esc(currentServer().name) + " over Tailscale and posts notifications itself. Nothing else to install.</p>" +
-        '<div class="set-row"><div><b>Status</b><div class="sub">Connected to ' + esc(currentServer().name) + " · ongoing notification shown</div></div></div>" +
-        '<div class="set-row"><div><b>Battery</b><div class="sub">Unrestricted</div></div><span class="tag">Done</span></div>' +
-        '<div class="set-row"><div><b>Tailscale always-on VPN</b><div class="sub">Set it in Android settings, under VPN</div></div><button type="button" class="text-btn">Open</button></div>' +
-        '<div class="set-row"><div><b>Phone maker</b><div class="sub">Samsung can stop background apps. See its guide on dontkillmyapp.com</div></div><button type="button" class="text-btn">Guide</button></div>';
-    }
-    return head + '<p class="lede">Alerts go through an ntfy server and the ntfy app. They carry no message text, only the bot and what happened.</p>' +
-      '<div class="field"><label for="ntfy-url">Server</label><input id="ntfy-url" data-field="ntfy-url" value="' + esc(state.ntfyUrl) + '" spellcheck="false"></div>' +
-      '<div class="field"><label for="ntfy-topic">Topic</label><input id="ntfy-topic" data-field="ntfy-topic" value="' + esc(state.ntfyTopic) + '" spellcheck="false"></div>' +
-      '<div class="field"><label for="ntfy-token">Access token</label><input id="ntfy-token" data-field="ntfy-token" type="password" value="' + esc(state.ntfyToken) + '" placeholder="tk_…" spellcheck="false"></div>' +
-      '<p class="need-k">Reserve the topic on the server so only this token can read it.</p>';
+    return '<h2>Alerts when the app is closed</h2>' +
+      '<p class="lede">Botsman keeps its own connection to ' + esc(currentServer().name) + " and posts notifications itself. Android requires an ongoing notification while it runs. You can silence it in Android settings.</p>" +
+      '<div class="set-row"><div><b>Status</b><div class="sub">Connected to ' + esc(currentServer().name) + " · ongoing notification shown</div></div></div>" +
+      '<div class="set-row"><div><b>Battery</b><div class="sub">Unrestricted</div></div><span class="tag">Done</span></div>' +
+      '<div class="set-row"><div><b>Phone maker</b><div class="sub">Samsung can stop background apps. See its guide on dontkillmyapp.com</div></div><button type="button" class="text-btn">Guide</button></div>';
   }
   function loginView() {
     const server = state.pendingServer
@@ -860,7 +940,7 @@
     const lede = switching
       ? "Switching servers needs your password. The username stays filled in."
       : "Your sign-in on this device expired.";
-    return '<div class="login"><div class="login-card"><div class="wordmark" style="margin-bottom:18px">Hermes Bots</div>' +
+    return '<div class="login"><div class="login-card"><div class="wordmark" style="margin-bottom:18px">Botsman</div>' +
       "<h1>" + esc(title) + "</h1><p class=\"lede\">" + esc(lede) + "</p>" +
       '<div class="server-line">' + esc(server.name) + " · " + esc(server.host) + ":" + server.port + "</div>" +
       '<div class="field"><label for="username">Username</label><input id="username" value="' + esc(state.loginUser) + '" autocomplete="username"></div>' +
@@ -878,6 +958,370 @@
     return '<div class="modal-back"><div class="modal" role="dialog" aria-labelledby="upd-title">' + inner + "</div></div>";
   }
 
+  function fileText(botId, file) {
+    if (file === "USER_PROFILE" || file === "USER_MEMORY") return files.user[file];
+    if (!files.bots[botId]) files.bots[botId] = { BOT_PROFILE: (botBy(botId) || {}).about || "", BOT_MEMORY: "" };
+    return files.bots[botId][file];
+  }
+  function setFileText(botId, file, text) {
+    if (file === "USER_PROFILE" || file === "USER_MEMORY") files.user[file] = text;
+    else {
+      fileText(botId, file);
+      files.bots[botId][file] = text;
+    }
+  }
+  function proposalCard(p) {
+    return '<div class="card alert"><div class="kicker">Needs you · Memory edit</div><h3>' + esc(botName(p.bot)) + " wants to change " + esc(p.file) + ".md</h3>" +
+      '<div class="diff"><div class="diff-line add">+ ' + esc(p.add) + "</div></div>" +
+      '<p class="need-k">From: ' + esc(p.source) + ". " + esc(botName(p.bot)) + " keeps working while this waits.</p>" +
+      '<div class="choices"><button type="button" class="choice primary" data-act="proposal-yes" data-id="' + p.id + '">Confirm</button>' +
+      '<button type="button" class="choice" data-act="proposal-no" data-id="' + p.id + '">Reject</button></div></div>';
+  }
+  function settleProposal(id, accept) {
+    const p = state.proposals.filter(function (x) { return x.id === id; })[0];
+    if (!p) return;
+    if (accept) {
+      const text = fileText(p.bot, p.file);
+      setFileText(p.bot, p.file, (text ? text + "\n" : "") + "- " + p.add);
+    }
+    state.proposals = state.proposals.filter(function (x) { return x.id !== id; });
+    render({ preserve: true });
+  }
+  function memoryView(botId) {
+    const bot = botBy(botId) || bots[0];
+    const file = state.memFile[bot.id] || "BOT_PROFILE";
+    const text = fileText(bot.id, file);
+    const pending = state.proposals.filter(function (p) { return p.bot === bot.id; }).map(proposalCard).join("");
+    const tabs = ["USER_PROFILE", "USER_MEMORY", "BOT_PROFILE", "BOT_MEMORY"].map(function (k) {
+      return '<button type="button" class="' + (k === file ? "on" : "") + '" data-act="mem-file" data-bot="' + bot.id + '" data-id="' + k + '">' + k + ".md</button>";
+    }).join("");
+    const level = file === "USER_PROFILE" || file === "USER_MEMORY" ? "Shared by every bot" : "Only " + bot.name;
+    const body = '<div class="pane"><div class="page">' + pending +
+      '<div class="seg" style="margin-bottom:12px">' + tabs + "</div>" +
+      '<p class="lede">' + esc(FILE_INFO[file]) + "</p>" +
+      '<div class="field"><label for="mem-text">' + esc(file) + ".md · " + esc(level) + '</label><textarea id="mem-text" class="file-text" rows="11" data-field="mem:' + bot.id + ":" + file + '">' + esc(text) + "</textarea>" +
+      '<div class="count" id="mem-count">' + text.length.toLocaleString("en-US") + " / " + LIMITS[file].toLocaleString("en-US") + " characters</div></div>" +
+      (state.memError ? '<div class="err">' + esc(state.memError) + "</div>" : "") +
+      (state.memSaved ? '<p class="need-k">Saved. Each bot gets the change with its next message.</p>' : "") +
+      '<div class="choices"><button type="button" class="primary" data-act="mem-save" data-bot="' + bot.id + '" data-id="' + file + '">Save</button></div>' +
+      "</div></div>";
+    return column("Memory", bot.name, body);
+  }
+  function notesFor(botId) {
+    if (!notes[botId]) notes[botId] = [];
+    return notes[botId];
+  }
+  function noteRows(botId) {
+    const q = state.noteQuery.trim().toLowerCase();
+    const list = notesFor(botId).filter(function (n) {
+      return !q || n.name.toLowerCase().indexOf(q) >= 0 || n.text.toLowerCase().indexOf(q) >= 0;
+    });
+    if (!list.length) return '<div class="empty">' + (q ? "No note matches that." : "No notes yet.") + "</div>";
+    return list.map(function (n) {
+      return '<button type="button" class="set-row wide" data-act="nav" data-to="#/notes/' + botId + "/" + n.id + '"><span><b>' + esc(n.name) + '</b><span class="sub block">' + esc(snippet(n.text) || "Empty") + '</span></span><span class="tag">' + esc(n.updated) + "</span></button>";
+    }).join("");
+  }
+  function notesView(botId) {
+    const bot = botBy(botId) || bots[0];
+    const body = '<div class="pane"><div class="page">' +
+      '<div style="display:flex;justify-content:space-between;gap:8px;align-items:center"><h2>Notes</h2>' +
+      '<button type="button" class="primary" data-act="note-new" data-bot="' + bot.id + '">New note</button></div>' +
+      '<p class="lede">Longer records this bot keeps, such as the projects it tracks. A bot opens a note only when it needs it, and its edits here do not ask you.</p>' +
+      '<div class="field"><label for="note-q">Search</label><input id="note-q" data-field="note-q:' + bot.id + '" value="' + esc(state.noteQuery) + '" placeholder="Search by keyword"></div>' +
+      '<div id="note-rows">' + noteRows(bot.id) + "</div></div></div>";
+    return column("Notes", bot.name, body);
+  }
+  function noteView(botId, noteId) {
+    const bot = botBy(botId) || bots[0];
+    const note = notesFor(bot.id).filter(function (n) { return n.id === noteId; })[0];
+    if (!note) return column("Note", bot.name, '<div class="pane"><div class="empty">That note is gone.</div></div>');
+    const remove = state.confirmDelete === "note:" + note.id
+      ? '<span class="confirm">Delete this note?<button type="button" class="text-btn" data-act="delete-note" data-bot="' + bot.id + '" data-id="' + note.id + '">Delete</button><button type="button" class="text-btn" data-act="delete-no">Cancel</button></span>'
+      : '<button type="button" class="ghost" data-act="delete-ask" data-id="note:' + note.id + '">Delete</button>';
+    const body = '<div class="pane"><div class="page">' +
+      '<div class="field"><label for="note-name">File name</label><input id="note-name" data-field="note:' + bot.id + ":" + note.id + ':name" value="' + esc(note.name) + '" spellcheck="false"></div>' +
+      '<div class="field"><label for="note-text">Text</label><textarea id="note-text" class="file-text" rows="13" data-field="note:' + bot.id + ":" + note.id + ':text">' + esc(note.text) + "</textarea></div>" +
+      (state.noteSaved ? '<p class="need-k">Saved.</p>' : "") +
+      '<div class="choices"><button type="button" class="primary" data-act="note-save">Save</button>' + remove + "</div></div></div>";
+    return column(note.name, bot.name + " · Notes", body);
+  }
+  function cfgFor(botId) {
+    if (!state.botCfg[botId]) {
+      const seed = HB.botCfg[botId] || {};
+      state.botCfg[botId] = {
+        mode: seed.mode || "manual", wait: seed.wait || "1 hour", network: seed.network !== false, hostShell: false,
+        mcp: Object.assign({}, seed.mcp), skills: Object.assign({}, seed.skills)
+      };
+    }
+    return state.botCfg[botId];
+  }
+  function toggleRow(act, botId, id, on, label, sub) {
+    return '<button type="button" class="set-row wide" data-act="' + act + '" data-bot="' + botId + '" data-id="' + esc(id) + '"><span><b>' + esc(label) + '</b><span class="sub block">' + esc(sub) + '</span></span><span class="toggle' + (on ? " on" : "") + '"><i></i></span></button>';
+  }
+  function modeNote(mode) {
+    if (mode === "smart") return "A classifier decides anything that leaves this bot's folder. If it is unsure or fails, it asks you.";
+    if (mode === "off") return "Actions outside this bot's folder run without asking.";
+    return "Anything that leaves this bot's folder asks you.";
+  }
+  function hostShellRow(act, botId, on) {
+    return toggleRow(act, botId, "host-shell", on, "Server shell", "Lets the main bot run commands on your server, outside its sandbox, with your full access. It follows the approval mode. Off by default.");
+  }
+  function mcpManager() {
+    const a = state.addMcp;
+    return '<div class="group-label">Add a connection</div><p class="need-k">Only the main bot manages connections. Each bot then turns them on or off for itself.</p>' +
+      '<div class="field"><label for="mcp-name">Name</label><input id="mcp-name" data-field="mcp:name" value="' + esc(a.name) + '" placeholder="calendar"></div>' +
+      '<div class="field"><label for="mcp-url">Address</label><input id="mcp-url" data-field="mcp:url" value="' + esc(a.url) + '" placeholder="https://mcp.example.com" spellcheck="false"></div>' +
+      (a.error ? '<div class="err">' + esc(a.error) + "</div>" : "") +
+      '<button type="button" class="primary" data-act="mcp-add">Add connection</button>';
+  }
+  function botSettingsView(botId) {
+    const bot = botBy(botId) || bots[0];
+    const cfg = cfgFor(bot.id);
+    const modes = [["manual", "Manual"], ["smart", "Smart"], ["off", "Off"]].map(function (m) {
+      return '<button type="button" class="' + (cfg.mode === m[0] ? "on" : "") + '" data-act="cfg-mode" data-bot="' + bot.id + '" data-id="' + m[0] + '">' + m[1] + "</button>";
+    }).join("");
+    const waits = ["15 minutes", "1 hour", "8 hours", "Until answered"].map(function (w) {
+      return "<option" + (cfg.wait === w ? " selected" : "") + ">" + esc(w) + "</option>";
+    }).join("");
+    const mcp = HB.mcp.map(function (c) { return toggleRow("cfg-mcp", bot.id, c.id, !!cfg.mcp[c.id], c.name, c.detail); }).join("");
+    const own = (HB.botSkills[bot.id] || []).map(function (s) {
+      return '<div class="static-row"><b>' + esc(s.name) + "</b><span>Always on. Created by " + esc(bot.name) + ".</span></div>";
+    }).join("");
+    const skillRows = function (source) {
+      return HB.skills.filter(function (s) { return s.source === source; }).map(function (s) {
+        return toggleRow("cfg-skill", bot.id, s.id, !!cfg.skills[s.id], s.name, s.detail);
+      }).join("");
+    };
+    const body = '<div class="pane"><div class="page"><h2>Permissions</h2>' +
+      '<div class="seg" style="margin-bottom:8px">' + modes + "</div>" +
+      '<p class="lede">' + esc(modeNote(cfg.mode)) + " Memory edits always ask, in every mode.</p>" +
+      '<div class="field"><label for="cfg-wait">Approval wait</label><select id="cfg-wait" data-field="cfg-wait:' + bot.id + '">' + waits + '</select><div class="need-k" style="margin-top:6px">If you do not answer in time, the action is refused and the bot is told.</div></div>' +
+      toggleRow("cfg-network", bot.id, "network", cfg.network, "Network", "Commands run by this bot can reach the internet") +
+      (bot.pinned ? hostShellRow("cfg-host-shell", bot.id, cfg.hostShell) : "") +
+      '<div class="group-label">Connections</div>' + mcp + (bot.pinned ? mcpManager() : "") +
+      (own ? '<div class="group-label">This bot\'s skills</div>' + own : "") +
+      '<div class="group-label">Botsman skills</div>' + skillRows("botsman") +
+      '<div class="group-label">Server skills</div>' + skillRows("server") +
+      '<p class="need-k" style="margin-top:8px">Botsman and server skills start off. Turn on what this bot needs. A bot can create its own skills and routines, and you get an alert when it does. Only the main bot adds to the Botsman skills.</p>' +
+      "</div></div>";
+    return column("Bot settings", bot.name, body);
+  }
+  function chatById(id) {
+    return botChats.filter(function (c) { return c.id === id && botBy(c.a) && botBy(c.b); })[0] || null;
+  }
+  function convoView(id) {
+    const chat = chatById(id);
+    if (!chat) return column("Bot chat", "", '<div class="pane"><div class="empty">That conversation is gone.</div></div>');
+    const paused = chat.paused
+      ? '<div class="banner" role="status"><span><strong>Paused</strong><span class="sub">10 messages without you</span></span><button type="button" class="text-btn" data-act="convo-resume" data-id="' + chat.id + '">Resume</button></div>'
+      : "";
+    const foot = state.stepIn[chat.id]
+      ? '<div class="dock"><div class="dock-inner"><div class="steer-row"><input id="step-text" data-field="step-text" placeholder="Message both bots" value="' + esc(state.stepText) + '"><button type="button" class="ghost" data-act="step-send" data-id="' + chat.id + '">Send</button></div></div></div>'
+      : '<div class="dock"><div class="dock-inner"><button type="button" class="ghost" data-act="step-in" data-id="' + chat.id + '">Step in</button></div></div>';
+    return '<div class="column"><div class="topbar">' + backBtn() + avatar(chat.a, { sm: true }) + avatar(chat.b, { sm: true }) +
+      '<div class="topbar-text"><strong>' + esc(botName(chat.a)) + " ↔ " + esc(botName(chat.b)) + "</strong><span>" + esc(chat.topic) + "</span></div></div>" + paused +
+      '<div class="pane"><div class="thread">' + chat.messages.map(function (m) { return renderMessage(m, chat.messages); }).join("") + "</div></div>" + foot + "</div>";
+  }
+  function authMethod(c) {
+    const methods = HB.providerAuth[c.provider];
+    return methods.indexOf(c.method) >= 0 ? c.method : methods[0];
+  }
+  function authError(c) {
+    const method = authMethod(c);
+    if (method === "key" && !c.key.trim()) return "Paste a key.";
+    if (method === "signin" && !c.callback.trim()) return "Paste the address or code from your browser.";
+    return "";
+  }
+  function usageLabelField(c, head) {
+    const options = ["Default", "Botsman"].map(function (label) {
+      return '<button type="button" class="' + (label === c.usageLabel ? "on" : "") + '" data-act="usage-label" data-head="' + head + '" data-id="' + label + '">' + label + "</button>";
+    }).join("");
+    return '<div class="field"><label>Usage label</label><div class="seg">' + options + "</div>" +
+      '<p class="need-k">The label Anthropic sees on requests. Default is the Agent SDK\'s own. Anthropic doesn\'t document changing it, so Botsman may affect your account. Applies the next time Claude Code starts.</p></div>';
+  }
+  function authBody(c, head) {
+    const method = authMethod(c);
+    if (method === "claude") {
+      return '<p class="need-k">If Claude Code is already signed in on your server, Check login finds it. Otherwise, run this in a terminal there. The login stays with Claude Code, and Botsman never sees it.</p>' +
+        '<pre class="cmd">claude auth login</pre>' +
+        '<div class="field"><label for="' + head + '-program">Claude Code program (optional)</label><input id="' + head + '-program" data-field="' + head + ':claudePath" value="' + esc(c.claudePath) + '" placeholder="Included with Botsman" spellcheck="false"></div>' +
+        '<div class="field"><label for="' + head + '-folder">Login folder (optional)</label><input id="' + head + '-folder" data-field="' + head + ':claudeDir" value="' + esc(c.claudeDir) + '" placeholder="~/.claude" spellcheck="false"></div>' +
+        usageLabelField(c, head);
+    }
+    if (method === "key") {
+      return '<div class="field"><label for="' + head + '-key">API key</label><input id="' + head + '-key" type="password" data-field="' + head + ':key" value="' + esc(c.key) + '" autocomplete="off" spellcheck="false"></div>';
+    }
+    if (method === "signin") {
+      return '<p class="need-k">Sign in on the page that opens. Your browser then shows a code, or fails to load a local address, which is expected. Copy it and paste it here.</p>' +
+        '<button type="button" class="ghost" data-act="auth-open">Open sign-in page</button>' +
+        '<div class="field" style="margin-top:10px"><label for="' + head + '-callback">Address or code from your browser</label><input id="' + head + '-callback" data-field="' + head + ':callback" value="' + esc(c.callback) + '" placeholder="http://localhost:1455/auth/callback?code=…" spellcheck="false"></div>';
+    }
+    return '<p class="need-k">Open the GitHub page and enter this code, then finish here.</p>' +
+      '<div class="static-row"><b>Code</b><span>4F2A-91BC</span></div>' +
+      '<button type="button" class="ghost" data-act="auth-open">Open github.com/login/device</button>';
+  }
+  function authFields(c, head) {
+    const methods = HB.providerAuth[c.provider];
+    const method = authMethod(c);
+    const seg = methods.length < 2 ? "" : '<div class="seg" style="margin-bottom:10px">' + methods.map(function (m) {
+      return '<button type="button" class="' + (m === method ? "on" : "") + '" data-act="auth-method" data-head="' + head + '" data-id="' + m + '">' + (HB.authLabels[m] || "Sign in") + "</button>";
+    }).join("") + "</div>";
+    const note = method === "claude" && HB.providerNotes[c.provider] ? '<p class="need-k">' + esc(HB.providerNotes[c.provider]) + "</p>" : "";
+    return seg + authBody(c, head) + note;
+  }
+  function providerOpen() { return state.addKey.open || route.q.get("connect"); }
+  function closeConnect() {
+    Object.assign(state.addKey, { open: null, key: "", callback: "", error: "" });
+    if (route.q.get("connect")) location.hash = "#/providers"; else render({ preserve: true });
+  }
+  function providerStatus(name) {
+    const p = state.providers.filter(function (x) { return x.name === name; })[0];
+    if (p) return (HB.authStatus[p.auth] || "Signed in · ") + p.saved;
+    const m = HB.providerAuth[name];
+    return "Not connected · " + (m.length > 1 ? "API key or sign-in" : m[0] === "key" ? "API key" : "Sign-in");
+  }
+  function providerForm(name) {
+    const a = state.addKey;
+    a.provider = name;
+    const label = HB.authActions[authMethod(a)] || "Finish sign-in";
+    return '<div class="card" style="margin:8px 0 12px">' + authFields(a, "key") +
+      (a.error ? '<div class="err">' + esc(a.error) + "</div>" : "") +
+      '<div class="choices" style="margin-top:10px"><button type="button" class="primary" data-act="provider-add">' + label + '</button><button type="button" class="ghost" data-act="provider-cancel">Cancel</button></div></div>';
+  }
+  function providerActions(name) {
+    const connected = state.providers.some(function (p) { return p.name === name; });
+    if (state.confirmDelete === "provider:" + name) {
+      return '<span class="confirm">Remove?<button type="button" class="text-btn" data-act="provider-remove" data-id="' + esc(name) + '">Remove</button><button type="button" class="text-btn" data-act="delete-no">Cancel</button></span>';
+    }
+    const open = '<button type="button" class="ghost" data-act="provider-open" data-id="' + esc(name) + '">' + (connected ? "Replace" : "Connect") + "</button>";
+    return connected ? '<span class="choices">' + open + '<button type="button" class="ghost" data-act="delete-ask" data-id="provider:' + esc(name) + '">Remove</button></span>' : open;
+  }
+  function providersView() {
+    const open = providerOpen();
+    const rows = HB.providerNames.map(function (name) {
+      return '<div class="set-row"><div><b>' + esc(name) + '</b><div class="sub">' + providerStatus(name) + "</div></div>" + providerActions(name) + "</div>" + (open === name ? providerForm(name) : "");
+    }).join("");
+    const body = '<div class="pane"><div class="page"><h2>Model providers</h2>' +
+      '<p class="lede">Connect a provider with an API key, or sign in where that is available. Keys and sign-ins are stored only on the server, encrypted. Nobody can view them after saving, and bots cannot read them.</p>' + rows + "</div></div>";
+    return column("Model providers", currentServer().name, body);
+  }
+  function newBotView() {
+    const f = state.newBot;
+    const options = HB.models.map(function (m) { return "<option" + (m === f.model ? " selected" : "") + ">" + esc(m) + "</option>"; }).join("");
+    const body = '<div class="pane"><div class="page"><h2>New bot</h2>' +
+      '<p class="lede">The bot gets its own folder, its own files, and its own chat. It starts with Manual permissions.</p>' +
+      '<div class="field"><label for="nb-name">Name</label><input id="nb-name" data-field="new:name" value="' + esc(f.name) + '"></div>' +
+      '<div class="field"><label for="nb-desc">Description</label><input id="nb-desc" data-field="new:description" value="' + esc(f.description) + '" placeholder="Shown in the bot list"></div>' +
+      '<div class="field"><label for="nb-purpose">Purpose</label><textarea id="nb-purpose" rows="6" data-field="new:purpose" placeholder="What this bot is for. Saved as BOT_PROFILE.md.">' + esc(f.purpose) + "</textarea></div>" +
+      '<div class="field"><label for="nb-model">Default model</label><select id="nb-model" data-field="new:model">' + options + "</select></div>" +
+      '<div class="field"><label for="nb-folder">Folder on the server</label><input id="nb-folder" data-field="new:folder" value="' + esc(f.folder) + '" placeholder="~/.botsman/workspaces/&lt;id&gt;" spellcheck="false">' +
+      '<p class="need-k">Leave it empty to use this default. The bot can read and write everything in this folder.<br>Free space: ' + HB.serverDisks.map(function (d) { return esc(d.path) + " " + esc(d.free); }).join(" · ") + "</p></div>" +
+      (f.error ? '<div class="err">' + esc(f.error) + "</div>" : "") +
+      '<button type="button" class="primary" data-act="bot-create">Create bot</button></div></div>';
+    return column("New bot", currentServer().name, body);
+  }
+  function folderRefused(path) {
+    if (!path) return false;
+    const clean = path.replace(/\/+$/, "").replace(/^\/home\/[^/]+/, "~");
+    if (clean === "" || clean === "~") return true;
+    const workspace = clean.match(/^~\/\.botsman\/workspaces\/([^/]+)$/);
+    if (workspace) return !!botBy(workspace[1]);
+    return /^~\/(\.ssh|\.claude|\.agents|\.botsman)(\/|$)/.test(clean);
+  }
+  function createBot() {
+    const f = state.newBot;
+    if (!f.name.trim()) { f.error = "Name the bot."; render({ preserve: true }); return; }
+    if (folderRefused(f.folder.trim())) { f.error = "Choose another folder. This one would expose your home folder, sensitive files, Botsman's data, or another bot."; render({ preserve: true }); return; }
+    const id = uid();
+    bots.push({
+      id: id, name: f.name.trim(), description: f.description.trim() || "New bot", about: f.purpose,
+      model: f.model, effort: "Medium", mark: "diamond", pinned: false, activity: 2000, time: "Now",
+      preview: "", unread: 0, working: false, needs: null, queue: []
+    });
+    files.bots[id] = { BOT_PROFILE: f.purpose, BOT_MEMORY: "" };
+    state.newBot = { name: "", description: "", purpose: "", model: HB.models[1], folder: "", error: "" };
+    location.hash = "#/chat/" + id;
+  }
+  function setupFields(s) {
+    if (s.step === 0) {
+      return "<h1>Connect to your server</h1><p class=\"lede\">Enter the address of your Botsman server. This first sign-in sets the owner password.</p>" +
+        '<div class="field"><label for="su-url">Server address</label><input id="su-url" data-field="setup:url" value="' + esc(s.url) + '" placeholder="https://bots.example.com" spellcheck="false"></div>' +
+        '<div class="field"><label for="su-pass">Owner password</label><input id="su-pass" type="password" data-field="setup:password" value="' + esc(s.password) + '" autocomplete="new-password"></div>';
+    }
+    if (s.step === 1) {
+      const options = HB.providerNames.map(function (n) { return "<option" + (n === s.provider ? " selected" : "") + ">" + esc(n) + "</option>"; }).join("");
+      return "<h1>Add a model provider</h1><p class=\"lede\">Bots need one provider to run. Its key or sign-in is stored only on the server, and it cannot be viewed after saving.</p>" +
+        '<div class="field"><label for="su-provider">Provider</label><select id="su-provider" data-field="setup:provider">' + options + "</select></div>" + authFields(s, "setup");
+    }
+    if (s.step === 2) {
+      return "<h1>Name your main bot</h1><p class=\"lede\">The main bot can change your other bots and your user files, and each change asks you first. It cannot be deleted.</p>" +
+        '<div class="field"><label for="su-main">Name</label><input id="su-main" data-field="setup:main" value="' + esc(s.main) + '"></div>' +
+        hostShellRow("setup-host-shell", "", s.hostShell);
+    }
+    return device() === "phone"
+      ? "<h1>Alerts when the app is closed</h1><p class=\"lede\">Botsman keeps its own connection to your server, so nothing else needs installing. Android requires an ongoing notification while it runs. You can silence it in Android settings.</p>"
+      : "<h1>Alerts in the tray</h1><p class=\"lede\">Botsman stays in the tray and keeps its connection to your server. Closing the window does not stop alerts.</p>";
+  }
+  function setupNext() {
+    const s = state.setup;
+    let error = "";
+    if (s.step === 0 && (!s.url.trim() || !s.password)) error = "Enter the address and a password.";
+    if (s.step === 1) error = authError(s);
+    if (s.step === 2 && !s.main.trim()) error = "Name the main bot.";
+    s.error = error;
+    if (error) { render({ preserve: true }); return; }
+    if (s.step === 3) {
+      cfgFor(bots.filter(function (b) { return b.pinned; })[0].id).hostShell = s.hostShell;
+      location.hash = homeHash();
+      return;
+    }
+    s.step += 1;
+    render({ preserve: true });
+  }
+  function setupView() {
+    const s = state.setup;
+    const back = s.step ? '<button type="button" class="ghost" data-act="setup-back">Back</button>' : "";
+    const next = s.step === 3 ? (device() === "phone" ? "Allow notifications and finish" : "Finish") : "Continue";
+    return '<div class="login"><div class="login-card"><div class="wordmark" style="margin-bottom:18px">Botsman</div>' +
+      '<div class="need-k" style="margin-bottom:8px">Step ' + (s.step + 1) + " of 4</div>" + setupFields(s) +
+      (s.error ? '<div class="err">' + esc(s.error) + "</div>" : "") +
+      '<div class="choices">' + back + '<button type="button" class="primary" data-act="setup-next">' + esc(next) + "</button></div></div></div>";
+  }
+  function setPart(target, key, value) {
+    target[key] = value;
+  }
+  function noteField(rest, value) {
+    const bits = rest.split(":");
+    const note = notesFor(bits[0]).filter(function (n) { return n.id === bits[1]; })[0];
+    if (note) note[bits[2]] = value;
+  }
+  function memField(rest, value) {
+    const bits = rest.split(":");
+    setFileText(bits[0], bits[1], value);
+    const count = document.getElementById("mem-count");
+    if (count) count.textContent = value.length.toLocaleString("en-US") + " / " + LIMITS[bits[1]].toLocaleString("en-US") + " characters";
+  }
+  function noteQuery(botId, value) {
+    state.noteQuery = value;
+    const rows = document.getElementById("note-rows");
+    if (rows) rows.innerHTML = noteRows(botId);
+  }
+  function fieldInput(f, t) {
+    const cut = f.indexOf(":");
+    const head = cut < 0 ? f : f.slice(0, cut);
+    const rest = cut < 0 ? "" : f.slice(cut + 1);
+    if (head === "bot") { const b = activeSettingsBot(); if (b) setPart(b, rest, t.value); return; }
+    if (head === "mem") { memField(rest, t.value); return; }
+    if (head === "note") { noteField(rest, t.value); return; }
+    if (head === "note-q") { noteQuery(rest, t.value); return; }
+    if (head === "cfg-wait") { cfgFor(rest).wait = t.value; return; }
+    if (head === "step-text") { state.stepText = t.value; return; }
+    const targets = { mcp: state.addMcp, key: state.addKey, "new": state.newBot, setup: state.setup };
+    if (targets[head]) setPart(targets[head], rest, t.value);
+    if (rest === "provider") render({ preserve: true });
+  }
+  function activeSettingsBot() { return route.parts[0] === "bot" ? botBy(route.parts[1]) : null; }
+
   function mainView() {
     const a = route.parts[0], b = route.parts[1], c = route.parts[2];
     if (a === "routines" && b) return routinesView(b);
@@ -886,7 +1330,14 @@
     if (a === "routine" && b === "runs") return runsView(c);
     if (a === "room") return roomColumn(b);
     if (a === "usage") return usageView();
+    if (a === "bot" && b === "new") return newBotView();
     if (a === "bot") return botView(b || "junior");
+    if (a === "memory") return memoryView(b || "junior");
+    if (a === "notes" && c) return noteView(b, c);
+    if (a === "notes") return notesView(b || "junior");
+    if (a === "bot-settings") return botSettingsView(b || "junior");
+    if (a === "convo") return convoView(b);
+    if (a === "providers") return providersView();
     if (a === "settings") return settingsView();
     if (a === "notifications") return notifView();
     if (a === "chat") return chatColumn(b || "junior");
@@ -895,6 +1346,7 @@
   function inner() {
     const a = route.parts[0];
     if (a === "login") return loginView();
+    if (a === "setup") return setupView();
     if (a === "update") return device() === "phone" ? listPage() : '<div class="shell">' + sidebar() + chatColumn("junior") + "</div>";
     if (device() === "phone" && (!a || a === "bots")) return listPage();
     const main = mainView();
@@ -903,7 +1355,7 @@
   }
   function chrome() {
     if (device() === "desktop") {
-      return '<div class="titlebar"><span>Hermes Bots</span><span class="caption"><span>' + svg(IC.min, 14) + "</span><span>" + svg(IC.max, 12) + "</span><span>" + svg(IC.close, 14) + "</span></span></div>";
+      return '<div class="titlebar"><span>Botsman</span><span class="caption"><span>' + svg(IC.min, 14) + "</span><span>" + svg(IC.max, 12) + "</span><span>" + svg(IC.close, 14) + "</span></span></div>";
     }
     return '<div class="status"><span class="status-time">' + nowTime() + '</span><span class="status-icons">' + svg(IC.wifi, 16) + svg(IC.bat, 18) + "</span></div>";
   }
@@ -1105,29 +1557,19 @@
     const bot = activeBot();
     state.composer = "";
     state.slashIndex = 0;
-    if (name === "compress") {
+    if ((name === "memory" || name === "notes") && bot) {
+      location.hash = "#/" + name + "/" + bot.id;
+      return;
+    }
+    if (name === "compact") {
       list.push({ id: uid(), role: "system", text: "Earlier messages were summarized." });
     } else if (name === "clear") {
       list.push({ id: uid(), role: "system", text: "Context cleared. The transcript stays on screen." });
     } else if (name === "skills") {
       list.push({ id: uid(), role: "system", text: "Skills on for this bot: calendar, github, memory." });
-    } else if (name === "personality") {
-      const who = bot ? bot.name : (activeRoom() ? activeRoom().name : "This chat");
-      list.push({ id: uid(), role: "system", text: who + " speaks briefly, names the next step, and does not pad." });
     } else if (name === "usage") {
       const tokens = list.reduce(function (s, m) { return s + ((m.usage && m.usage.tokens) || 0); }, 0);
       list.push({ id: uid(), role: "system", text: "This chat · " + toks(tokens) + " · " + money(chatCost(list)) + "." });
-    } else if (name === "undo") {
-      let i = list.length - 1;
-      while (i >= 0 && list[i].role === "system") i -= 1;
-      if (i >= 0 && (list[i].role === "assistant" || list[i].role === "user")) {
-        const role = list[i].role;
-        list.splice(i, 1);
-        if (role === "assistant" && i - 1 >= 0 && list[i - 1].role === "user") list.splice(i - 1, 1);
-        list.push({ id: uid(), role: "system", text: "Undid the last turn." });
-      } else {
-        list.push({ id: uid(), role: "system", text: "Nothing to undo." });
-      }
     } else if (name === "help") {
       list.push({ id: uid(), role: "system", text: "Commands: " + (HB.commands || []).map(function (c) { return "/" + c.name; }).join(", ") + "." });
     }
@@ -1175,13 +1617,13 @@
       routines.unshift({
         id: uid(), bot: f.bot, name: f.name.trim(), prompt: f.prompt, freq: f.freq, time: f.time,
         onceDate: f.onceDate, days: (f.days || []).slice(), cron: cron, cronDirty: !!f.cronDirty,
-        chat: !!f.chat, ntfy: !!f.ntfy, paused: false, result: "Ran just now. Posted into this chat.", runs: []
+        chat: !!f.chat, ntfy: !!f.ntfy, memory: !!f.memory, paused: false, result: "Ran just now. Posted into this chat.", runs: []
       });
     } else {
       const j = routines.filter(function (r) { return r.id === f.id; })[0];
       if (j) Object.assign(j, {
         name: f.name.trim(), prompt: f.prompt, freq: f.freq, time: f.time, onceDate: f.onceDate,
-        days: (f.days || []).slice(), cron: cron, cronDirty: !!f.cronDirty, chat: !!f.chat, ntfy: !!f.ntfy
+        days: (f.days || []).slice(), cron: cron, cronDirty: !!f.cronDirty, chat: !!f.chat, ntfy: !!f.ntfy, memory: !!f.memory
       });
     }
     location.hash = "#/routines/" + f.bot;
@@ -1242,10 +1684,6 @@
         onRoute();
         render({ scroll: "message" });
       } else location.hash = next;
-    },
-    handoff: function (el) {
-      state.openHandoff[el.dataset.id] = !state.openHandoff[el.dataset.id];
-      render({ preserve: true });
     },
     summarize: function (el) { summarize(el.dataset.id); },
     slash: function (el) { runCommand(el.dataset.id); },
@@ -1363,7 +1801,7 @@
         freq: t.freq === "cron" ? "cron" : t.freq, time: t.time || "07:00",
         onceDate: "2026-10-27", days: (t.days || []).slice(),
         cron: t.cron || toCron(t), cronDirty: t.freq === "cron", cronOn: t.freq === "cron",
-        chat: !!t.chat, ntfy: !!t.ntfy, error: ""
+        chat: !!t.chat, ntfy: !!t.ntfy, memory: false, error: ""
       };
       render({ preserve: true });
     },
@@ -1393,6 +1831,7 @@
       if (el.dataset.id === "ntfy") state.form.ntfy = !state.form.ntfy;
       render({ preserve: true });
     },
+    "form-memory": function () { state.form.memory = !state.form.memory; render({ preserve: true }); },
     "save-routine": function () { saveForm(); },
     "delete-job": function (el) {
       const i = routines.findIndex(function (r) { return r.id === el.dataset.id; });
@@ -1416,12 +1855,11 @@
     "add-server": function () {
       const a = state.addServer;
       if (!a.name.trim() || !a.host.trim()) { a.error = "Name and address are both required."; render({ preserve: true }); return; }
-      const port = parseInt(a.port, 10) || 9119;
+      const port = parseInt(a.port, 10) || 443;
       state.servers.push({ id: uid(), name: a.name.trim(), host: a.host.trim(), port: port });
-      state.addServer = { name: "", host: "", port: "9119", error: "" };
+      state.addServer = { name: "", host: "", port: "443", error: "" };
       render({ preserve: true });
     },
-    "push-mode": function (el) { state.pushMode = el.dataset.id; render({ preserve: true }); },
     notif: function (el) { state.notif[el.dataset.id] = !state.notif[el.dataset.id]; render({ preserve: true }); },
     login: function () {
       if (!state.loginPass) { state.loginError = "Enter your password."; render({ preserve: true, focus: "password" }); return; }
@@ -1432,6 +1870,133 @@
       location.hash = homeHash();
     },
     install: function () { state.installed = true; render({ preserve: true }); },
+    "mem-file": function (el) {
+      state.memFile[el.dataset.bot] = el.dataset.id;
+      state.memSaved = null;
+      state.memError = "";
+      render({ preserve: true });
+    },
+    "mem-save": function (el) {
+      const file = el.dataset.id;
+      const over = fileText(el.dataset.bot, file).length > LIMITS[file];
+      state.memError = over ? file + ".md is over its limit. Trim it, then save." : "";
+      state.memSaved = over ? null : file;
+      render({ preserve: true });
+    },
+    "proposal-yes": function (el) { settleProposal(el.dataset.id, true); },
+    "proposal-no": function (el) { settleProposal(el.dataset.id, false); },
+    "note-new": function (el) {
+      const botId = el.dataset.bot;
+      const id = uid();
+      notesFor(botId).unshift({ id: id, name: "untitled.md", updated: "Just now", text: "" });
+      location.hash = "#/notes/" + botId + "/" + id;
+    },
+    "note-save": function () { state.noteSaved = true; render({ preserve: true }); },
+    "delete-note": function (el) {
+      const list = notesFor(el.dataset.bot);
+      const i = list.findIndex(function (n) { return n.id === el.dataset.id; });
+      if (i >= 0) list.splice(i, 1);
+      location.hash = "#/notes/" + el.dataset.bot;
+    },
+    "cfg-mode": function (el) { cfgFor(el.dataset.bot).mode = el.dataset.id; render({ preserve: true }); },
+    "cfg-network": function (el) {
+      const cfg = cfgFor(el.dataset.bot);
+      cfg.network = !cfg.network;
+      render({ preserve: true });
+    },
+    "cfg-host-shell": function (el) {
+      const cfg = cfgFor(el.dataset.bot);
+      cfg.hostShell = !cfg.hostShell;
+      render({ preserve: true });
+    },
+    "setup-host-shell": function () {
+      state.setup.hostShell = !state.setup.hostShell;
+      render({ preserve: true });
+    },
+    "cfg-mcp": function (el) {
+      const cfg = cfgFor(el.dataset.bot);
+      cfg.mcp[el.dataset.id] = !cfg.mcp[el.dataset.id];
+      render({ preserve: true });
+    },
+    "cfg-skill": function (el) {
+      const cfg = cfgFor(el.dataset.bot);
+      cfg.skills[el.dataset.id] = !cfg.skills[el.dataset.id];
+      render({ preserve: true });
+    },
+    "mcp-add": function () {
+      const a = state.addMcp;
+      if (!a.name.trim() || !a.url.trim()) { a.error = "Name and address are both required."; render({ preserve: true }); return; }
+      HB.mcp.push({ id: uid(), name: a.name.trim(), detail: a.url.trim() });
+      state.addMcp = { name: "", url: "", error: "" };
+      render({ preserve: true });
+    },
+    "convo-resume": function (el) {
+      const chat = chatById(el.dataset.id);
+      if (chat) chat.paused = false;
+      render({ preserve: true });
+    },
+    "step-in": function (el) {
+      state.stepIn[el.dataset.id] = true;
+      render({ scroll: "bottom", focus: "step-text" });
+    },
+    "step-send": function (el) {
+      const chat = chatById(el.dataset.id);
+      const text = state.stepText.trim();
+      if (!chat || !text) return;
+      state.minute += 1;
+      chat.messages.push({ id: uid(), role: "user", time: nowTime(), text: text });
+      state.stepText = "";
+      chat.paused = false;
+      render({ scroll: "bottom", focus: "step-text" });
+    },
+    "provider-add": function () {
+      const a = state.addKey;
+      a.provider = providerOpen();
+      a.error = authError(a);
+      if (a.error) { render({ preserve: true }); return; }
+      const auth = authMethod(a);
+      state.providers = state.providers.filter(function (p) { return p.name !== a.provider; });
+      state.providers.push({ name: a.provider, auth: auth, saved: "Just now" });
+      closeConnect();
+    },
+    "provider-open": function (el) {
+      Object.assign(state.addKey, { open: el.dataset.id, method: HB.providerAuth[el.dataset.id][0], key: "", callback: "", error: "" });
+      render({ preserve: true });
+    },
+    "provider-cancel": function () { closeConnect(); },
+    "usage-label": function (el) {
+      const target = el.dataset.head === "setup" ? state.setup : state.addKey;
+      target.usageLabel = el.dataset.id;
+      render({ preserve: true });
+    },
+    "auth-method": function (el) {
+      (el.dataset.head === "setup" ? state.setup : state.addKey).method = el.dataset.id;
+      render({ preserve: true });
+    },
+    "auth-open": function () { /* Opens the provider's page in the browser. */ },
+    "provider-remove": function (el) {
+      state.providers = state.providers.filter(function (p) { return p.name !== el.dataset.id; });
+      state.confirmDelete = null;
+      render({ preserve: true });
+    },
+    "bot-create": function () { createBot(); },
+    "delete-bot": function (el) {
+      const i = bots.findIndex(function (b) { return b.id === el.dataset.id; });
+      if (i >= 0) deletedBots.push(Object.assign(bots.splice(i, 1)[0], { deleted: true }));
+      location.hash = homeHash();
+    },
+    "restore-bot": function (el) {
+      const i = deletedBots.findIndex(function (b) { return b.id === el.dataset.id; });
+      if (i >= 0) bots.push(Object.assign(deletedBots.splice(i, 1)[0], { deleted: false }));
+      render({ preserve: true });
+    },
+    "restore-no": function () { state.restoreDeclined = true; render({ preserve: true }); },
+    "setup-next": function () { setupNext(); },
+    "setup-back": function () {
+      state.setup.step = Math.max(0, state.setup.step - 1);
+      state.setup.error = "";
+      render({ preserve: true });
+    },
     reconnect: function () {
       state.reconnect = "ok";
       render({ preserve: true });
@@ -1491,9 +2056,7 @@
         return;
       }
       if (f.indexOf("add:") === 0) { state.addServer[f.slice(4)] = t.value; return; }
-      if (f === "ntfy-url") state.ntfyUrl = t.value;
-      if (f === "ntfy-topic") state.ntfyTopic = t.value;
-      if (f === "ntfy-token") state.ntfyToken = t.value;
+      fieldInput(f, t);
     });
     app.addEventListener("change", function (e) {
       if (e.target.id === "file-in") { addFiles(e.target.files); e.target.value = ""; }

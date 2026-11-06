@@ -243,15 +243,6 @@ input:focus-visible, textarea:focus-visible, select:focus-visible { outline: non
   letter-spacing: 0;
   text-transform: none;
 }
-.handoff-body {
-  margin-top: 6px;
-  color: var(--fg-2);
-  font-size: 14px;
-  line-height: 1.5;
-  white-space: normal;
-  overflow-wrap: break-word;
-}
-
 .quote {
   border-left: 2px solid var(--line-2);
   padding-left: 8px;
@@ -546,3 +537,12 @@ html[data-device="phone"] .choice, html[data-device="phone"] .primary.block { wi
 html[data-device="desktop"] .list-page { display: none; }
 html[data-device="phone"] .bot-row { padding: 10px 8px; }
 html[data-device="phone"] .dock { padding-bottom: 18px; }
+
+.new-bot { margin: 6px 8px 0; }
+.set-row.wide { width: 100%; text-align: left; }
+.set-row .sub.block { display: block; }
+.file-text { font-family: var(--mono, monospace); font-size: 13px; line-height: 1.5; }
+.count { color: var(--fg-3); font-size: 12px; margin-top: 4px; font-variant-numeric: tabular-nums; }
+.card .diff { margin: 0 0 8px; }
+
+.card .diff-line { white-space: pre-wrap; }
