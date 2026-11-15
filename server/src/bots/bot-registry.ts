@@ -43,6 +43,12 @@ export class BotRegistry {
   }
 
   // Folders of every bot other than `exceptId`, deleted ones included, since their files stay on disk.
+  // Every bot's folder, deleted bots included, since a deleted bot's folder stays in backups.
+  allFolders(): { botId: string; folder: string }[] {
+    const rows = this.#db.prepare("SELECT id, folder FROM bots ORDER BY created_at").all() as Row[];
+    return rows.map((row) => ({ botId: String(row.id), folder: String(row.folder) }));
+  }
+
   folders(exceptId: string): string[] {
     const rows = this.#db.prepare("SELECT folder FROM bots WHERE id != ?").all(exceptId) as Row[];
     return rows.map((row) => String(row.folder));

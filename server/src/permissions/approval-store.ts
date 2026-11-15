@@ -84,12 +84,14 @@ export class ApprovalStore {
     return new Map(rows.map((row) => [String(row.call_id), String(row.id)]));
   }
 
+  // The newest 500 approvals of the given bots, filtered before the limit so no pending approval is left out.
   list(filter: { status?: string; botIds: readonly string[] }): Approval[] {
-    const rows = this.#db.prepare("SELECT * FROM approvals ORDER BY created_at DESC LIMIT 500").all() as Row[];
-    return rows
-      .map(toApproval)
-      .filter((approval) => filter.botIds.includes(approval.botId))
-      .filter((approval) => filter.status === undefined || approval.status === filter.status);
+    if (filter.botIds.length === 0) return [];
+    const bots = filter.botIds.map(() => "?").join(", ");
+    const status = filter.status === undefined ? "" : "AND status = ?";
+    const parameters = filter.status === undefined ? filter.botIds : [...filter.botIds, filter.status];
+    const rows = this.#db.prepare(`SELECT * FROM approvals WHERE bot_id IN (${bots}) ${status} ORDER BY created_at DESC LIMIT 500`).all(...parameters) as Row[];
+    return rows.map(toApproval);
   }
 
   grant(botId: string, conversation: string, toolName: string): void {

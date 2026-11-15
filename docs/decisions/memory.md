@@ -79,7 +79,7 @@ In that turn the bot writes to its notes, and edits `BOT_MEMORY.md`. The main bo
 | Save turn | After a reply whose context reaches the model's context window minus 32,768 tokens |
 | Pi's own compaction | When the next request would pass the context window minus 16,384 tokens. Pi's background compaction is off, so this is the only automatic one. |
 
-The save turn shows in chat as a notice, and its request id is tied to the reply that crossed the threshold, so a restart never asks twice. Models with a context window of 32,768 tokens or less skip the save turn and rely on Pi's compaction.
+The save turn shows in chat as a notice, and its request id is tied to the reply that crossed the threshold, so a restart never asks twice. When a restart lands between the save turn and its compaction, the compaction runs when the bot opens again. Models with a context window of 32,768 tokens or less skip the save turn and rely on Pi's compaction.
 
 ## Notes
 

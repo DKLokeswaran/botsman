@@ -18,7 +18,8 @@ export class MemoryEdits {
   describe(bot: Bot, toolName: string, args: Record<string, unknown>): MemoryEdit | undefined {
     if (toolName !== MEMORY_TOOL || args.action !== EDIT_MEMORY) return undefined;
     const file = (typeof args.file === "string" ? args.file : DEFAULT_FILE) as MemoryFileName;
-    const content = typeof args.content === "string" ? args.content : "";
+    if (typeof args.content !== "string") throw new ApiError(400, "bad_request", "The content field is required for edit_memory");
+    const content = args.content;
     assertMayWrite(bot, file);
     assertWithinLimit(file, content);
     return { file, content, previous: this.#files.read(bot.id, file) };

@@ -119,7 +119,9 @@ export class BotSession {
     const watch = await this.#root.watch(context);
     this.#watch = watch;
     let wasRunning = false;
-    this.#services.onView(this.botId, toChatView(watch.value));
+    const first = toChatView(watch.value);
+    this.#services.onView(this.botId, first);
+    this.#checkCompactionOnOpen(first);
     watch.start(async (call) => {
       if (call.kind !== "value") return;
       const view = toChatView(call.value);
@@ -128,6 +130,13 @@ export class BotSession {
       wasRunning = running;
       this.#services.onView(this.botId, view);
     });
+  }
+
+  // A restart can land between a save turn and its compaction; with no reply running, the guard finishes that work now.
+  #checkCompactionOnOpen(view: ChatView): void {
+    const running = (view.docs["pi.live"] as { run?: unknown } | undefined)?.run !== undefined;
+    const bot = this.#services.currentBot(this.botId);
+    if (!running && bot !== undefined) this.#guard.afterRun(bot, view);
   }
 
   #runEnded(view: ChatView): void {

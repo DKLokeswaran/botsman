@@ -8,10 +8,13 @@ const PUBLIC = { public: true };
 
 export function registerAuthRoutes(app: FastifyInstance, services: Services): void {
   const { auth, bots } = services;
-  // Ten password attempts per address every fifteen minutes.
-  const logins = new RateLimiter(10, 15 * 60_000);
+  // Ten password attempts per address and thirty in all every fifteen minutes. The overall cap holds even when a
+  // local process fakes X-Forwarded-For to look like many addresses.
+  const perAddress = new RateLimiter(10, 15 * 60_000);
+  const overall = new RateLimiter(30, 15 * 60_000);
   const limit = (ip: string) => {
-    if (!logins.take(ip)) throw new ApiError(429, "rate_limited", "Too many sign-in attempts; wait and try again");
+    const allowed = perAddress.take(ip) && overall.take("all");
+    if (!allowed) throw new ApiError(429, "rate_limited", "Too many sign-in attempts; wait and try again");
   };
 
   app.get("/api/setup", { config: PUBLIC }, async (): Promise<SetupStatus> => ({ needsSetup: !auth.hasOwner() }));

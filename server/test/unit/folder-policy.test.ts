@@ -15,7 +15,7 @@ describe("bot folder rules", () => {
     mkdirSync(other, { recursive: true });
     return {
       root,
-      rules: { homeDir: root.home, dataDir: root.dataDir, defaultFolder: path.join(root.dataDir, "workspaces", "b1"), otherBotFolders: [other] },
+      rules: { homeDir: root.home, dataDir: root.dataDir, backupDir: path.join(root.root, "backups"), defaultFolder: path.join(root.dataDir, "workspaces", "b1"), otherBotFolders: [other] },
     };
   }
 
@@ -29,6 +29,8 @@ describe("bot folder rules", () => {
     ["{home}/.botsman/bots", "Botsman's own data"],
     ["{home}/.botsman/workspaces/other", "Botsman's own data"],
     ["{root}/other-bot/sub", "another bot"],
+    ["{root}/backups", "backups"],
+    ["{root}/backups/2026-11-15", "backups"],
   ])("refuses %s", (template, reason) => {
     const { root, rules: folderRules } = rules();
     const requested = template.replace("{home}", root.home).replace("{root}", root.root);

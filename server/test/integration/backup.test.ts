@@ -43,6 +43,15 @@ describe("backups", () => {
     expect(existsSync(path.join(target, "folders", folders[0]!, "work.txt"))).toBe(true);
   });
 
+  it("still copies a deleted bot's folder that sits outside the data folder", async () => {
+    const extra = path.join(server.root.root, "disk3", "repo");
+    const bot = await server.client.createBot({ name: "Gone", folder: extra });
+    writeFileSync(path.join(bot.folder, "kept.txt"), "still here");
+    await server.client.request("DELETE", `/api/bots/${bot.id}`);
+    const target = await runBackup(server.botsman.services);
+    expect(existsSync(path.join(target, "folders", bot.id, "kept.txt"))).toBe(true);
+  });
+
   it("keeps only the newest backups", () => {
     const dir = path.join(server.root.root, "prune");
     for (const name of ["2026-01-01", "2026-01-02", "2026-01-03", "2026-01-04.partial"]) mkdirSync(path.join(dir, name), { recursive: true });

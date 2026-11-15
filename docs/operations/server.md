@@ -39,13 +39,15 @@ The systemd unit sets these as `Environment=` lines.
 | --- | --- | --- |
 | `BOTSMAN_DATA_DIR` | `~/.botsman` | All server state |
 | `BOTSMAN_HOST` | `127.0.0.1` | Listen address |
-| `BOTSMAN_PORT` | `7600` | Listen port |
+| `BOTSMAN_PORT` | `7600` | Listen port, 0 to 65535 |
 | `BOTSMAN_TRUST_PROXY` | `127.0.0.1,::1` | Proxy addresses whose `X-Forwarded-*` headers count |
 | `BOTSMAN_TLS_CERT`, `BOTSMAN_TLS_KEY` | unset | Certificate and key files for the server's own TLS |
 | `BOTSMAN_BACKUP_DIR` | `~/.botsman-backups` | Where nightly backups go |
-| `BOTSMAN_BACKUP_HOUR` | `3` | Local hour of the nightly backup |
-| `BOTSMAN_BACKUP_KEEP` | `7` | Backups kept; older ones are removed |
+| `BOTSMAN_BACKUP_HOUR` | `3` | Local hour of the nightly backup, 0 to 23 |
+| `BOTSMAN_BACKUP_KEEP` | `7` | Backups kept, 1 to 365; older ones are removed |
 | `BOTSMAN_SCRIPT_MODEL` | unset | `1` adds the scripted test model. Tests only. |
+
+A number setting outside its range, or not a whole number, stops the server at startup with the reason.
 
 The server never reads model provider keys from its environment. Keys and sign-ins come only from the apps.
 

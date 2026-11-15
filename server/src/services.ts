@@ -93,6 +93,7 @@ export async function createServices(config: Config, options: ServiceOptions = {
     paths,
     homeDir: config.homeDir,
     dataDir: config.dataDir,
+    backupDir: config.backupDir,
     memory: memoryFiles,
     lifecycle: {
       changed: async (bot: Bot, previous: Bot | undefined) => {
@@ -119,6 +120,7 @@ export async function createServices(config: Config, options: ServiceOptions = {
   }
 
   async function close(): Promise<void> {
+    policy.shutDown();
     await engine.closeAll();
     sandbox.stopAll();
     db.close();

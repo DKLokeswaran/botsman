@@ -6,7 +6,7 @@ import type { Database } from "../store/database.ts";
 export type BackupSources = {
   readonly dataDir: string;
   readonly serverDb: Database;
-  // Live bots and their folders; deleted bots' data is covered too because it stays in the data folder.
+  // Every bot's folder, deleted bots included.
   readonly botFolders: readonly { botId: string; folder: string }[];
 };
 

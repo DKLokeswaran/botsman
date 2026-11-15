@@ -4,6 +4,7 @@ import path from "node:path";
 export type FolderRules = {
   readonly homeDir: string;
   readonly dataDir: string;
+  readonly backupDir: string;
   // The default folder of the bot being checked, the one path inside the data folder a bot may have.
   readonly defaultFolder: string;
   readonly otherBotFolders: readonly string[];
@@ -25,6 +26,7 @@ function refusalReason(folder: string, rules: FolderRules): string | undefined {
   if (isInside(rules.homeDir, folder)) return "The folder would expose the owner's home folder";
   if (sensitive.some((target) => isInside(folder, target))) return "The folder is inside a sensitive folder";
   if (folder !== rules.defaultFolder && overlaps(folder, rules.dataDir)) return "The folder overlaps Botsman's own data";
+  if (overlaps(folder, rules.backupDir)) return "The folder overlaps Botsman's backups";
   if (rules.otherBotFolders.some((other) => overlaps(folder, other))) return "The folder overlaps another bot's folder";
   return undefined;
 }
@@ -43,6 +45,7 @@ function resolveRules(rules: FolderRules): FolderRules {
   return {
     homeDir: resolveReal(rules.homeDir),
     dataDir: resolveReal(rules.dataDir),
+    backupDir: resolveReal(rules.backupDir),
     defaultFolder: resolveReal(rules.defaultFolder),
     otherBotFolders: rules.otherBotFolders.map(resolveReal),
   };

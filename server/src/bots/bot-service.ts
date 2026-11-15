@@ -20,6 +20,7 @@ export class BotService {
   readonly #paths: ReturnType<typeof dataPaths>;
   readonly #homeDir: string;
   readonly #dataDir: string;
+  readonly #backupDir: string;
   readonly #memory: MemoryFiles;
   readonly #lifecycle: BotLifecycle;
 
@@ -28,6 +29,7 @@ export class BotService {
     paths: ReturnType<typeof dataPaths>;
     homeDir: string;
     dataDir: string;
+    backupDir: string;
     memory: MemoryFiles;
     lifecycle: BotLifecycle;
   }) {
@@ -35,6 +37,7 @@ export class BotService {
     this.#paths = options.paths;
     this.#homeDir = options.homeDir;
     this.#dataDir = options.dataDir;
+    this.#backupDir = options.backupDir;
     this.#memory = options.memory;
     this.#lifecycle = options.lifecycle;
   }
@@ -105,6 +108,7 @@ export class BotService {
     return {
       homeDir: this.#homeDir,
       dataDir: this.#dataDir,
+      backupDir: this.#backupDir,
       defaultFolder: this.#paths.defaultWorkspace(id),
       otherBotFolders: this.#registry.folders(id),
     };

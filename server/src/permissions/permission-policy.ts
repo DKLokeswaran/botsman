@@ -32,6 +32,7 @@ export class PermissionPolicy {
   readonly #onChange: (approval: Approval) => void;
   readonly #now: () => number;
   readonly #waiters = new Map<string, Set<(approval: Approval) => void>>();
+  #shuttingDown = false;
 
   constructor(store: ApprovalStore, describeMemoryEdit: DescribeMemoryEdit, onChange: (approval: Approval) => void, now: () => number = Date.now) {
     this.#store = store;
@@ -55,6 +56,11 @@ export class PermissionPolicy {
     if (decision === "allow_chat") this.#store.grant(approval.botId, approval.conversation, approval.toolName);
     this.#settled(approval);
     return approval;
+  }
+
+  // From now on, a wait aborted because the server is closing leaves its approval pending, so the call waits again after the restart.
+  shutDown(): void {
+    this.#shuttingDown = true;
   }
 
   // Cancels every pending approval of a bot, for example when it is deleted.
@@ -101,14 +107,22 @@ export class PermissionPolicy {
   // Waits for the owner, the approval wait to run out, or the bot being stopped, whichever comes first.
   #waitForAnswer(approval: Approval, signal: AbortSignal | undefined): Promise<Approval> {
     if (approval.status !== "pending") return Promise.resolve(approval);
-    return new Promise((resolve) => {
-      const finish = (settled: Approval) => {
+    return new Promise((resolve, reject) => {
+      const release = () => {
         clearTimeout(timer);
         signal?.removeEventListener("abort", onAbort);
         this.#waiters.get(approval.id)?.delete(finish);
+      };
+      const finish = (settled: Approval) => {
+        release();
         resolve(settled);
       };
-      const onAbort = () => finish(this.#settleQuietly(approval.id, "cancelled"));
+      // A shutdown aborts every wait too; only a stop cancels the approval.
+      const onAbort = () => {
+        if (!this.#shuttingDown) return finish(this.#settleQuietly(approval.id, "cancelled"));
+        release();
+        reject(new Error("The server is shutting down"));
+      };
       const timer = setTimeout(() => finish(this.#settleQuietly(approval.id, "expired")), Math.max(0, approval.expiresAt - this.#now()));
       this.#waitersOf(approval.id).add(finish);
       if (signal?.aborted) onAbort();

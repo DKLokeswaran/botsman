@@ -1,4 +1,4 @@
-import { botIdOfStream, ClientMessage, SERVER_STREAM, type ServerMessage, type ServerSnapshot, type StreamEvent, type StreamPosition } from "@botsman/protocol";
+import { botIdOfStream, type ChatSnapshot, ClientMessage, SERVER_STREAM, type ServerMessage, type ServerSnapshot, type StreamEvent, type StreamPosition } from "@botsman/protocol";
 import { compile } from "@earendil-works/pi-schema";
 import type { FastifyInstance } from "fastify";
 import type { WebSocket } from "ws";
@@ -51,6 +51,7 @@ class SocketSession {
       return this.#fail("unauthorized", "Access token is not valid");
     }
     // A revoked device loses its socket within a minute.
+    clearInterval(this.#timer);
     this.#timer = setInterval(() => {
       if (!this.#services.auth.sessionLive(this.#sessionId!)) this.#fail("unauthorized", "Signed out");
     }, SESSION_CHECK_MS);
@@ -72,20 +73,20 @@ class SocketSession {
     let live = false;
     const unsubscribe = hub.subscribe(stream, (item) => (live ? this.#event(stream, item) : held.push(item)));
     this.#subscriptions.set(stream, unsubscribe);
-    const snapshot = await this.#snapshot(stream);
-    const seq = hub.currentSeq(stream);
+    const { snapshot, seq } = await this.#snapshot(stream);
     this.#send({ type: "snapshot", stream, epoch: hub.epoch, seq, snapshot });
     for (const item of held) if (item.seq > seq) this.#event(stream, item);
     live = true;
   }
 
-  async #snapshot(stream: string) {
+  // The snapshot and the stream's sequence number are read together, so no event can fall between them.
+  async #snapshot(stream: string): Promise<{ snapshot: ChatSnapshot | ServerSnapshot; seq: number }> {
     const services = this.#services;
     const botId = botIdOfStream(stream);
-    if (botId === undefined) return this.#serverSnapshot();
+    if (botId === undefined) return { snapshot: this.#serverSnapshot(), seq: services.hub.currentSeq(stream) };
     const bot = services.bots.get(botId);
     if (services.sandbox.status.ok) await services.engine.view(bot);
-    return services.feed.snapshot(bot.id, services.registry.chatSettings(bot));
+    return { snapshot: services.feed.snapshot(bot.id, services.registry.chatSettings(bot)), seq: services.hub.currentSeq(stream) };
   }
 
   #serverSnapshot(): ServerSnapshot {

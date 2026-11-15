@@ -67,6 +67,27 @@ describe("auth and exposure", () => {
     }
     expect(results).toContain(429);
   });
+
+  it("caps password guesses overall, so a faked X-Forwarded-For can't pose as many addresses", async () => {
+    const other = await startTestServer();
+    const results: number[] = [];
+    for (let attempt = 0; attempt < 32; attempt++) {
+      const response = await other.client.raw("POST", "/api/auth/login", { password: "wrong", deviceName: "x" }, { "x-forwarded-for": `10.0.0.${attempt}` });
+      results.push(response.status);
+    }
+    expect(results.slice(0, 30)).not.toContain(429);
+    expect(results.slice(30)).toEqual([429, 429]);
+    await other.botsman.stop();
+    other.root.cleanup();
+  });
+
+  it("closes a WebSocket that sends a message over 64 KiB", async () => {
+    const socket = new WebSocket(`${server.baseUrl.replace("http", "ws")}/api/ws`, { headers: { "x-forwarded-proto": "https" } } as unknown as string[]);
+    await new Promise((resolve) => (socket.onopen = resolve));
+    const closed = new Promise<number>((resolve) => (socket.onclose = (event) => resolve(event.code)));
+    socket.send("x".repeat(70 * 1024));
+    expect(await closed).toBe(1009);
+  });
 });
 
 describe("bots", () => {
@@ -156,6 +177,16 @@ describe("memory", () => {
     const result = await main.stream.waitForMessage(main.chat, (message) => message.type === "tool_result" && message.toolName === "memory");
     expect(result).toMatchObject({ isError: false, output: expect.stringContaining("USER_MEMORY.md now holds") });
     main.stream.close();
+  });
+
+  it("refuses an edit with no content before asking the owner", async () => {
+    const bot = await server.client.createBot({ name: "No content", defaultModel: SCRIPT_MODEL_REF });
+    const { stream, chat } = await openChat(bot.id);
+    await server.client.send(bot.id, 'tool memory {"action":"edit_memory","file":"BOT_MEMORY.md"}');
+    const result = await stream.waitForMessage(chat, (message) => message.type === "tool_result");
+    expect(result).toMatchObject({ isError: true, output: expect.stringContaining("content field is required") });
+    expect((await server.client.approvals()).approvals.filter((approval) => approval.botId === bot.id)).toHaveLength(0);
+    stream.close();
   });
 
   it("refuses an edit over the file's limit with the current usage", async () => {

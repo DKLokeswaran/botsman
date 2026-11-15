@@ -1,5 +1,5 @@
 import path from "node:path";
-import { isInside } from "../bots/folder-policy.ts";
+import { isInside, resolveReal } from "../bots/folder-policy.ts";
 
 export type BoundaryCheck =
   | { readonly leaves: false }
@@ -17,14 +17,21 @@ export function checkBoundary(toolName: string, args: Record<string, unknown>, f
   if (!FILE_TOOLS.has(toolName)) {
     return { leaves: true, reason: `The ${toolName} tool acts outside the bot's folder`, description: `Run ${toolName}`, command };
   }
-  const target = typeof args.path === "string" ? path.resolve(folder, args.path) : folder;
-  if (isInside(target, folder)) return { leaves: false };
+  const target = toolTarget(args.path, folder);
+  if (isInside(target, resolveReal(folder))) return { leaves: false };
   return {
     leaves: true,
     reason: `The path is outside the bot's folder (${folder})`,
     description: `${capitalize(toolName)} ${target}`,
     command,
   };
+}
+
+// The real path a file tool acts on: Pi drops a leading `@`, and symlinks are followed to where they point.
+function toolTarget(requested: unknown, folder: string): string {
+  if (typeof requested !== "string") return resolveReal(folder);
+  const withoutAt = requested.startsWith("@") ? requested.slice(1) : requested;
+  return resolveReal(path.resolve(folder, withoutAt));
 }
 
 function capitalize(text: string): string {

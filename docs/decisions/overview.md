@@ -49,6 +49,7 @@ A bot gets read-write access to its whole folder, so the server refuses any path
 - `/` and the owner's home folder
 - `~/.ssh`, `~/.claude`, and `~/.agents`
 - Botsman's own data, other than the default folder
+- the backups folder, which holds copies of that data
 - another bot's folder
 
 Those checks also apply to anything inside these paths. Chat history, memory files, and notes stay in `~/.botsman` wherever the folder is.
@@ -145,7 +146,7 @@ The apps have no permanent erase in v1. That is done on the server by hand.
 
 ## Exposure
 
-The server does not care whether its address is on a tailnet or the public internet. It requires HTTPS and treats every deployment as reachable by strangers: rate-limited login, and revocable refresh tokens. TLS comes from Tailscale, a reverse proxy such as Caddy, or certificate files given to the server. The server listens on `127.0.0.1` by default and refuses any request that didn't arrive over TLS, judged from its own TLS or a trusted proxy's `X-Forwarded-Proto`. Login allows 10 password attempts per address every 15 minutes. Access tokens last 15 minutes and refresh tokens 60 days from their last use; each refresh replaces the refresh token. See [running the server](../operations/server.md).
+The server does not care whether its address is on a tailnet or the public internet. It requires HTTPS and treats every deployment as reachable by strangers: rate-limited login, and revocable refresh tokens. TLS comes from Tailscale, a reverse proxy such as Caddy, or certificate files given to the server. The server listens on `127.0.0.1` by default and refuses any request that didn't arrive over TLS, judged from its own TLS or a trusted proxy's `X-Forwarded-Proto`. Login allows 10 password attempts per address and 30 in all every 15 minutes. The overall cap stops a local process that fakes `X-Forwarded-For` from posing as many addresses; the cost is that a flood of wrong passwords can lock the owner out for up to 15 minutes. Access tokens last 15 minutes and refresh tokens 60 days from their last use; each refresh replaces the refresh token. Both WebSockets recheck the device's session every minute, so a revoked device loses them, and refuse any client message over 64 KiB. See [running the server](../operations/server.md).
 
 ## To settle during the build
 

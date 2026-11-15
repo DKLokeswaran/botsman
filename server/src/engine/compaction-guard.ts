@@ -2,7 +2,7 @@ import type { Bot } from "@botsman/protocol";
 import type { Usage } from "@earendil-works/pi-ai";
 import { BACKGROUND_CONTEXT as context } from "@earendil-works/chord/context";
 import type { Conversation, Harness } from "@earendil-works/pi-durable";
-import { PRE_COMPACTION_KIND } from "../events/chat-view.ts";
+import { OWNER_MESSAGE_KIND, PRE_COMPACTION_KIND } from "../events/chat-view.ts";
 import type { ChatView, EngineServices } from "./types.ts";
 
 // Pi's blocking threshold sits this far below the context window; Pi's own compaction there is the safety net.
@@ -25,14 +25,23 @@ export class CompactionGuard {
     this.#botId = botId;
   }
 
+  // Runs when a reply ends, and once when the bot opens with no reply running.
   afterRun(bot: Bot, view: ChatView): void {
-    if (this.#saving) return;
-    const last = lastAnswer(view);
-    if (last === undefined || !this.#nearLimit(bot, last.usage)) return;
+    if (this.#saving || compacting(view)) return;
+    const work = this.#nextStep(bot, view);
+    if (work === undefined) return;
     this.#saving = true;
-    this.#saveThenCompact(bot, last.id)
+    work()
       .catch((error) => this.#services.log(`bot ${this.#botId}: save before compaction failed: ${String(error)}`))
       .finally(() => (this.#saving = false));
+  }
+
+  // A save turn a restart left without its compaction only needs the compaction; otherwise a reply near the limit starts the save turn.
+  #nextStep(bot: Bot, view: ChatView): (() => Promise<void>) | undefined {
+    if (saveAwaitingCompaction(view)) return () => this.#compact();
+    const last = lastAnswer(view);
+    if (last === undefined || !this.#nearLimit(bot, last.usage)) return undefined;
+    return () => this.#saveThenCompact(bot, last.id);
   }
 
   #nearLimit(bot: Bot, usage: Usage): boolean {
@@ -51,6 +60,10 @@ export class CompactionGuard {
       context,
     );
     await submission.wait(context);
+    await this.#compact();
+  }
+
+  async #compact(): Promise<void> {
     const taskId = await this.#root.compact("Keep the owner's open requests, decisions, and anything still in progress.", context);
     await this.#harness.waitForTask(taskId, context);
   }
@@ -65,9 +78,26 @@ function savePrompt(bot: Bot): string {
   ].join(" ");
 }
 
+// True when the newest input is a save turn with no compaction or reset after it.
+function saveAwaitingCompaction(view: ChatView): boolean {
+  for (let index = view.entries.length - 1; index >= 0; index--) {
+    const kind = view.entries[index]!.kind;
+    if (kind === PRE_COMPACTION_KIND) return true;
+    if (kind === OWNER_MESSAGE_KIND || kind === "pi.compaction" || kind === "pi.reset") return false;
+  }
+  return false;
+}
+
+function compacting(view: ChatView): boolean {
+  const live = view.docs["pi.live"] as { compactions?: readonly unknown[] } | undefined;
+  return (live?.compactions?.length ?? 0) > 0;
+}
+
+// The newest reply since the last compaction or reset; replies before one no longer reflect the context size.
 function lastAnswer(view: ChatView): { id: number; usage: Usage } | undefined {
   for (let index = view.entries.length - 1; index >= 0; index--) {
     const entry = view.entries[index]!;
+    if (entry.kind === "pi.compaction" || entry.kind === "pi.reset") return undefined;
     const message = entry.model?.[0];
     if (entry.kind === "pi.assistant" && message?.role === "assistant") return { id: entry.id, usage: message.usage };
   }

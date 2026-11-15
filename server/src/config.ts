@@ -36,14 +36,23 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
     dataDir,
     homeDir: home,
     host: env.BOTSMAN_HOST ?? "127.0.0.1",
-    port: Number(env.BOTSMAN_PORT ?? 7600),
+    port: integerSetting(env, "BOTSMAN_PORT", 7600, 0, 65_535),
     trustProxy: (env.BOTSMAN_TRUST_PROXY ?? "127.0.0.1,::1").split(",").map((entry) => entry.trim()).filter(Boolean),
     tls: tlsFromEnv(env),
     backupDir: path.resolve(env.BOTSMAN_BACKUP_DIR ?? path.join(home, ".botsman-backups")),
-    backupHour: Number(env.BOTSMAN_BACKUP_HOUR ?? 3),
-    backupKeep: Number(env.BOTSMAN_BACKUP_KEEP ?? 7),
+    backupHour: integerSetting(env, "BOTSMAN_BACKUP_HOUR", 3, 0, 23),
+    backupKeep: integerSetting(env, "BOTSMAN_BACKUP_KEEP", 7, 1, 365),
     scriptModel: env.BOTSMAN_SCRIPT_MODEL === "1",
   };
+}
+
+// A whole-number setting within its range; anything else stops startup with the reason.
+function integerSetting(env: NodeJS.ProcessEnv, name: string, fallback: number, min: number, max: number): number {
+  const raw = env[name];
+  if (raw === undefined || raw === "") return fallback;
+  const value = Number(raw);
+  if (!Number.isInteger(value) || value < min || value > max) throw new Error(`${name} must be a whole number from ${min} to ${max}; got "${raw}"`);
+  return value;
 }
 
 function tlsFromEnv(env: NodeJS.ProcessEnv): Config["tls"] {

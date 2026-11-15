@@ -66,8 +66,12 @@ describe("crash recovery", () => {
     return { root, port, client, botId };
   }
 
-  async function restart(root: ReturnType<typeof tempRoot>, port: number): Promise<void> {
-    children.pop()!.kill("SIGKILL");
+  // SIGKILL acts like a crash; SIGTERM is how systemd stops the service.
+  async function restart(root: ReturnType<typeof tempRoot>, port: number, signal: "SIGKILL" | "SIGTERM" = "SIGKILL"): Promise<void> {
+    const child = children.pop()!;
+    const exited = new Promise((resolve) => child.once("exit", resolve));
+    child.kill(signal);
+    await exited;
     await new Promise((resolve) => setTimeout(resolve, 300));
     children.push(await startProcess(root, port));
   }
@@ -76,11 +80,11 @@ describe("crash recovery", () => {
     return client.request("GET", `/api/bots/${botId}/chat/history?limit=200`);
   }
 
-  it("keeps an approval across a kill, and runs the tool exactly once after it is allowed", async () => {
+  it.each(["SIGKILL", "SIGTERM"] as const)("keeps an approval across a %s restart, and runs the tool exactly once after it is allowed", async (signal) => {
     const { root, port, client, botId } = await boot();
     await client.send(botId, 'tool read {"path":"/etc/hostname"}');
     await waitUntil(async () => (await client.approvals()).approvals.length === 1);
-    await restart(root, port);
+    await restart(root, port, signal);
     await client.login(PASSWORD);
     const [approval] = (await client.approvals()).approvals;
     expect(approval).toMatchObject({ status: "pending", toolName: "read" });

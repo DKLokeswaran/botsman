@@ -106,7 +106,8 @@ const ACTIONS: Record<MemoryAction, ActionHandler> = {
   // Runs only after the owner allowed the edit.
   edit_memory: (bot, args, { memoryTool }) => {
     const file: MemoryFileName = args.file ?? "BOT_MEMORY.md";
-    memoryTool.editMemory(bot, file, required(args.content, "content"));
+    // The approval already required content; an empty string clears the file.
+    memoryTool.editMemory(bot, file, args.content ?? "");
     return `The owner approved the edit. ${file} now holds the content you wrote.`;
   },
 };

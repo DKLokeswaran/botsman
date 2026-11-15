@@ -5,7 +5,7 @@ import { pruneBackups, writeBackup } from "./backup.ts";
 export async function runBackup(services: Services): Promise<string> {
   const { config } = services;
   const target = await writeBackup(
-    { dataDir: config.dataDir, serverDb: services.db, botFolders: services.registry.list().map((bot) => ({ botId: bot.id, folder: bot.folder })) },
+    { dataDir: config.dataDir, serverDb: services.db, botFolders: services.registry.allFolders() },
     config.backupDir,
   );
   pruneBackups(config.backupDir, config.backupKeep);
