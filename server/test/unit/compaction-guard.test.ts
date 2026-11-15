@@ -95,12 +95,12 @@ describe("saving before compaction", () => {
     expect(calls).toEqual(["compact"]);
   });
 
-  it("treats messages steered back to back into a save turn as part of it", async () => {
-    const { calls, submissions, settled, guard: subject } = guard({ status: "done", stopReason: "length" });
-    submissions.set("pre-compaction:2", settled);
-    subject.afterRun(bot, view([entry(1, OWNER_MESSAGE_KIND), answer(2, WINDOW - 20_000), saveEntry(3, 2), answer(4, WINDOW - 18_000, "toolUse"), entry(5, OWNER_MESSAGE_KIND), entry(6, OWNER_MESSAGE_KIND), answer(SAVE_ANSWER, WINDOW - 15_000, "length")]));
+  it("starts a new turn at a message sent after a steered message that got no reply", async () => {
+    const { calls, submissions, guard: subject } = guard();
+    submissions.set("pre-compaction:2", { status: "unanswered", reason: "aborted" });
+    subject.afterRun(bot, view([entry(1, OWNER_MESSAGE_KIND), answer(2, WINDOW - 20_000), saveEntry(3, 2), answer(4, WINDOW - 18_000, "toolUse"), entry(5, OWNER_MESSAGE_KIND), entry(6, OWNER_MESSAGE_KIND), answer(7, WINDOW - 15_000)]));
     await settle();
-    expect(calls).toEqual([]);
+    expect(calls).toEqual(["save", "compact"]);
   });
 
   it("starts a new turn at messages queued back to back after a finished reply", async () => {

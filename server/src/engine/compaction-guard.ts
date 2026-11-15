@@ -137,8 +137,8 @@ function turnStart(view: ChatView): number | undefined {
   return undefined;
 }
 
-// Pi places a steered message after a tool round, so the reply before it, past any messages sent alongside it,
-// stopped for tool calls.
+// Pi places a steered message after a tool round, so the reply before it stopped for tool calls. Pi steers one message
+// at a time (its default steering mode), so a message right after another owner message starts a new turn.
 function steered(view: ChatView, index: number): boolean {
   for (let before = index - 1; before >= 0; before--) {
     const entry = view.entries[before]!;
@@ -146,7 +146,7 @@ function steered(view: ChatView, index: number): boolean {
       const message = entry.model?.[0];
       return message?.role === "assistant" && message.stopReason === "toolUse";
     }
-    if (isBoundary(entry.kind)) return false;
+    if (entry.kind === OWNER_MESSAGE_KIND || isBoundary(entry.kind)) return false;
   }
   return false;
 }
