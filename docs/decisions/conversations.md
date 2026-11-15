@@ -16,7 +16,7 @@
 - **The owner's chats are private from other bots.** A bot never sees the owner's chat with another bot, so a message to another bot has to explain itself. The main bot is the exception. It can read any chat through a tool, and it is never loaded automatically.
 - **Bots don't get each other's files by talking.** Only the main bot can open another bot's files or notes, through a tool.
 - **Other conversations don't spill into the owner's chat.** To carry something over, a bot writes it to memory or notes, or posts a result if the owner asked for one.
-- **Messages from bots and channels are information, not commands.** Anything a bot proposes for memory because of one shows its source.
+- **Messages from bots and channels are information, not commands.** A memory edit a bot asks for because of one shows its source.
 
 ## Routines
 

@@ -24,9 +24,10 @@ When a bot-written file is full, the write fails with the current usage, and the
 Every bot edit to a memory file asks the owner, in every permission mode. Three things make this work:
 
 - **Files sit outside the bot's folder.** Bots change them only through the memory tool. A shell command can't reach them.
-- **An edit becomes a proposal, and the tool call waits for it.** The bot's reply pauses until the owner accepts or rejects, like an approval. The answer comes back as the tool's result, so the bot knows the outcome at once. A proposal shows the conversation it came from, so a bad fact can be traced.
-- **A wait has the same limits as an approval.** An unanswered proposal ends as expired after the bot's approval wait, and stopping the bot cancels it. Either way the file is unchanged, and the tool result says so.
-- **A proposal survives a restart.** The waiting tool call remembers its proposal, so after a crash it waits on the same one instead of proposing again.
+- **An edit is an ordinary approval.** The memory tool's `edit_memory` call goes through the same approval as any tool call: the reply waits, the approval expires after the bot's approval wait, stopping the bot cancels it, and it survives a restart. The approval shows the file, the new content, and the content when the bot asked, so the apps can show the change. It shows the conversation it came from, so a bad fact can be traced.
+- **Each edit is allowed on its own.** "Allow for this chat" doesn't apply to memory edits, so the apps offer only Allow and Deny.
+
+Who may write the file and its character limit are checked before the owner is asked, so the owner never allows an edit that then fails. Allowed, the tool writes the file and says so; denied, expired, or cancelled, the bot gets the usual refused tool result and the file is unchanged.
 
 Notes are not covered by this. A bot tracking its projects would otherwise ask constantly.
 
@@ -71,7 +72,7 @@ Pi's default on current models keeps the old prompt and adds the update after it
 
 Botsman controls compaction through Pi's settings and its manual `compact()` call. When a chat nears the limit, the server gives the bot one turn to save what matters, then starts compaction. Pi's automatic compaction stays on as the safety net, for example when a provider rejects a request as too long.
 
-In that turn the bot writes to its notes, and proposes any `BOT_MEMORY.md` changes for confirmation. The main bot can also propose `USER_MEMORY.md` changes. Each proposal waits for the owner, as every memory file edit does, so compaction starts only after the owner has answered every proposal from that turn. Notes are written at once.
+In that turn the bot writes to its notes, and edits `BOT_MEMORY.md`. The main bot can also edit `USER_MEMORY.md`. Each memory file edit waits for the owner's approval, so compaction starts only after the owner has answered every edit from that turn. Notes are written at once.
 
 | Threshold | Where |
 | --- | --- |
@@ -84,7 +85,7 @@ The save turn shows in chat as a notice, and its request id is tied to the reply
 
 Notes are plain Markdown files that hold what doesn't fit a small file, such as the projects a developer bot tracks. A note's name is a plain file name ending in `.md`, with no folders. They live in `bots/<id>/notes/`, outside the bot's folder, so `ls` and `grep -r` in that folder never spend tokens on them. They reach the model only when the bot opens one.
 
-One `memory` tool does all of this. It searches, reads, and writes notes, and proposes edits to the memory files. Hermes has a `memory` tool too, and OpenClaw has `memory_search` and `memory_get`.
+One `memory` tool does all of this. It searches, reads, and writes notes, and edits the memory files with the owner's approval. Hermes has a `memory` tool too, and OpenClaw has `memory_search` and `memory_get`.
 
 This has two costs. A bot can't run shell scripts over its notes, and folder snapshots don't cover them.
 

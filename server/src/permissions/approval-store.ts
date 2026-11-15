@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import type { Approval } from "@botsman/protocol";
+import type { Approval, MemoryEdit } from "@botsman/protocol";
 import { conflict, notFound } from "../errors.ts";
 import type { Database, Row } from "../store/database.ts";
 
@@ -12,6 +12,7 @@ export type NewApproval = {
   readonly reason: string;
   readonly description: string;
   readonly command: string;
+  readonly memoryEdit: MemoryEdit | null;
   readonly waitMs: number;
 };
 
@@ -32,10 +33,23 @@ export class ApprovalStore {
     const now = this.#now();
     this.#db
       .prepare(
-        `INSERT INTO approvals (id, bot_id, conversation, call_id, tool_name, args, reason, description, command, status, created_at, expires_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending', ?, ?)`,
+        `INSERT INTO approvals (id, bot_id, conversation, call_id, tool_name, args, reason, description, command, memory_edit, status, created_at, expires_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending', ?, ?)`,
       )
-      .run(id, request.botId, request.conversation, request.callId, request.toolName, JSON.stringify(request.args), request.reason, request.description, request.command, now, now + request.waitMs);
+      .run(
+        id,
+        request.botId,
+        request.conversation,
+        request.callId,
+        request.toolName,
+        JSON.stringify(request.args),
+        request.reason,
+        request.description,
+        request.command,
+        request.memoryEdit === null ? null : JSON.stringify(request.memoryEdit),
+        now,
+        now + request.waitMs,
+      );
     return this.get(id);
   }
 
@@ -99,6 +113,7 @@ function toApproval(row: Row): Approval {
     reason: String(row.reason),
     description: String(row.description),
     command: String(row.command),
+    memoryEdit: row.memory_edit === null ? null : (JSON.parse(String(row.memory_edit)) as MemoryEdit),
     status: row.status as Approval["status"],
     decision: (row.decision ?? null) as Approval["decision"],
     createdAt: Number(row.created_at),

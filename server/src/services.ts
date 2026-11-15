@@ -1,7 +1,7 @@
 import { mkdirSync } from "node:fs";
 import { randomUUID } from "node:crypto";
 import path from "node:path";
-import { type Alert, type Approval, type Bot, type MemoryProposal, SERVER_STREAM, type StreamEvent } from "@botsman/protocol";
+import { type Alert, type Approval, type Bot, SERVER_STREAM, type StreamEvent } from "@botsman/protocol";
 import type { Provider } from "@earendil-works/pi-ai";
 import { AuthService } from "./auth/auth-service.ts";
 import { BotRegistry } from "./bots/bot-registry.ts";
@@ -11,7 +11,7 @@ import { Engine } from "./engine/engine.ts";
 import { ChatFeed } from "./events/chat-feed.ts";
 import { StreamHub } from "./events/stream-hub.ts";
 import { MemoryFiles } from "./memory/memory-files.ts";
-import { Proposals } from "./memory/proposals.ts";
+import { MemoryEdits } from "./memory/memory-edits.ts";
 import { NotesStore } from "./notes/notes-store.ts";
 import { ApprovalStore } from "./permissions/approval-store.ts";
 import { PermissionPolicy } from "./permissions/permission-policy.ts";
@@ -57,14 +57,11 @@ export async function createServices(config: Config, options: ServiceOptions = {
 
   const feed = new ChatFeed(hub, (botId) => approvalStore.pendingByCall(botId), (botId) => alert("failure", botId, botId));
 
-  const policy = new PermissionPolicy(approvalStore, (approval: Approval) => {
+  const memoryEdits = new MemoryEdits(memoryFiles);
+  const policy = new PermissionPolicy(approvalStore, (bot, toolName, args) => memoryEdits.describe(bot, toolName, args), (approval: Approval) => {
     publish({ type: "approval", approval });
     if (approval.status === "pending") alert("approval", approval.botId, approval.id);
     feed.refreshLive(approval.botId);
-  });
-  const proposals = new Proposals(db, memoryFiles, (proposal: MemoryProposal) => {
-    publish({ type: "proposal", proposal });
-    if (proposal.status === "pending") alert("memory_proposal", proposal.botId, proposal.id);
   });
   const logins = new ProviderLogins(catalog, () => deviceId(db), (login) => publish({ type: "login", login }));
 
@@ -83,7 +80,7 @@ export async function createServices(config: Config, options: ServiceOptions = {
       deleteNote: (botId, name) => notes.delete(botId, name),
       searchNotes: (botId, query) => notes.search(botId, query),
       readMemory: (botId) => memoryFiles.snapshot(botId),
-      proposeMemoryEdit: (input, wait) => proposals.proposeAndWait(input, wait),
+      editMemory: (bot, file, content) => memoryEdits.apply(bot, file, content),
     },
     memorySnapshot: (botId) => memoryFiles.snapshot(botId),
     onView: (botId, view) => feed.update(botId, view),
@@ -105,7 +102,6 @@ export async function createServices(config: Config, options: ServiceOptions = {
       },
       deleted: async (botId: string) => {
         policy.cancelAll(botId);
-        proposals.cancelAll(botId);
         await engine.close(botId);
         feed.forget(botId);
         publish({ type: "bot_deleted", botId });
@@ -128,7 +124,7 @@ export async function createServices(config: Config, options: ServiceOptions = {
     db.close();
   }
 
-  return { config, paths, db, hub, alerts, auth, registry, bots, memoryFiles, notes, proposals, approvalStore, policy, sandbox, catalog, logins, engine, feed, resumeBots, close };
+  return { config, paths, db, hub, alerts, auth, registry, bots, memoryFiles, notes, approvalStore, policy, sandbox, catalog, logins, engine, feed, resumeBots, close };
 }
 
 // A stable id for this server, which some sign-ins send as the device id.

@@ -5,7 +5,7 @@ export type BoundaryCheck =
   | { readonly leaves: false }
   | { readonly leaves: true; readonly reason: string; readonly description: string; readonly command: string };
 
-// Tools that always stay inside the boundary: shell commands run in the sandbox, and memory edits ask on their own.
+// Tools that always stay inside the boundary: shell commands run in the sandbox, and the memory tool reaches only the bot's notes and memory files. Memory edits ask before this check.
 const CONTAINED_TOOLS = new Set(["bash", "memory"]);
 const FILE_TOOLS = new Set(["read", "write", "edit"]);
 

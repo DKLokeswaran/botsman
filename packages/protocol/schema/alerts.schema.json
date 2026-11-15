@@ -13,7 +13,6 @@
           "enum": [
             "approval",
             "question",
-            "memory_proposal",
             "routine_result",
             "failure",
             "channel_mention",
@@ -105,7 +104,6 @@
                   "enum": [
                     "approval",
                     "question",
-                    "memory_proposal",
                     "routine_result",
                     "failure",
                     "channel_mention",

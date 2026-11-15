@@ -95,7 +95,6 @@ class SocketSession {
     return {
       bots,
       approvals: services.approvalStore.list({ status: "pending", botIds }),
-      proposals: services.proposals.list({ status: "pending", botIds }),
     };
   }
 

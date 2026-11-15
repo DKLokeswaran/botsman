@@ -7,13 +7,8 @@ import {
   type MemoryFile,
   type MemoryFileName,
   type MemoryFiles,
-  type MemoryProposal,
-  type MemoryProposalList,
-  ProposalAnswer,
-  ProposalListQuery,
 } from "@botsman/protocol";
 import type { FastifyInstance } from "fastify";
-import { notFound } from "../errors.ts";
 import type { Services } from "../services.ts";
 
 const WRITERS: Record<MemoryFileName, MemoryFile["writtenBy"]> = {
@@ -24,8 +19,7 @@ const WRITERS: Record<MemoryFileName, MemoryFile["writtenBy"]> = {
 };
 
 export function registerMemoryRoutes(app: FastifyInstance, services: Services): void {
-  const { bots, memoryFiles, proposals } = services;
-  const liveBotIds = () => bots.list().map((bot) => bot.id);
+  const { bots, memoryFiles } = services;
 
   // All four files as one bot sees them, with each file's limit.
   app.get<{ Params: IdParams }>("/api/bots/:id/memory", { schema: { params: IdParams } }, async (request): Promise<MemoryFiles> => {
@@ -42,14 +36,4 @@ export function registerMemoryRoutes(app: FastifyInstance, services: Services): 
     return { name: file, content: memoryFiles.read(bot.id, file), limit: MemoryLimits[file], writtenBy: WRITERS[file] };
   });
 
-  app.get<{ Querystring: ProposalListQuery }>("/api/memory/proposals", { schema: { querystring: ProposalListQuery } }, async (request): Promise<MemoryProposalList> => {
-    const botIds = request.query.botId === undefined ? liveBotIds() : liveBotIds().filter((id) => id === request.query.botId);
-    return { proposals: proposals.list({ status: request.query.status, botIds }) };
-  });
-
-  app.post<{ Params: IdParams; Body: ProposalAnswer }>("/api/memory/proposals/:id/answer", { schema: { params: IdParams, body: ProposalAnswer } }, async (request): Promise<MemoryProposal> => {
-    const proposal = proposals.get(request.params.id);
-    if (!liveBotIds().includes(proposal.botId)) throw notFound("Proposal");
-    return proposals.answer(proposal.id, request.body.decision);
-  });
 }

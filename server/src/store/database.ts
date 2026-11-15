@@ -63,6 +63,7 @@ const MIGRATIONS: readonly string[] = [
     reason TEXT NOT NULL,
     description TEXT NOT NULL,
     command TEXT NOT NULL,
+    memory_edit TEXT,
     status TEXT NOT NULL,
     decision TEXT,
     created_at INTEGER NOT NULL,
@@ -77,20 +78,6 @@ const MIGRATIONS: readonly string[] = [
     created_at INTEGER NOT NULL,
     PRIMARY KEY (bot_id, conversation, tool_name)
   );
-  CREATE TABLE proposals (
-    id TEXT PRIMARY KEY,
-    bot_id TEXT NOT NULL,
-    file TEXT NOT NULL,
-    content TEXT NOT NULL,
-    previous TEXT NOT NULL,
-    reason TEXT NOT NULL,
-    conversation TEXT NOT NULL,
-    status TEXT NOT NULL,
-    created_at INTEGER NOT NULL,
-    expires_at INTEGER NOT NULL,
-    answered_at INTEGER
-  );
-  CREATE INDEX proposals_status ON proposals (status, created_at);
   CREATE TABLE note_files (
     bot_id TEXT NOT NULL,
     name TEXT NOT NULL,

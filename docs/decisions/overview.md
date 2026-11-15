@@ -77,7 +77,7 @@ Botsman doesn't load skills from repos cloned into a bot's folder. The bot's ski
 | `events` | Turns Pi's conversation state changes into our own app events. |
 | `permissions` | The `beforeTool` hook, approvals, the classifier, and approval waits. |
 | `sandbox` | Builds each bot's `bwrap` allow list, starts its `pi-env` daemon, and checks at startup that sandboxes work. |
-| `memory` | The four files, proposals, sending changes to bots, and the pre-compaction save. |
+| `memory` | The four files, the checks on memory edits, sending changes to bots, and the pre-compaction save. |
 | `notes` | Keyword index over each bot's notes. |
 | `routines` | Durable sleep tasks that run each routine on schedule. |
 | `conversations` | Bot-to-bot exchanges, channels, and the loop limit. |
@@ -135,7 +135,7 @@ Deleting a bot sets `deleted_at` on its row in the bot registry. Nothing is eras
 - The server leaves a deleted bot out of everything it sends the apps: the bot list, Needs you, alerts, routines, memory, notes, and its conversations with other bots.
 - Lines for those conversations disappear from other bots' chats. Past channel messages stay, so the channel still reads correctly.
 - Past costs stay in the usage total, grouped as "Deleted bots".
-- Its routines stop, pending approvals and memory edits are refused, and its sandboxes stop.
+- Its routines stop, its pending approvals, memory edits included, are cancelled, and its sandboxes stop.
 - Other bots can't find it or message it. The main bot sees it only through its restore tools.
 - Its SQLite file, memory files, notes, and folder stay on disk and in backups. Its name is free to reuse.
 

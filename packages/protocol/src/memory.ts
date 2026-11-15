@@ -1,4 +1,4 @@
-import { arr, int, nullable, obj, oneOf, opt, type Static, str } from "@earendil-works/pi-schema";
+import { arr, int, obj, oneOf, type Static, str } from "@earendil-works/pi-schema";
 
 export const MemoryFileNames = ["USER_PROFILE.md", "USER_MEMORY.md", "BOT_PROFILE.md", "BOT_MEMORY.md"] as const;
 export const MemoryFileName = oneOf(MemoryFileNames);
@@ -29,29 +29,6 @@ export type MemoryFileParams = Static<typeof MemoryFileParams>;
 export const MemoryFileUpdate = obj({ content: str({ maxLength: 6000 }) });
 export type MemoryFileUpdate = Static<typeof MemoryFileUpdate>;
 
-export const ProposalStatuses = ["pending", "accepted", "rejected", "expired", "cancelled"] as const;
-
-// A bot's proposed edit to a memory file. The bot's tool call waits for the owner's answer until `expiresAt`.
-export const MemoryProposal = obj({
-  id: str(),
-  botId: str(),
-  file: MemoryFileName,
-  content: str(),
-  previous: str(),
-  reason: str(),
-  conversation: str(),
-  status: oneOf(ProposalStatuses),
-  createdAt: int(),
-  expiresAt: int(),
-  answeredAt: nullable(int()),
-});
-export type MemoryProposal = Static<typeof MemoryProposal>;
-
-export const MemoryProposalList = obj({ proposals: arr(MemoryProposal) });
-export type MemoryProposalList = Static<typeof MemoryProposalList>;
-
-export const ProposalListQuery = obj({ status: opt(oneOf(ProposalStatuses)), botId: opt(str()) });
-export type ProposalListQuery = Static<typeof ProposalListQuery>;
-
-export const ProposalAnswer = obj({ decision: oneOf(["accept", "reject"]) });
-export type ProposalAnswer = Static<typeof ProposalAnswer>;
+// A bot's edit to a memory file, shown with the approval that asks the owner. `previous` is the file when the bot asked.
+export const MemoryEdit = obj({ file: MemoryFileName, content: str(), previous: str() });
+export type MemoryEdit = Static<typeof MemoryEdit>;

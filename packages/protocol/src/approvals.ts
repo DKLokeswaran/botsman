@@ -1,9 +1,11 @@
 import { arr, int, nullable, obj, oneOf, opt, type Static, str } from "@earendil-works/pi-schema";
+import { MemoryEdit } from "./memory.ts";
 
 export const ApprovalStatuses = ["pending", "allowed", "denied", "expired", "cancelled"] as const;
 export const ApprovalDecisions = ["allow_once", "allow_chat", "deny"] as const;
 
 // A tool call waiting for the owner, with why the bot asks and the full call.
+// A memory edit carries the file, the new content and the current content, and can only be allowed once.
 export const Approval = obj({
   id: str(),
   botId: str(),
@@ -12,6 +14,7 @@ export const Approval = obj({
   reason: str(),
   description: str(),
   command: str(),
+  memoryEdit: nullable(MemoryEdit),
   status: oneOf(ApprovalStatuses),
   decision: nullable(oneOf(ApprovalDecisions)),
   createdAt: int(),

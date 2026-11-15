@@ -1,4 +1,4 @@
-import { chatStream, type MemoryProposal } from "@botsman/protocol";
+import { chatStream } from "@botsman/protocol";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { scriptModelProvider } from "../../src/testing/script-model.ts";
 import { HttpError, type StreamClient } from "../e2e/client.ts";
@@ -137,83 +137,56 @@ describe("approvals", () => {
   });
 });
 
-// Waits for a bot's memory proposal to appear, pending.
-async function pendingProposal(botId: string): Promise<MemoryProposal> {
-  for (let attempt = 0; attempt < 100; attempt++) {
-    const proposal = (await server.client.proposals()).proposals.find((candidate) => candidate.botId === botId);
-    if (proposal !== undefined) return proposal;
-    await new Promise((resolve) => setTimeout(resolve, 50));
-  }
-  throw new Error(`No pending proposal for bot ${botId}`);
-}
-
 describe("memory", () => {
-  it("lets only the main bot propose USER_MEMORY.md, and no bot a PROFILE file", async () => {
+  it("lets only the main bot edit USER_MEMORY.md, and no bot a PROFILE file, without asking the owner first", async () => {
     const bot = await server.client.createBot({ name: "Plain", defaultModel: SCRIPT_MODEL_REF });
     const { stream, chat } = await openChat(bot.id);
-    await server.client.send(bot.id, 'tool memory {"action":"propose_memory_edit","file":"USER_MEMORY.md","content":"x"}');
+    await server.client.send(bot.id, 'tool memory {"action":"edit_memory","file":"USER_MEMORY.md","content":"x"}');
     const refused = await stream.waitForMessage(chat, (message) => message.type === "tool_result");
     expect(refused).toMatchObject({ isError: true, output: expect.stringContaining("Only the main bot") });
+    expect((await server.client.approvals()).approvals.filter((approval) => approval.botId === bot.id)).toHaveLength(0);
     stream.close();
 
     const main = await openChat(mainId);
-    await server.client.send(mainId, 'tool memory {"action":"propose_memory_edit","file":"USER_MEMORY.md","content":"Owner lives in Chennai."}');
-    await server.client.answerProposal((await pendingProposal(mainId)).id, "accept");
-    const accepted = await main.stream.waitForMessage(main.chat, (message) => message.type === "tool_result" && message.toolName === "memory");
-    expect(accepted).toMatchObject({ isError: false, output: expect.stringContaining("accepted") });
+    await server.client.send(mainId, 'tool memory {"action":"edit_memory","file":"USER_MEMORY.md","content":"Owner lives in Chennai.","reason":"The owner said so"}');
+    const live = await main.stream.waitForLive(main.chat, (state) => state.tools.some((tool) => tool.awaitingApproval !== null));
+    const approval = (await server.client.approvals()).approvals.find((candidate) => candidate.id === live.tools[0]!.awaitingApproval)!;
+    expect(approval).toMatchObject({ reason: "The owner said so", memoryEdit: { file: "USER_MEMORY.md", content: "Owner lives in Chennai.", previous: "" } });
+    await server.client.answerApproval(approval.id, "allow_once");
+    const result = await main.stream.waitForMessage(main.chat, (message) => message.type === "tool_result" && message.toolName === "memory");
+    expect(result).toMatchObject({ isError: false, output: expect.stringContaining("USER_MEMORY.md now holds") });
     main.stream.close();
   });
 
   it("refuses an edit over the file's limit with the current usage", async () => {
     const { stream, chat } = await openChat(mainId);
     const content = "x".repeat(4100);
-    await server.client.send(mainId, `tool memory {"action":"propose_memory_edit","content":"${content}"}`);
+    await server.client.send(mainId, `tool memory {"action":"edit_memory","content":"${content}"}`);
     const result = await stream.waitForMessage(chat, (message) => message.type === "tool_result" && message.isError);
     expect(result).toMatchObject({ output: expect.stringContaining("limited to 4000 characters") });
     stream.close();
   });
 
-  it("holds the tool call until the owner rejects, and leaves the file unchanged", async () => {
-    const bot = await server.client.createBot({ name: "Rejected", defaultModel: SCRIPT_MODEL_REF });
+  it("asks even in off mode, never allows a memory edit for the whole chat, and leaves the file unchanged when denied", async () => {
+    const bot = await server.client.createBot({ name: "Denied edit", defaultModel: SCRIPT_MODEL_REF });
+    await server.client.updateBot(bot.id, { permissionMode: "off" });
     const { stream, chat } = await openChat(bot.id);
-    await server.client.send(bot.id, 'tool memory {"action":"propose_memory_edit","content":"Likes long answers."}');
-    const proposal = await pendingProposal(bot.id);
-    expect(stream.messages.get(chat)!.some((message) => message.type === "tool_result")).toBe(false);
-    await server.client.answerProposal(proposal.id, "reject");
+    await server.client.send(bot.id, 'tool memory {"action":"edit_memory","content":"Likes long answers."}');
+    const live = await stream.waitForLive(chat, (state) => state.tools.some((tool) => tool.awaitingApproval !== null));
+    const approvalId = live.tools[0]!.awaitingApproval!;
+    await expectError(server.client.answerApproval(approvalId, "allow_chat"), 400, "bad_request");
+    await server.client.answerApproval(approvalId, "deny");
     const result = await stream.waitForMessage(chat, (message) => message.type === "tool_result");
-    expect(result).toMatchObject({ isError: false, output: expect.stringContaining("rejected") });
+    expect(result).toMatchObject({ isError: true, output: expect.stringContaining("denied") });
     expect((await server.client.memory(bot.id)).files.find((file) => file.name === "BOT_MEMORY.md")!.content).toBe("");
     stream.close();
   });
 
-  it("ends an unanswered proposal once the approval wait runs out", async () => {
-    const bot = await server.client.createBot({ name: "Unanswered", defaultModel: SCRIPT_MODEL_REF });
-    server.botsman.services.db.prepare("UPDATE bots SET approval_wait_ms = 300 WHERE id = ?").run(bot.id);
-    const { stream, chat } = await openChat(bot.id);
-    await server.client.send(bot.id, 'tool memory {"action":"propose_memory_edit","content":"Never answered."}');
-    const result = await stream.waitForMessage(chat, (message) => message.type === "tool_result");
-    expect(result).toMatchObject({ output: expect.stringContaining("did not answer") });
-    expect((await server.client.proposals("expired")).proposals.some((proposal) => proposal.botId === bot.id)).toBe(true);
-    stream.close();
-  });
-
-  it("cancels a waiting proposal when the bot is stopped", async () => {
-    const bot = await server.client.createBot({ name: "Stopped", defaultModel: SCRIPT_MODEL_REF });
-    await server.client.send(bot.id, 'tool memory {"action":"propose_memory_edit","content":"Stopped midway."}');
-    const proposal = await pendingProposal(bot.id);
-    await server.client.stop(bot.id);
-    expect(server.botsman.services.proposals.get(proposal.id).status).toBe("cancelled");
-  });
-
-  it("returns the answer as the tool result, and sends memory changes with the next message, not shown in chat", async () => {
+  it("sends memory changes with the bot's next message, not shown in chat", async () => {
     const bot = await server.client.createBot({ name: "Rememberer", defaultModel: SCRIPT_MODEL_REF });
     const { stream, chat } = await openChat(bot.id);
     await server.client.send(bot.id, "first");
     await stream.waitForMessage(chat, (message) => message.type === "assistant" && message.text === "echo: first");
-    await server.client.send(bot.id, 'tool memory {"action":"propose_memory_edit","content":"Prefers short answers."}');
-    await server.client.answerProposal((await pendingProposal(bot.id)).id, "accept");
-    const result = await stream.waitForMessage(chat, (message) => message.type === "tool_result");
-    expect(result).toMatchObject({ isError: false, output: expect.stringContaining("BOT_MEMORY.md now holds the content you proposed") });
     await server.client.request("PUT", `/api/bots/${bot.id}/memory/USER_PROFILE.md`, { content: "The owner is Lokes." });
     await server.client.send(bot.id, "second");
     await stream.waitForMessage(chat, (message) => message.type === "assistant" && message.text === "echo: second");

@@ -2,10 +2,9 @@ import { int, lit, obj, opt, type Static, str, union } from "@earendil-works/pi-
 import type { Approval } from "./approvals.ts";
 import type { Bot } from "./bots.ts";
 import type { ChatEvent, ChatSnapshot } from "./chat.ts";
-import type { MemoryProposal } from "./memory.ts";
 import type { ProviderLogin } from "./providers.ts";
 
-// Stream names: `chat:<botId>` for one bot's chat, `server` for approvals, proposals, bots, and sign-ins.
+// Stream names: `chat:<botId>` for one bot's chat, `server` for approvals, bots, and sign-ins.
 export const SERVER_STREAM = "server";
 export function chatStream(botId: string): string {
   return `chat:${botId}`;
@@ -28,7 +27,6 @@ export type ClientMessage = Static<typeof ClientMessage>;
 
 export type ServerEvent =
   | { type: "approval"; approval: Approval }
-  | { type: "proposal"; proposal: MemoryProposal }
   | { type: "bot"; bot: Bot }
   | { type: "bot_deleted"; botId: string }
   | { type: "login"; login: ProviderLogin }
@@ -37,7 +35,6 @@ export type ServerEvent =
 export type ServerSnapshot = {
   bots: Bot[];
   approvals: Approval[];
-  proposals: MemoryProposal[];
 };
 
 export type StreamEvent = ChatEvent | ServerEvent;

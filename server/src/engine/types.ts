@@ -1,9 +1,8 @@
-import type { Bot, MemoryProposal, ModelRef, NoteInfo, NoteSearchHit, ThinkingLevel } from "@botsman/protocol";
+import type { Bot, MemoryFileName, ModelRef, NoteInfo, NoteSearchHit, ThinkingLevel } from "@botsman/protocol";
 import type { Models } from "@earendil-works/pi-ai";
 import type { ExecutionEnv } from "@earendil-works/pi-durable/env";
 import type { ViewDocs, ViewEntry } from "../events/chat-view.ts";
 import type { MemorySnapshot } from "../memory/memory-files.ts";
-import type { ProposalInput, ProposalWait } from "../memory/proposals.ts";
 import type { ToolCheck, ToolVerdict } from "../permissions/permission-policy.ts";
 
 // What the `memory` tool can do for one bot. The engine owns the tool; these services own the files.
@@ -14,7 +13,7 @@ export type MemoryToolBackend = {
   deleteNote(botId: string, name: string): void;
   searchNotes(botId: string, query: string): NoteSearchHit[];
   readMemory(botId: string): MemorySnapshot;
-  proposeMemoryEdit(input: ProposalInput, wait: ProposalWait): Promise<MemoryProposal>;
+  editMemory(bot: Bot, file: MemoryFileName, content: string): void;
 };
 
 // Everything the engine needs from the rest of the server, as plain interfaces.

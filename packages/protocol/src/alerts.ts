@@ -1,10 +1,10 @@
 import { int, lit, obj, oneOf, type Static, str, union } from "@earendil-works/pi-schema";
 
 // Alert kinds from the PRD. The alert names the bot and the event; apps fetch any content from the server.
+// Memory edits are approvals, so they alert as `approval`.
 export const AlertKinds = [
   "approval",
   "question",
-  "memory_proposal",
   "routine_result",
   "failure",
   "channel_mention",

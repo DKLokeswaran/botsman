@@ -8,7 +8,6 @@ import type {
   ChatSnapshot,
   LiveState,
   MemoryFiles,
-  MemoryProposal,
   NoteSearchResult,
   SendMessageResponse,
   ServerMessage,
@@ -88,14 +87,6 @@ export class BotsmanClient {
 
   answerApproval(id: string, decision: "allow_once" | "allow_chat" | "deny"): Promise<Approval> {
     return this.request("POST", `/api/approvals/${id}/answer`, { decision });
-  }
-
-  proposals(status = "pending"): Promise<{ proposals: MemoryProposal[] }> {
-    return this.request("GET", `/api/memory/proposals?status=${status}`);
-  }
-
-  answerProposal(id: string, decision: "accept" | "reject"): Promise<MemoryProposal> {
-    return this.request("POST", `/api/memory/proposals/${id}/answer`, { decision });
   }
 
   memory(botId: string): Promise<MemoryFiles> {

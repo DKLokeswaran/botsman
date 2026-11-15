@@ -57,10 +57,10 @@ export class CompactionGuard {
 }
 
 function savePrompt(bot: Bot): string {
-  const userMemory = bot.isMain ? ", and USER_MEMORY.md edits for lasting facts about the owner" : "";
+  const userMemory = bot.isMain ? ", and USER_MEMORY.md for lasting facts about the owner" : "";
   return [
     "This chat is close to its context limit and will be compacted after this turn.",
-    `Save anything worth keeping now: write notes with the memory tool for longer records, and propose BOT_MEMORY.md edits for facts that belong in every prompt${userMemory}.`,
+    `Save anything worth keeping now with the memory tool: notes for longer records, BOT_MEMORY.md for facts that belong in every prompt${userMemory}. Memory file edits wait for the owner's approval.`,
     "Reply with one short line when you are done.",
   ].join(" ");
 }
