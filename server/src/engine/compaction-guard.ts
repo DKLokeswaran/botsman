@@ -2,13 +2,15 @@ import type { Bot } from "@botsman/protocol";
 import type { Usage } from "@earendil-works/pi-ai";
 import { BACKGROUND_CONTEXT as context } from "@earendil-works/chord/context";
 import type { Conversation, Harness } from "@earendil-works/pi-durable";
-import { OWNER_MESSAGE_KIND, PRE_COMPACTION_KIND } from "../events/chat-view.ts";
+import { OWNER_MESSAGE_KIND, PRE_COMPACTION_KIND, type ViewEntry } from "../events/chat-view.ts";
 import type { ChatView, EngineServices } from "./types.ts";
 
 // Pi's blocking threshold sits this far below the context window; Pi's own compaction there is the safety net.
 const PI_RESERVE_TOKENS = 16_384;
 // Botsman starts its save turn this far before Pi's threshold.
 const SAVE_MARGIN_TOKENS = 16_384;
+// How many of the newest stored entries are read to see how a save turn ended.
+const RECENT_ENTRIES = 50;
 
 // When a chat nears its context limit, gives the bot one turn to save what matters, then compacts.
 export class CompactionGuard {
@@ -59,9 +61,16 @@ export class CompactionGuard {
       { type: "input", content: savePrompt(bot), entry: { kind: PRE_COMPACTION_KIND, data: {} }, whenBusy: "followUp", requestId: `pre-compaction:${answerId}` },
       context,
     );
-    // A save turn that failed or was stopped saved nothing; the next reply near the limit asks again.
+    // A save turn that failed or was stopped may have saved too little; the next reply near the limit asks again.
     const settled = await submission.wait(context);
-    if (settled.status === "done") await this.#compact();
+    if (settled.status === "done" && (await this.#saveFinished())) await this.#compact();
+  }
+
+  // Judges the save turn from the stored transcript, by the same rule as after a restart.
+  async #saveFinished(): Promise<boolean> {
+    const page = await this.#root.entries({ order: "descending" }, RECENT_ENTRIES, undefined, context);
+    const entries = [...(page.items as unknown as ViewEntry[])].reverse();
+    return saveAwaitingCompaction({ entries, docs: {} });
   }
 
   async #compact(): Promise<void> {
@@ -80,7 +89,7 @@ function savePrompt(bot: Bot): string {
 }
 
 // True when the newest input is a save turn whose last reply finished, with no compaction or reset after it.
-// A save turn that failed or was stopped saved nothing, so the next reply near the limit asks again instead.
+// A save turn that failed or was stopped may have saved too little, so the next reply near the limit asks again instead.
 function saveAwaitingCompaction(view: ChatView): boolean {
   let lastReplyFinished: boolean | undefined;
   for (let index = view.entries.length - 1; index >= 0; index--) {
@@ -92,9 +101,10 @@ function saveAwaitingCompaction(view: ChatView): boolean {
   return false;
 }
 
+// A finished reply ends the turn: it doesn't stop for tool calls, and it didn't fail or get stopped.
 function finished(entry: ChatView["entries"][number]): boolean {
   const message = entry.model?.[0];
-  return message?.role === "assistant" && message.stopReason !== "error" && message.stopReason !== "aborted";
+  return message?.role === "assistant" && (message.stopReason === "stop" || message.stopReason === "length");
 }
 
 function compacting(view: ChatView): boolean {

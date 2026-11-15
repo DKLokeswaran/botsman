@@ -6,11 +6,15 @@ import type { ChatView, EngineServices } from "../../src/engine/types.ts";
 import { OWNER_MESSAGE_KIND, PRE_COMPACTION_KIND } from "../../src/events/chat-view.ts";
 
 const WINDOW = 200_000;
+const answer = (id: number, tokens: number, stopReason = "stop") => ({ id, kind: "pi.assistant", model: [{ role: "assistant", stopReason, usage: { totalTokens: tokens } }] });
+const entry = (id: number, kind: string) => ({ id, kind });
 
 // A guard over a fake conversation that records what it is asked to do.
-function guard(saveOutcome: "done" | "unanswered" = "done") {
+function guard(saveOutcome: "done" | "unanswered" = "done", saveReply: object = answer(9, 1_000)) {
   const calls: string[] = [];
+  const stored = [saveReply, entry(8, PRE_COMPACTION_KIND)];
   const root = {
+    entries: async () => ({ items: stored }),
     submit: async () => {
       calls.push("save");
       return { wait: async () => ({ status: saveOutcome }) };
@@ -30,8 +34,6 @@ function guard(saveOutcome: "done" | "unanswered" = "done") {
 }
 
 const bot = { id: "b1", isMain: false } as Bot;
-const answer = (id: number, tokens: number, stopReason = "stop") => ({ id, kind: "pi.assistant", model: [{ role: "assistant", stopReason, usage: { totalTokens: tokens } }] });
-const entry = (id: number, kind: string) => ({ id, kind });
 const view = (entries: object[]): ChatView => ({ entries, docs: {} }) as unknown as ChatView;
 const settle = () => new Promise((resolve) => setTimeout(resolve, 10));
 
@@ -41,6 +43,13 @@ describe("saving before compaction", () => {
     subject.afterRun(bot, view([entry(1, OWNER_MESSAGE_KIND), answer(2, WINDOW - 20_000)]));
     await settle();
     expect(calls).toEqual(["save", "compact"]);
+  });
+
+  it.each(["toolUse", "error", "aborted"])("doesn't compact when the save turn's last reply ended with %s", async (stopReason) => {
+    const { calls, guard: subject } = guard("done", answer(9, 0, stopReason));
+    subject.afterRun(bot, view([entry(1, OWNER_MESSAGE_KIND), answer(2, WINDOW - 20_000)]));
+    await settle();
+    expect(calls).toEqual(["save"]);
   });
 
   it("doesn't compact when the save turn is stopped or fails", async () => {
@@ -57,7 +66,7 @@ describe("saving before compaction", () => {
     expect(calls).toEqual(["compact"]);
   });
 
-  it.each(["error", "aborted"])("doesn't compact after a save turn whose reply ended with %s", async (stopReason) => {
+  it.each(["toolUse", "error", "aborted"])("doesn't compact after a restart when the save turn's reply ended with %s", async (stopReason) => {
     const { calls, guard: subject } = guard();
     subject.afterRun(bot, view([entry(1, OWNER_MESSAGE_KIND), answer(2, WINDOW - 20_000), entry(3, PRE_COMPACTION_KIND), answer(4, 0, stopReason)]));
     await settle();
