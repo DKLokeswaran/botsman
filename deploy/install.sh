@@ -1,11 +1,13 @@
 #!/usr/bin/env bash
 # Installs the Botsman server for the current user: checks Node and pnpm, sets up bubblewrap and its AppArmor
-# profile (the only steps that need root), installs dependencies, and starts a systemd user service.
+# profile, installs dependencies, and starts a systemd user service. Installing bubblewrap and the profile needs root,
+# and so does lingering when logind refuses it.
 set -euo pipefail
 
 REPO="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 PNPM_VERSION="12.18.0"
 NODE_MAJOR="24"
+PNPM="pnpm"
 
 say() { printf '\n==> %s\n' "$*"; }
 fail() { printf '\nerror: %s\n' "$*" >&2; exit 1; }
@@ -18,26 +20,34 @@ check_node() {
   [ "$major" = "$NODE_MAJOR" ] || fail "Node ${NODE_MAJOR} is required; found $(node -v)."
 }
 
+# Installs pnpm under ~/.local, so it works when Node itself is installed system-wide and owned by root.
 check_pnpm() {
-  if ! command -v pnpm >/dev/null || [ "$(pnpm -v)" != "$PNPM_VERSION" ]; then
-    say "Installing pnpm ${PNPM_VERSION} for this user"
-    npm install --global "pnpm@${PNPM_VERSION}"
-  fi
+  if command -v pnpm >/dev/null && [ "$(pnpm -v)" = "$PNPM_VERSION" ]; then return; fi
+  PNPM="$HOME/.local/bin/pnpm"
+  if [ -x "$PNPM" ] && [ "$("$PNPM" -v)" = "$PNPM_VERSION" ]; then return; fi
+  say "Installing pnpm ${PNPM_VERSION} for this user"
+  npm install --global --prefix "$HOME/.local" "pnpm@${PNPM_VERSION}"
 }
 
 # Bots never run unsandboxed, so bubblewrap must be on the host.
 install_bwrap() {
   if command -v bwrap >/dev/null; then return; fi
   say "Installing bubblewrap (needs sudo)"
+  sudo apt-get update
   sudo apt-get install -y bubblewrap
 }
 
+bwrap_works() {
+  bwrap --unshare-user --ro-bind / / true 2>/dev/null
+}
+
 # Ubuntu 24.04 and later block user namespaces unless a program has a profile. The profile covers /usr/bin/bwrap only;
-# the restriction stays on for everything else.
+# the restriction stays on for everything else. Checking bwrap itself, not the profile file, also repairs a profile
+# that was copied but never loaded.
 install_apparmor_profile() {
   local restricted="/proc/sys/kernel/apparmor_restrict_unprivileged_userns"
   if [ ! -f "$restricted" ] || [ "$(cat "$restricted")" != "1" ]; then return; fi
-  if [ -f /etc/apparmor.d/bwrap ]; then return; fi
+  if bwrap_works; then return; fi
   say "Installing the AppArmor profile for bwrap (needs sudo)"
   sudo install -m 0644 "$REPO/deploy/apparmor-bwrap" /etc/apparmor.d/bwrap
   sudo apparmor_parser -r /etc/apparmor.d/bwrap
@@ -45,7 +55,7 @@ install_apparmor_profile() {
 
 install_dependencies() {
   say "Installing dependencies"
-  (cd "$REPO" && pnpm install --frozen-lockfile)
+  (cd "$REPO" && "$PNPM" install --frozen-lockfile)
 }
 
 install_service() {
@@ -56,7 +66,7 @@ install_service() {
   systemctl --user daemon-reload
   systemctl --user enable --now botsman.service
   # Keeps the service running while the owner is logged out.
-  loginctl enable-linger "$USER" || echo "Run 'sudo loginctl enable-linger $USER' so Botsman keeps running after you log out."
+  loginctl enable-linger "$USER" 2>/dev/null || sudo loginctl enable-linger "$USER"
 }
 
 check_node
