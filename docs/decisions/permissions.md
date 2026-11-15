@@ -89,9 +89,9 @@ The install script uses the `bwrap` already on the host, and installs it through
 
 ### What has been tested
 
-**The sandbox has been tested on one setup only:** Ubuntu 24.04, kernel 6.8, x86-64, and bubblewrap 0.9.0, with Pi's real tools and its faux model provider, as of 2026-11-06. It has not been run with a real model, after a reboot, on arm64, or on any other distro. Ubuntu, Pi's daemon, and the Agent SDK all publish arm64 builds.
+**The sandbox has been tested on two setups:** Ubuntu 24.04, kernel 6.8, x86-64, and bubblewrap 0.9.0, as of 2026-11-06; and Debian 12, kernel 6.1, x86-64, and bubblewrap 0.8.0, as of 2026-11-16. Both used Pi's real tools and its faux model provider. It has not been run with a real model, after a host reboot, on arm64, or on any other distro. Debian 12 doesn't restrict user namespaces, so it needs no AppArmor profile. Ubuntu, Pi's daemon, and the Agent SDK all publish arm64 builds.
 
-The server's own tests, in `server/test/integration/sandbox.test.ts` and `crash.test.ts`, check on every run that the owner's home, keys, and Botsman's data stay hidden, that system folders are read-only with no capabilities, that the network toggle works, that Stop ends a process that left its group, and that killing the server ends every sandboxed process. They passed on the same setup on 2026-11-09.
+The server's own tests, in `server/test/integration/sandbox.test.ts` and `crash.test.ts`, check on every run that the owner's home, keys, and Botsman's data stay hidden, that system folders are read-only with no capabilities, that the network toggle works, that Stop ends a process that left its group, and that killing the server ends every sandboxed process. They passed on the Ubuntu setup on 2026-11-09, and on the Debian setup, after a run of `deploy/install.sh`, on 2026-11-16. The table below is from the Ubuntu setup.
 
 | Test | Result |
 | --- | --- |
