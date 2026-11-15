@@ -6,19 +6,35 @@ import type { ChatView, EngineServices } from "../../src/engine/types.ts";
 import { OWNER_MESSAGE_KIND, PRE_COMPACTION_KIND } from "../../src/events/chat-view.ts";
 
 const WINDOW = 200_000;
-const answer = (id: number, tokens: number, stopReason = "stop") => ({ id, kind: "pi.assistant", model: [{ role: "assistant", stopReason, usage: { totalTokens: tokens } }] });
-const entry = (id: number, kind: string) => ({ id, kind });
+const SAVE_ANSWER = 90;
 
-// A guard over a fake conversation that records what it is asked to do.
-function guard(saveOutcome: "done" | "unanswered" = "done", saveReply: object = answer(9, 1_000)) {
+const answer = (id: number, tokens: number, stopReason = "stop") => ({ id, kind: "pi.assistant", model: [{ role: "assistant", stopReason, usage: { totalTokens: tokens } }] });
+const entry = (id: number, kind: string, data?: unknown) => ({ id, kind, data });
+const saveEntry = (id: number, answerId: number) => entry(id, PRE_COMPACTION_KIND, { requestId: `pre-compaction:${answerId}` });
+const view = (entries: object[]): ChatView => ({ entries, docs: {} }) as unknown as ChatView;
+const settle = () => new Promise((resolve) => setTimeout(resolve, 10));
+const bot = { id: "b1", isMain: false } as Bot;
+
+type SaveOutcome = { status: "done"; stopReason: string } | { status: "unanswered" };
+
+// A guard over a fake conversation: submissions are deduplicated by request id, as in Pi, and the save turn's
+// recorded answer is entry SAVE_ANSWER.
+function guard(outcome: SaveOutcome = { status: "done", stopReason: "stop" }) {
   const calls: string[] = [];
-  const stored = [saveReply, entry(8, PRE_COMPACTION_KIND)];
+  const submissions = new Map<string, object>();
+  const stored = [answer(SAVE_ANSWER, 1_000, outcome.status === "done" ? outcome.stopReason : "error")];
+  const settled = outcome.status === "done" ? { status: "done", answer: SAVE_ANSWER } : { status: "unanswered", reason: "aborted" };
   const root = {
-    entries: async () => ({ items: stored }),
-    submit: async () => {
-      calls.push("save");
-      return { wait: async () => ({ status: saveOutcome }) };
+    submit: async (draft: { requestId: string }) => {
+      if (!submissions.has(draft.requestId)) {
+        calls.push("save");
+        submissions.set(draft.requestId, settled);
+      }
+      return { wait: async () => submissions.get(draft.requestId) };
     },
+    entries: async (query: { maxEntryId: number; order: string }) => ({
+      items: stored.filter((item) => item.id <= query.maxEntryId).sort((a, b) => (query.order === "descending" ? b.id - a.id : a.id - b.id)),
+    }),
     compact: async () => {
       calls.push("compact");
       return "task";
@@ -30,12 +46,8 @@ function guard(saveOutcome: "done" | "unanswered" = "done", saveReply: object = 
     models: { getModel: () => ({ contextWindow: WINDOW }) },
     log: () => {},
   } as unknown as EngineServices;
-  return { calls, guard: new CompactionGuard(root, harness, services, "b1") };
+  return { calls, submissions, settled, guard: new CompactionGuard(root, harness, services, "b1") };
 }
-
-const bot = { id: "b1", isMain: false } as Bot;
-const view = (entries: object[]): ChatView => ({ entries, docs: {} }) as unknown as ChatView;
-const settle = () => new Promise((resolve) => setTimeout(resolve, 10));
 
 describe("saving before compaction", () => {
   it("asks for a save turn, then compacts, when a reply nears the limit", async () => {
@@ -45,37 +57,40 @@ describe("saving before compaction", () => {
     expect(calls).toEqual(["save", "compact"]);
   });
 
-  it.each(["toolUse", "error", "aborted"])("doesn't compact when the save turn's last reply ended with %s", async (stopReason) => {
-    const { calls, guard: subject } = guard("done", answer(9, 0, stopReason));
-    subject.afterRun(bot, view([entry(1, OWNER_MESSAGE_KIND), answer(2, WINDOW - 20_000)]));
-    await settle();
-    expect(calls).toEqual(["save"]);
-  });
-
   it("doesn't compact when the save turn is stopped or fails", async () => {
-    const { calls, guard: subject } = guard("unanswered");
+    const { calls, guard: subject } = guard({ status: "unanswered" });
     subject.afterRun(bot, view([entry(1, OWNER_MESSAGE_KIND), answer(2, WINDOW - 20_000)]));
     await settle();
     expect(calls).toEqual(["save"]);
   });
 
-  it("only compacts when a restart left a save turn without its compaction", async () => {
-    const { calls, guard: subject } = guard();
-    subject.afterRun(bot, view([entry(1, OWNER_MESSAGE_KIND), answer(2, WINDOW - 20_000), entry(3, PRE_COMPACTION_KIND), answer(4, WINDOW - 19_000)]));
+  it.each(["toolUse", "length", "error", "aborted"])("doesn't compact when the save turn's recorded answer ended with %s", async (stopReason) => {
+    const { calls, guard: subject } = guard({ status: "done", stopReason });
+    subject.afterRun(bot, view([entry(1, OWNER_MESSAGE_KIND), answer(2, WINDOW - 20_000)]));
+    await settle();
+    expect(calls).toEqual(["save"]);
+  });
+
+  it("only compacts a finished save turn a restart left behind, even with owner messages after it", async () => {
+    const { calls, submissions, settled, guard: subject } = guard();
+    submissions.set("pre-compaction:2", settled);
+    subject.afterRun(bot, view([answer(2, WINDOW - 20_000), saveEntry(3, 2), answer(SAVE_ANSWER, 1_000), entry(95, OWNER_MESSAGE_KIND), answer(96, 1_000)]));
     await settle();
     expect(calls).toEqual(["compact"]);
   });
 
-  it.each(["toolUse", "error", "aborted"])("doesn't compact after a restart when the save turn's reply ended with %s", async (stopReason) => {
-    const { calls, guard: subject } = guard();
-    subject.afterRun(bot, view([entry(1, OWNER_MESSAGE_KIND), answer(2, WINDOW - 20_000), entry(3, PRE_COMPACTION_KIND), answer(4, 0, stopReason)]));
+  it("asks again at the next reply near the limit after a save turn that didn't finish", async () => {
+    const { calls, submissions, guard: subject } = guard();
+    submissions.set("pre-compaction:2", { status: "unanswered", reason: "aborted" });
+    subject.afterRun(bot, view([answer(2, WINDOW - 20_000), saveEntry(3, 2), entry(95, OWNER_MESSAGE_KIND), answer(96, WINDOW - 18_000)]));
     await settle();
-    expect(calls).toEqual([]);
+    expect(calls).toEqual(["save", "compact"]);
+    expect([...submissions.keys()]).toEqual(["pre-compaction:2", "pre-compaction:96"]);
   });
 
   it("does nothing once the chat was compacted after the last reply", async () => {
     const { calls, guard: subject } = guard();
-    subject.afterRun(bot, view([entry(3, PRE_COMPACTION_KIND), answer(4, WINDOW - 19_000), entry(5, "pi.compaction")]));
+    subject.afterRun(bot, view([saveEntry(3, 2), answer(4, WINDOW - 19_000), entry(5, "pi.compaction")]));
     await settle();
     expect(calls).toEqual([]);
   });

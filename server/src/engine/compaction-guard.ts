@@ -1,16 +1,14 @@
 import type { Bot } from "@botsman/protocol";
 import type { Usage } from "@earendil-works/pi-ai";
 import { BACKGROUND_CONTEXT as context } from "@earendil-works/chord/context";
-import type { Conversation, Harness } from "@earendil-works/pi-durable";
-import { OWNER_MESSAGE_KIND, PRE_COMPACTION_KIND, type ViewEntry } from "../events/chat-view.ts";
+import type { Conversation, EntryId, Harness } from "@earendil-works/pi-durable";
+import { PRE_COMPACTION_KIND, type ViewEntry } from "../events/chat-view.ts";
 import type { ChatView, EngineServices } from "./types.ts";
 
 // Pi's blocking threshold sits this far below the context window; Pi's own compaction there is the safety net.
 const PI_RESERVE_TOKENS = 16_384;
 // Botsman starts its save turn this far before Pi's threshold.
 const SAVE_MARGIN_TOKENS = 16_384;
-// How many of the newest stored entries are read to see how a save turn ended.
-const RECENT_ENTRIES = 50;
 
 // When a chat nears its context limit, gives the bot one turn to save what matters, then compacts.
 export class CompactionGuard {
@@ -38,12 +36,16 @@ export class CompactionGuard {
       .finally(() => (this.#saving = false));
   }
 
-  // A save turn a restart left without its compaction only needs the compaction; otherwise a reply near the limit starts the save turn.
+  // A save turn a restart or a stop left without its compaction is settled first; then a reply near the limit starts one.
   #nextStep(bot: Bot, view: ChatView): (() => Promise<void>) | undefined {
-    if (saveAwaitingCompaction(view)) return () => this.#compact();
+    const leftover = leftoverSaveRequest(view);
     const last = lastAnswer(view);
-    if (last === undefined || !this.#nearLimit(bot, last.usage)) return undefined;
-    return () => this.#saveThenCompact(bot, last.id);
+    const fresh = last !== undefined && this.#nearLimit(bot, last.usage) ? saveRequestId(last.id) : undefined;
+    if (leftover === undefined && fresh === undefined) return undefined;
+    return async () => {
+      if (leftover !== undefined && (await this.#settleSave(bot, leftover))) return;
+      if (fresh !== undefined && fresh !== leftover) await this.#settleSave(bot, fresh);
+    };
   }
 
   #nearLimit(bot: Bot, usage: Usage): boolean {
@@ -55,22 +57,24 @@ export class CompactionGuard {
     return saveAt > 0 && usage.totalTokens >= saveAt;
   }
 
-  // The request id ties the save turn to the answer that crossed the threshold, so a restart never asks twice.
-  async #saveThenCompact(bot: Bot, answerId: number): Promise<void> {
+  // Submits the save turn, or finds the one already submitted under this request id, waits for it, and compacts
+  // when it finished. Returns whether it compacted.
+  async #settleSave(bot: Bot, requestId: string): Promise<boolean> {
     const submission = await this.#root.submit(
-      { type: "input", content: savePrompt(bot), entry: { kind: PRE_COMPACTION_KIND, data: {} }, whenBusy: "followUp", requestId: `pre-compaction:${answerId}` },
+      { type: "input", content: savePrompt(bot), entry: { kind: PRE_COMPACTION_KIND, data: { requestId } }, whenBusy: "followUp", requestId },
       context,
     );
-    // A save turn that failed or was stopped may have saved too little; the next reply near the limit asks again.
     const settled = await submission.wait(context);
-    if (settled.status === "done" && (await this.#saveFinished())) await this.#compact();
+    if (settled.status !== "done" || settled.answer === undefined || !(await this.#answerFinished(settled.answer))) return false;
+    await this.#compact();
+    return true;
   }
 
-  // Judges the save turn from the stored transcript, by the same rule as after a restart.
-  async #saveFinished(): Promise<boolean> {
-    const page = await this.#root.entries({ order: "descending" }, RECENT_ENTRIES, undefined, context);
-    const entries = [...(page.items as unknown as ViewEntry[])].reverse();
-    return saveAwaitingCompaction({ entries, docs: {} });
+  // Whether the answer Pi recorded for the save turn ended the turn.
+  async #answerFinished(answerId: number): Promise<boolean> {
+    const page = await this.#root.entries({ maxEntryId: answerId as EntryId, order: "descending" }, 1, undefined, context);
+    const entry = page.items[0] as unknown as ViewEntry | undefined;
+    return entry?.id === answerId && finished(entry);
   }
 
   async #compact(): Promise<void> {
@@ -88,23 +92,25 @@ function savePrompt(bot: Bot): string {
   ].join(" ");
 }
 
-// True when the newest input is a save turn whose last reply finished, with no compaction or reset after it.
-// A save turn that failed or was stopped may have saved too little, so the next reply near the limit asks again instead.
-function saveAwaitingCompaction(view: ChatView): boolean {
-  let lastReplyFinished: boolean | undefined;
+// The request id of the newest save turn with no compaction or reset after it, whatever came after it.
+function leftoverSaveRequest(view: ChatView): string | undefined {
   for (let index = view.entries.length - 1; index >= 0; index--) {
     const entry = view.entries[index]!;
-    if (entry.kind === PRE_COMPACTION_KIND) return lastReplyFinished === true;
-    if (entry.kind === OWNER_MESSAGE_KIND || entry.kind === "pi.compaction" || entry.kind === "pi.reset") return false;
-    if (entry.kind === "pi.assistant" && lastReplyFinished === undefined) lastReplyFinished = finished(entry);
+    if (entry.kind === "pi.compaction" || entry.kind === "pi.reset") return undefined;
+    if (entry.kind === PRE_COMPACTION_KIND) return (entry.data as { requestId?: string } | undefined)?.requestId;
   }
-  return false;
+  return undefined;
 }
 
-// A finished reply ends the turn: it doesn't stop for tool calls, and it didn't fail or get stopped.
+// Tied to the answer that crossed the threshold, so a restart or a repeated check never submits that save twice.
+function saveRequestId(answerId: number): string {
+  return `pre-compaction:${answerId}`;
+}
+
+// A finished reply ends the turn on its own: not stopped for tool calls, cut off at the output limit, failed, or stopped.
 function finished(entry: ChatView["entries"][number]): boolean {
   const message = entry.model?.[0];
-  return message?.role === "assistant" && (message.stopReason === "stop" || message.stopReason === "length");
+  return message?.role === "assistant" && message.stopReason === "stop";
 }
 
 function compacting(view: ChatView): boolean {
