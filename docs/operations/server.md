@@ -29,7 +29,7 @@ The server listens on `127.0.0.1:7600` and accepts only HTTPS requests. Every re
 | --- | --- |
 | Caddy | `reverse_proxy 127.0.0.1:7600` in the site block. Caddy sends `X-Forwarded-Proto`. |
 | Tailscale certificate | Run `tailscale cert`, then set `BOTSMAN_TLS_CERT` and `BOTSMAN_TLS_KEY` to the files, and `BOTSMAN_HOST` to the tailnet address |
-| Tailscale Serve | `tailscale serve --bg --https=443 http://127.0.0.1:7600`. Whether Serve sends `X-Forwarded-Proto` has not been checked; if requests fail with `https_required`, use the certificate setup instead. |
+| Tailscale Serve | `tailscale serve --bg --https=443 http://127.0.0.1:7600`. Serve connects from `127.0.0.1` and sends `X-Forwarded-Proto: https`, replacing any `X-Forwarded-*` header the client sent, so `X-Forwarded-For` holds the device's real tailnet address. |
 
 ## Settings
 
