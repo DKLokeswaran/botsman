@@ -1,0 +1,8 @@
+packages:
+  - packages/*
+  - server
+
+# Install scripts stay blocked unless listed here as true.
+allowBuilds:
+  "@google/genai": false
+  protobufjs: false

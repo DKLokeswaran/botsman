@@ -1,0 +1,28 @@
+{
+  "name": "@botsman/server",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "start": "node src/main.ts",
+    "backup": "node src/backup-cli.ts",
+    "test": "vitest run",
+    "typecheck": "tsc -p tsconfig.json"
+  },
+  "dependencies": {
+    "@botsman/protocol": "workspace:*",
+    "@earendil-works/chord": "1.5.0",
+    "@earendil-works/pi-ai": "1.5.0",
+    "@earendil-works/pi-durable": "1.5.0",
+    "@earendil-works/pi-env": "1.5.0",
+    "@earendil-works/pi-schema": "1.5.0",
+    "@fastify/websocket": "11.3.4",
+    "fastify": "5.12.7"
+  },
+  "devDependencies": {
+    "@types/node": "24.19.2",
+    "typescript": "6.0.3",
+    "vitest": "5.0.5",
+    "@types/ws": "8.18.1"
+  }
+}

@@ -19,11 +19,19 @@ So Botsman limits what a command can do, then asks about anything beyond that.
 
 | Mode | Behaviour |
 | --- | --- |
-| Manual | Always asks the owner |
-| Smart | A classifier decides. Any uncertainty or failure asks the owner. |
+| Manual | Always asks the owner. The default for a new bot. |
+| Smart | A classifier decides. Any uncertainty or failure asks the owner. Until the classifier exists, Smart runs like Off. |
 | Off | Runs without asking |
 
 MCP tools marked destructive always ask, in every mode, and so do memory edits.
+
+Smart is a real setting the protocol and apps accept. In the server it calls the same path as Off, through one function that the classifier replaces, so nothing else changes when the classifier arrives. The apps show fixed text next to the Smart option: "Smart currently runs like Off."
+
+### What counts as leaving the folder
+
+Commands are never judged, so `bash` always counts as inside: the sandbox limits what it reaches. The `read`, `write`, and `edit` tools leave when their path resolves outside the bot's folder. The path is judged as Pi uses it: a leading `@` dropped, Unicode spaces made plain, `~` expanded to the bot's folder, `file://` URLs turned into paths, and symbolic links followed to where they point. Because `read` also tries other spellings of a missing file, a call leaves if any of those spellings resolves outside the folder. Any other tool without its own rule counts as leaving, so it asks. The `memory` tool counts as inside, because it reaches only the bot's own notes and memory files. Its `edit_memory` call is the exception: it always asks, in every mode, and "Allow for this chat" doesn't cover it. See [Confirmation](memory.md#confirmation).
+
+An approval doesn't widen the sandbox. An allowed read of `/etc/hostname` works because the sandbox shows `/etc`; an allowed write outside the folder still fails, because nothing outside it is writable.
 
 ## How the sandbox is set up
 
@@ -31,11 +39,18 @@ The server runs as the owner's user, and starts one `bwrap` sandbox per bot. Pi'
 
 | Inside the sandbox | Access |
 | --- | --- |
-| `/usr`, `/etc`, the DNS resolver folder, and the `pi-env` daemon's folder | Read-only |
+| `/usr` and `/etc` | Read-only |
+| `/bin`, `/sbin`, `/lib`, `/lib32`, `/lib64`, `/libx32` | The same links into `/usr` as on the host, or read-only folders on hosts without a merged `/usr` |
+| The DNS resolver folder, when `/etc/resolv.conf` points outside `/etc` (`/run/systemd/resolve` on systemd-resolved hosts) | Read-only |
+| The `pi-env` daemon program, at `/run/botsman/pi-env` | Read-only, so the bot doesn't see where Botsman is installed |
 | `~/.agents` and Botsman's shared `skills/` | Read-only |
 | The bot's folder, wherever the owner put it | Read-write |
 | `/proc`, `/dev`, `/tmp` | The sandbox's own private copies |
-| Everything else, including the rest of `/home`, and `/sys` | Doesn't exist |
+| Everything else, including the rest of `/home`, `/sys`, `/opt`, `/var`, and `/root` | Doesn't exist |
+
+Toolchains installed in the owner's home, such as nvm, pyenv, or cargo, are hidden. A bot that needs one installs it in its own folder.
+
+Paths are added only when a common command such as `git`, `npm`, or `pip` needs one.
 
 - **Namespaces.** Each sandbox has its own user, process, IPC, UTS, and cgroup namespaces. Bots can't see or signal each other's processes, the server's, or the owner's.
 - **Privileges.** All capabilities are dropped and new privileges are blocked, so `sudo` and `su` can't work. `--disable-userns` stops a bot creating namespaces of its own.
@@ -46,7 +61,9 @@ The server runs as the owner's user, and starts one `bwrap` sandbox per bot. Pi'
 
 ### Stop and crashes
 
-Stop kills the running command's process group. If a process that left the group is still running, the server also closes the bot's connection, which ends its sandbox and everything in it. The next tool call opens a new connection, which starts a new sandbox. The bot's folder stays, and `/tmp` starts empty.
+Stop ends every process the bot started. It aborts the reply, then always closes the bot's connection, which ends its sandbox and everything in it, including processes that left their group and anything else running in that sandbox at the time. The next tool call opens a new connection, which starts a new sandbox. The bot's folder stays, and `/tmp` starts empty.
+
+In M1 a bot runs only its chat with the owner, so Stop affects nothing else. Once routines share a bot's sandbox, Stop in the chat also ends a routine command running at that moment.
 
 A server crash ends every sandbox at once, so nothing keeps running unattended. After restart, Pi doesn't rerun an interrupted command. It tells the model the command was interrupted and may have partially run, and the conversation carries on.
 
@@ -72,7 +89,9 @@ The install script uses the `bwrap` already on the host, and installs it through
 
 ### What has been tested
 
-**The sandbox has been tested on one setup only:** Ubuntu 24.04, kernel 6.8, x86-64, and bubblewrap 0.9.0, with Pi's real tools and its faux model provider, as of 2026-11-06. It has not been run with a real model, after a reboot, on arm64, or on any other distro. Ubuntu, Pi's daemon, and the Agent SDK all publish arm64 builds.
+**The sandbox has been tested on two setups:** Ubuntu 24.04, kernel 6.8, x86-64, and bubblewrap 0.9.0, as of 2026-11-06; and Debian 12, kernel 6.1, x86-64, and bubblewrap 0.8.0, as of 2026-11-16. Both used Pi's real tools and its faux model provider. It has not been run with a real model, after a host reboot, on arm64, or on any other distro. Debian 12 doesn't restrict user namespaces, so it needs no AppArmor profile. Ubuntu, Pi's daemon, and the Agent SDK all publish arm64 builds.
+
+The server's own tests, in `server/test/integration/sandbox.test.ts` and `crash.test.ts`, check on every run that the owner's home, keys, and Botsman's data stay hidden, that system folders are read-only with no capabilities, that the network toggle works, that Stop ends a process that left its group, and that killing the server ends every sandboxed process. They passed on the Ubuntu setup on 2026-11-09, and on the Debian setup, after a run of `deploy/install.sh`, on 2026-11-16. The table below is from the Ubuntu setup.
 
 | Test | Result |
 | --- | --- |
@@ -96,8 +115,9 @@ Smart mode's classifier sees only the owner's messages and the tool calls, never
 
 ## Approvals
 
-- The owner answers Allow once, Allow for this chat, or Deny.
+- The owner answers Allow once, Allow for this chat, or Deny. Allow for this chat covers later calls of the same tool in the same chat.
 - The wait is per bot, 1 hour by default. If unanswered, the action is refused and the bot is told.
+- Stop cancels a waiting approval, and deleting a bot cancels its pending ones.
 - A request is stored, so it survives a server restart and every device sees the answer.
 - A crash during a wait counts toward Pi's `restartLimit`, so the server raises that limit.
 
@@ -183,6 +203,8 @@ The app states Anthropic's restriction on that form. See [risks](../risks.md).
 ## Keys
 
 Model provider keys and sign-ins sit in the server process, outside every sandbox, so bots can't read them. `host_bash` is the exception, because it runs as the server's user. Encryption protects mainly backups and stray copies, because the key to decrypt lives on the same server.
+
+Credentials are sealed with AES-256-GCM using `~/.botsman/secret.key`, which backups leave out. The server never reads provider keys from its own environment variables: pi-ai is given a store and no ambient sources, so a key exported in the server's shell can't be billed by accident.
 
 Shell commands get no other secrets in v1. A bot uses an MCP connection instead, which holds its own login.
 

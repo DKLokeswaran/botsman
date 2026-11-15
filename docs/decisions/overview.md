@@ -27,6 +27,7 @@ One Node process runs as the owner's user, as a systemd user service. It needs n
 ```text
 ~/.botsman/
   server.db                 login, tokens, bot registry, settings, encrypted model keys and sign-ins
+  secret.key                the key that encrypts model keys and signs access tokens, left out of backups
   user/USER_PROFILE.md
   user/USER_MEMORY.md
   skills/                   shared skill pool
@@ -48,6 +49,7 @@ A bot gets read-write access to its whole folder, so the server refuses any path
 - `/` and the owner's home folder
 - `~/.ssh`, `~/.claude`, and `~/.agents`
 - Botsman's own data, other than the default folder
+- the backups folder, which holds copies of that data
 - another bot's folder
 
 Those checks also apply to anything inside these paths. Chat history, memory files, and notes stay in `~/.botsman` wherever the folder is.
@@ -76,12 +78,18 @@ Botsman doesn't load skills from repos cloned into a bot's folder. The bot's ski
 | `events` | Turns Pi's conversation state changes into our own app events. |
 | `permissions` | The `beforeTool` hook, approvals, the classifier, and approval waits. |
 | `sandbox` | Builds each bot's `bwrap` allow list, starts its `pi-env` daemon, and checks at startup that sandboxes work. |
-| `memory` | The four files, proposals, sending changes to bots, and the pre-compaction save. |
+| `memory` | The four files, the checks on memory edits, sending changes to bots, and the pre-compaction save. |
 | `notes` | Keyword index over each bot's notes. |
 | `routines` | Durable sleep tasks that run each routine on schedule. |
 | `conversations` | Bot-to-bot exchanges, channels, and the loop limit. |
 | `tools` | The `memory` tool, web, messaging, and main bot tools, including `host_bash`. Skills and MCP adapters. |
 | `alerts` | Decides which events alert, and streams them to apps. |
+| `auth` | The owner's password, device sessions, and access and refresh tokens. |
+| `bots` | The bot registry, folder rules, and creating, editing, and deleting bots. |
+| `providers` | pi-ai's credential store over `server.db`, the provider list, and sign-ins. |
+| `backup` | Nightly backups and the backup command. |
+
+In M1 the `events` module receives Pi's conversation views from the engine as plain data and never imports Pi Durable itself, so the engine is the only importer. Alerts and the `server` stream are published from the service wiring in `server/src/services.ts`. `routines`, `conversations`, and the rest of `tools` come in later milestones.
 
 ### Conversations in Pi
 
@@ -91,8 +99,8 @@ Each bot's SQLite file holds its chat with the owner, routine runs, its side of 
 
 Our own schema, in the `protocol` package, defines every HTTP body and WebSocket message. Apps never see Pi's internal formats, so a Pi upgrade changes only the `engine` and `events` modules.
 
-- **Live updates.** The WebSocket sends events with a per-conversation sequence number.
-- **Reconnect.** The client sends the last sequence it saw, and the server replies with what it missed or a fresh snapshot.
+- **Live updates.** The WebSocket sends events with a per-conversation sequence number. A client signs in with its first message, since browsers can't set headers on a WebSocket.
+- **Reconnect.** The client sends the server's epoch and the last sequence it saw, and the server replies with what it missed or a fresh snapshot. The server keeps the last 1,000 events per stream in memory, and its epoch changes on every start, so a client returning after a restart gets a snapshot.
 - **Alerts stream.** A second, small stream carries only alert events, for the background connections.
 
 Rust and Kotlin message types for the alerts stream are generated from the same JSON Schema.
@@ -128,7 +136,7 @@ Deleting a bot sets `deleted_at` on its row in the bot registry. Nothing is eras
 - The server leaves a deleted bot out of everything it sends the apps: the bot list, Needs you, alerts, routines, memory, notes, and its conversations with other bots.
 - Lines for those conversations disappear from other bots' chats. Past channel messages stay, so the channel still reads correctly.
 - Past costs stay in the usage total, grouped as "Deleted bots".
-- Its routines stop, pending approvals and memory edits are refused, and its sandboxes stop.
+- Its routines stop, its pending approvals, memory edits included, are cancelled, and its sandboxes stop.
 - Other bots can't find it or message it. The main bot sees it only through its restore tools.
 - Its SQLite file, memory files, notes, and folder stay on disk and in backups. Its name is free to reuse.
 
@@ -138,12 +146,10 @@ The apps have no permanent erase in v1. That is done on the server by hand.
 
 ## Exposure
 
-The server does not care whether its address is on a tailnet or the public internet. It requires HTTPS and treats every deployment as reachable by strangers: rate-limited login, and revocable refresh tokens. TLS comes from Tailscale Serve or a reverse proxy such as Caddy.
+The server does not care whether its address is on a tailnet or the public internet. It requires HTTPS and treats every deployment as reachable by strangers: rate-limited login, and revocable refresh tokens. TLS comes from Tailscale, a reverse proxy such as Caddy, or certificate files given to the server. The server listens on `127.0.0.1` by default and refuses any request that didn't arrive over TLS, judged from its own TLS or a trusted proxy's `X-Forwarded-Proto`. Login allows 10 wrong passwords per address and 30 in all every 15 minutes. Each attempt is counted before the password is checked, so parallel guesses can't slip under the caps, and any outcome other than a wrong password gives its count back. The overall cap stops a local process that fakes `X-Forwarded-For` from posing as many addresses. The cost is that a stranger who keeps sending wrong passwords blocks new sign-ins for as long as they keep it up. Devices already signed in keep working, because refreshing a token is not a sign-in. Setup has its own limit of 10 attempts per address every 15 minutes. Access tokens last 15 minutes and refresh tokens 60 days from their last use; each refresh replaces the refresh token. Both WebSockets recheck the device's session every minute, so a revoked device loses them, and refuse any client message over 64 KiB. See [running the server](../operations/server.md).
 
 ## To settle during the build
 
-- Exactly which system paths a sandbox shows, starting from the tested list in [permissions](permissions.md#how-the-sandbox-is-set-up).
-- How Stop closes a bot's connection while other commands are running in that sandbox.
 - How snapshots of a bot's folder work.
 - Whether a bot's folder can move after creation.
 - Which web search provider to use.

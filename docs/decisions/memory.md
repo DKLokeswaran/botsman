@@ -24,8 +24,10 @@ When a bot-written file is full, the write fails with the current usage, and the
 Every bot edit to a memory file asks the owner, in every permission mode. Three things make this work:
 
 - **Files sit outside the bot's folder.** Bots change them only through the memory tool. A shell command can't reach them.
-- **An edit becomes a proposal.** The tool replies that the edit awaits confirmation, and the bot carries on. A routine or bot exchange never stalls on the owner.
-- **The answer arrives with the next message.** A proposal shows the conversation it came from, so a bad fact can be traced.
+- **An edit is an ordinary approval.** The memory tool's `edit_memory` call goes through the same approval as any tool call: the reply waits, the approval expires after the bot's approval wait, stopping the bot cancels it, and it survives a restart. The approval shows the file, the new content, and the content when the bot asked, so the apps can show the change. It shows the conversation it came from, so a bad fact can be traced.
+- **Each edit is allowed on its own.** "Allow for this chat" doesn't apply to memory edits, so the apps offer only Allow and Deny.
+
+Who may write the file and its character limit are checked before the owner is asked, so the owner never allows an edit that then fails. Allowed, the tool writes the file and says so; denied, expired, or cancelled, the bot gets the usual refused tool result and the file is unchanged.
 
 Notes are not covered by this. A bot tracking its projects would otherwise ask constantly.
 
@@ -51,9 +53,9 @@ Two events leave nothing in the cache to protect, so the server rewrites the fro
 - The first message after the cache has expired, such as when the owner returns to a bot after a break.
 - Compaction.
 
-Every model runs with Pi's `supportsMidConvoSystemMessages` setting off, so a request has one system prompt.
+Every model runs with Pi's `supportsMidConvoSystemMessages` setting off, so a request has one system prompt. The server enforces this with a hook that collapses system messages before every request, whatever a model's catalog entry says.
 
-The server judges expiry from the time of the bot's last request and the provider's cache lifetime. A wrong guess costs one cache rebuild.
+The server judges expiry from the time of the bot's last message or finished reply and the provider's cache lifetime, taken as 5 minutes. A wrong guess costs one cache rebuild. After a server restart the server doesn't know the last reply's time, so the first message may rewrite the prompt.
 
 On a Claude subscription, the new prompt goes in when the `claude` process next starts. See [Claude subscription](permissions.md#claude-subscription).
 
@@ -70,13 +72,20 @@ Pi's default on current models keeps the old prompt and adds the update after it
 
 Botsman controls compaction through Pi's settings and its manual `compact()` call. When a chat nears the limit, the server gives the bot one turn to save what matters, then starts compaction. Pi's automatic compaction stays on as the safety net, for example when a provider rejects a request as too long.
 
-In that turn the bot writes to its notes, and proposes any `BOT_MEMORY.md` changes for confirmation.
+In that turn the bot writes to its notes, and edits `BOT_MEMORY.md`. The main bot can also edit `USER_MEMORY.md`. Each memory file edit waits for the owner's approval, so compaction starts only after the owner has answered every edit from that turn. Notes are written at once.
+
+| Threshold | Where |
+| --- | --- |
+| Save turn | After a reply whose context reaches the model's context window minus 32,768 tokens |
+| Pi's own compaction | When the next request would pass the context window minus 16,384 tokens. Pi's background compaction is off, so this is the only automatic one. |
+
+The save turn shows in chat as a notice, and its request id is tied to the reply that crossed the threshold, so a restart never asks twice. When a restart lands between the save turn and its compaction, the compaction runs when the bot opens again. A save turn counts as finished only when the answer Pi recorded for it ends the turn on its own, rather than stopping for tool calls, being cut off at the output limit, failing, or being stopped. Messages the owner sends during the save turn don't change this. One that didn't finish may have saved too little, so no compaction follows it, and the owner's next reply near the limit asks for the save again; the save turn's own replies never start another. Each save turn's request id is stored with its entry, so after a restart the server checks that same submission instead of starting another, and a finished save turn is compacted even if the owner wrote meanwhile. A compaction that fails is retried at the next check; the save turn is not asked again. Models with a context window of 32,768 tokens or less skip the save turn and rely on Pi's compaction.
 
 ## Notes
 
-Notes are plain Markdown files that hold what doesn't fit a small file, such as the projects a developer bot tracks. They live in `bots/<id>/notes/`, outside the bot's folder, so `ls` and `grep -r` in that folder never spend tokens on them. They reach the model only when the bot opens one.
+Notes are plain Markdown files that hold what doesn't fit a small file, such as the projects a developer bot tracks. A note's name is a plain file name ending in `.md`, with no folders. They live in `bots/<id>/notes/`, outside the bot's folder, so `ls` and `grep -r` in that folder never spend tokens on them. They reach the model only when the bot opens one.
 
-One `memory` tool does all of this. It searches, reads, and writes notes, and proposes edits to the memory files. Hermes has a `memory` tool too, and OpenClaw has `memory_search` and `memory_get`.
+One `memory` tool does all of this. It searches, reads, and writes notes, and edits the memory files with the owner's approval. Hermes has a `memory` tool too, and OpenClaw has `memory_search` and `memory_get`.
 
 This has two costs. A bot can't run shell scripts over its notes, and folder snapshots don't cover them.
 
