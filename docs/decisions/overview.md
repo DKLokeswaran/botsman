@@ -88,7 +88,6 @@ Botsman doesn't load skills from repos cloned into a bot's folder. The bot's ski
 | `bots` | The bot registry, folder rules, and creating, editing, and deleting bots. |
 | `providers` | pi-ai's credential store over `server.db`, the provider list, and sign-ins. |
 | `backup` | Nightly backups and the backup command. |
-| `updates` | Fetches Windows and Android builds from GitHub Releases, and hands the right one to each app. |
 
 In M1 the `events` module receives Pi's conversation views from the engine as plain data and never imports Pi Durable itself, so the engine is the only importer. Alerts and the `server` stream are published from the service wiring in `server/src/services.ts`. `routines`, `conversations`, and the rest of `tools` come in later milestones.
 
@@ -123,7 +122,7 @@ Android's screens are separate, because the best Android chat needs native views
 | Local cache | IndexedDB | IndexedDB | SQLite |
 | Auto-start | Tauri | None | Boot receiver |
 | HTTP requests | Tauri's HTTP plugin, sent from Rust | The browser's `fetch` | React Native's `fetch` |
-| Updates | Tauri's updater, from the server | Comes with the server | Its own download and install, from the server |
+| Updates | Tauri's updater, from GitHub Releases | Comes with the server | Its own download and install, from GitHub Releases |
 
 The alerts connection runs when the UI does not, so it can't live in `client-core`. Its logic stays small: connect, catch up, show a notification.
 

@@ -23,9 +23,8 @@ M2 runs in seven steps. Each screen lands on both apps in the same change.
    - alert type settings
    - routes for compact, clear, and retry
    - the protocol version range in `/api/health`
-   - app builds for the Windows and Android updaters
 4. **One working path on all three clients.** Setup and sign-in, the bot list, chat with streaming, stop, steer, and queue, the reconnect banner, and approvals inline and in Needs you. The first run against a real model happens here.
-5. **App updates.** The release workflows, the signing keys, the Windows updater, and the Android updater. This comes early so that later builds reach the owner's devices through it.
+5. **App updates.** The release workflows, the update manifests on GitHub Releases, the Windows updater, and the Android updater. This comes early so that later builds reach the owner's devices through it.
 6. **Remaining screens.** New bot, bot info, bot settings, memory with pending edits, notes, model providers and their sign-in steps, the model and reasoning picker, usage, settings, signed-in devices, and slash commands.
 7. **Alerts and hardening.** The Windows alerts socket, tray, and auto-start. The Android foreground service, boot receiver, and per-brand setup steps. Browser notifications on the dashboard. The local cache, and the recorded event set run through both chat screens side by side.
 

@@ -194,7 +194,7 @@ How projects with direct APKs handle updates:
 
 ## What this implies for Botsman
 
-Two facts about Botsman narrow the choices. The repo is private. GitHub serves releases to people with read access to the repository, and its release asset API works without authentication only for public resources, so an app can't read updates from GitHub Releases without a token. The Android app is a direct APK, so no store delivers its updates.
+Two facts about Botsman shape the choices. The repo is public, so an app can read GitHub Releases without a token. A private repo would not allow that, because GitHub's release asset API works without authentication only for public resources. The Android app is a direct APK, so no store delivers its updates.
 
 ### Option a: one version and one tag
 
@@ -229,7 +229,7 @@ The dashboard becomes a fourth build with its own version, which the server rele
 
 **The server serves them.** Coder is the precedent, for a CLI. The Tauri updater supports it: Rust code can set the endpoint at runtime to the owner's server address and send the access token as a header, and the server answers 204 or the update JSON. The server needs the installer, its `.sig`, and the APK on disk, so they must travel inside the server release or be fetched by the server. The signing keys stay in the build pipeline, since the server only relays signed files.
 
-- Apps update with no outside host and no GitHub token, which fits the private repo and the rule against third-party relays.
+- Apps update with no outside host, which fits the rule against third-party relays. It is the only choice that works for a private repo without a token in each app.
 - The server can offer exactly the client builds made for its own version, so an app never moves ahead of its server.
 - Server releases grow by the size of the builds. An Android APK is about 44 MB per CPU architecture.
 - App updates wait on a server update. A fix for one app needs a server release, or a way for the server to fetch newer builds.
@@ -237,11 +237,11 @@ The dashboard becomes a fourth build with its own version, which the server rele
 
 **The apps fetch from a release host.** This is what every surveyed desktop and mobile client does.
 
-- GitHub Releases on the private repo needs a token in each app. A public host, such as a public releases repo or a static file host, removes that need and exposes the builds.
+- GitHub Releases on a public repo needs no token. On a private repo each app would need one.
 - Apps and server update independently, so the protocol range check carries the full load of keeping them compatible.
 - Tauri's static `latest.json` works with any file host, and `tauri-action` generates it.
 
-**Android, either way.** Self-update needs `REQUEST_INSTALL_PACKAGES`, the user's "install unknown apps" grant, and every build signed with the same key. Signal's website build is the model for a full in-app updater with a digest check, and NewPipe's for notify only. Leaving updates to Obtainium needs a release page it can read, which a private repo doesn't provide without a token. Developer verification applies to a sideloaded APK on certified devices as it rolls out.
+**Android, either way.** Self-update needs `REQUEST_INSTALL_PACKAGES`, the user's "install unknown apps" grant, and every build signed with the same key. Signal's website build is the model for a full in-app updater with a digest check, and NewPipe's for notify only. Leaving updates to Obtainium needs a release page it can read, which a public repo provides. Developer verification applies to a sideloaded APK on certified devices as it rolls out.
 
 ## Not confirmed
 

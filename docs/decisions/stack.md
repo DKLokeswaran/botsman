@@ -73,26 +73,26 @@ The `protocol` package holds one whole number. It goes up only when a change bre
 
 ### Where the apps get updates
 
-The apps fetch updates from the owner's Botsman server, not from GitHub. That keeps the apps free of any GitHub token and of any host the owner doesn't run. The server fetches new builds from GitHub Releases on its own schedule, so a new app build arrives without a server release. While the repo is private, the server needs a read-only GitHub token for this.
+The apps fetch updates from the repo's GitHub Releases. The repo is public, so they need no token, and every surveyed project with standalone clients updates them from a release host. The server takes no part in app updates.
 
-For each platform the server keeps the app version, its protocol number, the file, and its signature. It offers a build only when the build is newer than the app asking and its protocol number is inside the server's range.
+GitHub marks only one release in a repo as the latest, and Botsman has three lines of tags. So one release with the fixed tag `updates` holds a small manifest file for each app, and each app's release workflow replaces its manifest after the build is published. A manifest gives the app version, its protocol number, the file's address, and its signature or digest. An app installs a build only when the build is newer than itself and its protocol number is inside the range of the server it is connected to.
 
-- **Windows.** Rust code points Tauri's updater at the server's address and sends the access token. The server answers 204 when there is nothing newer, or the version, the file's address, and its signature. Tauri refuses an update without a valid signature, and that check can't be turned off.
-- **Android.** The app downloads the APK, checks its SHA-256 digest against the server's answer, and installs it through Android's package installer. This needs the `REQUEST_INSTALL_PACKAGES` permission and the owner's "install unknown apps" grant. Android accepts the update only when both APKs carry the same signing key.
+- **Windows.** Tauri's updater reads `windows.json` from the `updates` release. Tauri refuses an update without a valid signature, and that check can't be turned off.
+- **Android.** The app reads `android.json`, downloads the APK, checks its SHA-256 digest against the manifest, and installs it through Android's package installer. This needs the `REQUEST_INSTALL_PACKAGES` permission and the owner's "install unknown apps" grant. Android accepts the update only when both APKs carry the same signing key.
 
-The Tauri updater key and the Android keystore are GitHub Actions secrets, and the server only passes signed files along. Losing either key means installed apps can't take another update, so the owner keeps a copy of both outside GitHub.
+Someone who forks Botsman sets their own repo address and signing keys at build time.
+
+The Tauri updater key and the Android keystore are GitHub Actions secrets. Losing either key means installed apps can't take another update, so the owner keeps a copy of both outside GitHub.
 
 [Client versioning and updates](../research/client-versioning-and-updates.md) surveys how 18 other projects handle this.
 
 ## GitHub Actions
 
-The repo is private on a free GitHub account, which includes $12 of compute a month. A Linux 2-core runner costs $0.006 a minute and a Windows 2-core runner $0.010 a minute, as of 2026-11-16. Artifact storage is 500 MB.
+The repo is public, so standard GitHub-hosted runners are free.
 
 - Type checks and tests run on every pull request, on Linux.
-- The Windows installer and the Android APK build only on their tag or when started by hand, never on a pull request.
-- Build artifacts are kept for a short time, so the 500 MB doesn't fill up.
-
-One release of both apps costs an estimated $0.40 to $0.50, which allows 20 to 25 a month. The estimate comes from the 21-minute APK build below, not from a measured run. Runners for public repos are free.
+- The Windows installer and the Android APK build on their tag, when started by hand, and on a pull request that changes that app or the packages it uses.
+- Build artifacts are kept for a short time.
 
 ## Why pnpm
 
@@ -126,7 +126,7 @@ Server checks imported the Pi packages and the Agent SDK under Node 24, then ran
 - **Windows builds.** Install pnpm through npm, because [Windows Defender can block its standalone executable](https://pnpm.io/installation). Build on Windows. Tauri documents building from Linux as [a last resort](https://v2.tauri.app/distribute/windows-installer/), and Debian 12's NSIS 3.08 is too old to make the installer.
 - **Tauri.** Stay on Node 24, because [the CLI crashes on Node 26](https://github.com/tauri-apps/tauri/issues/16366). [Tauri CLI 2.12 can break Linux bundling](https://github.com/tauri-apps/tauri/issues/16250) when `tray-icon` is enabled only for Windows.
 - **Not yet run.** No APK has been built with pnpm 12, the sample APKs built with pnpm 10 and Bun have not been opened on a device, and nothing has been installed, built, or launched on Windows itself. M2 starts with the APK build and a run on a phone. The Windows installer builds in GitHub Actions, and the owner launches it on Windows without holding up other work.
-- **Runner memory.** Gradle needs more than 7 GB. Whether a private repo's standard Linux runner has that much has not been checked. If the APK can't build there, the choices are making the repo public, where runners are larger and free, or building the APK on the owner's machine.
+- **Runner memory.** Gradle needs more than 7 GB, so the APK builds on GitHub's standard Linux runner for public repos.
 
 ## Why Expo for Android
 
