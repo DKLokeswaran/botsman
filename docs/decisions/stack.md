@@ -25,7 +25,10 @@
 | Android styling | React Native `StyleSheet` and a shared token file | NativeWind's Tailwind 4 version is still a release candidate |
 | Alerts on Android | Our own Kotlin foreground service, as an Expo module | See [notifications](notifications.md) |
 | Bot isolation | Bubblewrap, one sandbox per bot | An allow list of paths, separate processes per bot, no root after install, and about 30 ms to start |
+| Windows HTTP | Tauri's HTTP plugin, which sends each request from Rust | The webview's origin differs from the server's, so a request from the page would need CORS headers on the server. Rust has no such rule. `client-core` takes `fetch` as an input, so the API client is written once. |
+| App updates | Tauri's updater plugin on Windows, and our own installer step on Android | See [versions and releases](#versions-and-releases) |
 | Hosting | A systemd user service, TLS from Tailscale Serve or Caddy | One process on one VPS, under a normal user |
+| Builds and checks | GitHub Actions | See [GitHub Actions](#github-actions) |
 | Tests | Vitest 5.0.5, using Pi's faux model provider through a scripted test model | Tests run with no model bills. M1 has no test against a real model. |
 | Type checks | TypeScript 6.0.3, `tsc` with no emit | Checks the sources Node runs as they are |
 
@@ -44,6 +47,52 @@ deploy                  install script, systemd unit, and AppArmor profile
 mockups                 clickable UI reference
 docs                    this documentation
 ```
+
+## Versions and releases
+
+Three parts have their own version and their own tag.
+
+| Part | Tag | How it reaches the owner |
+| --- | --- | --- |
+| Server and web dashboard | `server-v<version>` | `git pull` and `deploy/install.sh`, which also builds the dashboard with Vite |
+| Windows app | `windows-v<version>` | GitHub Actions builds the installer, and the server hands it to the app |
+| Android app | `android-v<version>` | GitHub Actions builds the APK, and the server hands it to the app |
+
+The dashboard shares the server's version because the server builds and serves it from its own checkout. It can't be released alone, and it can't fall out of step with the server. The Windows app runs the same `pc-ui` screens and still has its own version, because it holds Windows-only code and sits on a device that can lag behind. The shared packages have no version of their own. A change to one of them means a new release of each part it affects.
+
+A fix to one app needs only that app's tag. A fix to the server needs only the server's tag, and the apps offer no update.
+
+### Protocol version
+
+The `protocol` package holds one whole number. It goes up only when a change breaks an existing client or server. A new optional field or a new route leaves it alone.
+
+- The server reports the oldest number it accepts and its current number in `/api/health`. Both start at 1.
+- Each app has its number built in, and `client-core` checks it before connecting.
+- An app below the server's range shows "Update the app" and offers the update. An app above the range shows "Update the server". Neither connects until the versions fit.
+- After a breaking change, the server keeps accepting the previous number until both apps have shipped on the new one.
+
+### Where the apps get updates
+
+The apps fetch updates from the owner's Botsman server, not from GitHub. That keeps the apps free of any GitHub token and of any host the owner doesn't run. The server fetches new builds from GitHub Releases on its own schedule, so a new app build arrives without a server release. While the repo is private, the server needs a read-only GitHub token for this.
+
+For each platform the server keeps the app version, its protocol number, the file, and its signature. It offers a build only when the build is newer than the app asking and its protocol number is inside the server's range.
+
+- **Windows.** Rust code points Tauri's updater at the server's address and sends the access token. The server answers 204 when there is nothing newer, or the version, the file's address, and its signature. Tauri refuses an update without a valid signature, and that check can't be turned off.
+- **Android.** The app downloads the APK, checks its SHA-256 digest against the server's answer, and installs it through Android's package installer. This needs the `REQUEST_INSTALL_PACKAGES` permission and the owner's "install unknown apps" grant. Android accepts the update only when both APKs carry the same signing key.
+
+The Tauri updater key and the Android keystore are GitHub Actions secrets, and the server only passes signed files along. Losing either key means installed apps can't take another update, so the owner keeps a copy of both outside GitHub.
+
+[Client versioning and updates](../research/client-versioning-and-updates.md) surveys how 18 other projects handle this.
+
+## GitHub Actions
+
+The repo is private on a free GitHub account, which includes $12 of compute a month. A Linux 2-core runner costs $0.006 a minute and a Windows 2-core runner $0.010 a minute, as of 2026-11-16. Artifact storage is 500 MB.
+
+- Type checks and tests run on every pull request, on Linux.
+- The Windows installer and the Android APK build only on their tag or when started by hand, never on a pull request.
+- Build artifacts are kept for a short time, so the 500 MB doesn't fill up.
+
+One release of both apps costs an estimated $0.40 to $0.50, which allows 20 to 25 a month. The estimate comes from the 21-minute APK build below, not from a measured run. Runners for public repos are free.
 
 ## Why pnpm
 
@@ -76,7 +125,8 @@ Server checks imported the Pi packages and the Agent SDK under Node 24, then ran
 - **Android builds.** A clean release build took about 21 minutes on 4 CPUs for one CPU architecture, and made a 44 MB APK. Allow more than 7 GB of memory.
 - **Windows builds.** Install pnpm through npm, because [Windows Defender can block its standalone executable](https://pnpm.io/installation). Build on Windows. Tauri documents building from Linux as [a last resort](https://v2.tauri.app/distribute/windows-installer/), and Debian 12's NSIS 3.08 is too old to make the installer.
 - **Tauri.** Stay on Node 24, because [the CLI crashes on Node 26](https://github.com/tauri-apps/tauri/issues/16366). [Tauri CLI 2.12 can break Linux bundling](https://github.com/tauri-apps/tauri/issues/16250) when `tray-icon` is enabled only for Windows.
-- **Not yet run.** No APK has been built with pnpm 12, the sample APKs built with pnpm 10 and Bun have not been opened on a device, and nothing has been installed, built, or launched on Windows itself. These are the first checks in M2.
+- **Not yet run.** No APK has been built with pnpm 12, the sample APKs built with pnpm 10 and Bun have not been opened on a device, and nothing has been installed, built, or launched on Windows itself. M2 starts with the APK build and a run on a phone. The Windows installer builds in GitHub Actions, and the owner launches it on Windows without holding up other work.
+- **Runner memory.** Gradle needs more than 7 GB. Whether a private repo's standard Linux runner has that much has not been checked. If the APK can't build there, the choices are making the repo public, where runners are larger and free, or building the APK on the owner's machine.
 
 ## Why Expo for Android
 

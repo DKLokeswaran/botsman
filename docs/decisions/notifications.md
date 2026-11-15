@@ -46,6 +46,10 @@ The alerts socket runs in Tauri's Rust side, and the tray shows notifications. T
 
 The open page's WebSocket carries alerts, and the browser shows them as notifications after the owner allows them once. Notifications arrive only while the site is open in a tab. Nothing arrives after the tab closes.
 
+## Alert settings
+
+The owner turns each alert type on or off in the apps. The server stores these settings, so one choice applies to every device. The server leaves a type that is off out of the alerts stream. This follows the rule that state lives on the server.
+
 ## Alert content
 
 The alerts stream carries the bot and the event. The app fetches message content from the server. When UnifiedPush arrives, a push will carry only an ID, so no chat text passes through a third-party server.

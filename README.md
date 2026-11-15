@@ -19,6 +19,7 @@ The server core (milestone M1) is in `server/`, with its message schema in `pack
 | [docs/decisions/conversations.md](docs/decisions/conversations.md) | What context each conversation gets |
 | [docs/decisions/notifications.md](docs/decisions/notifications.md) | Alerts when the apps are closed |
 | [docs/research/pi-durable.md](docs/research/pi-durable.md) | What Pi Durable is, and test results |
+| [docs/research/client-versioning-and-updates.md](docs/research/client-versioning-and-updates.md) | How other projects version and update their clients |
 | [docs/risks.md](docs/risks.md) | Known risks and how we handle them |
 | [docs/operations/server.md](docs/operations/server.md) | Installing and running the server, backups, and restore |
 | [server/](server) | The Botsman server |

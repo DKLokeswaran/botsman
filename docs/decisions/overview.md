@@ -88,6 +88,7 @@ Botsman doesn't load skills from repos cloned into a bot's folder. The bot's ski
 | `bots` | The bot registry, folder rules, and creating, editing, and deleting bots. |
 | `providers` | pi-ai's credential store over `server.db`, the provider list, and sign-ins. |
 | `backup` | Nightly backups and the backup command. |
+| `updates` | Fetches Windows and Android builds from GitHub Releases, and hands the right one to each app. |
 
 In M1 the `events` module receives Pi's conversation views from the engine as plain data and never imports Pi Durable itself, so the engine is the only importer. Alerts and the `server` stream are published from the service wiring in `server/src/services.ts`. `routines`, `conversations`, and the rest of `tools` come in later milestones.
 
@@ -102,6 +103,7 @@ Our own schema, in the `protocol` package, defines every HTTP body and WebSocket
 - **Live updates.** The WebSocket sends events with a per-conversation sequence number. A client signs in with its first message, since browsers can't set headers on a WebSocket.
 - **Reconnect.** The client sends the server's epoch and the last sequence it saw, and the server replies with what it missed or a fresh snapshot. The server keeps the last 1,000 events per stream in memory, and its epoch changes on every start, so a client returning after a restart gets a snapshot.
 - **Alerts stream.** A second, small stream carries only alert events, for the background connections.
+- **Protocol version.** The package holds one whole number that goes up on a breaking change. The server reports the range it accepts, and an app outside that range stops with a screen that says which side to update. See [versions and releases](stack.md#versions-and-releases).
 
 Rust and Kotlin message types for the alerts stream are generated from the same JSON Schema.
 
@@ -120,14 +122,21 @@ Android's screens are separate, because the best Android chat needs native views
 | Token storage | Credential Manager | `HttpOnly`, `Secure`, `SameSite` cookie | Keystore |
 | Local cache | IndexedDB | IndexedDB | SQLite |
 | Auto-start | Tauri | None | Boot receiver |
+| HTTP requests | Tauri's HTTP plugin, sent from Rust | The browser's `fetch` | React Native's `fetch` |
+| Updates | Tauri's updater, from the server | Comes with the server | Its own download and install, from the server |
 
 The alerts connection runs when the UI does not, so it can't live in `client-core`. Its logic stays small: connect, catch up, show a notification.
+
+`client-core` takes `fetch` and token storage as inputs, and each shell supplies its own. `pc-ui` reaches the tray, notifications, and updates through one small platform interface. `apps/windows` implements it with Tauri calls. `apps/web` implements it with browser features, and marks the rest as absent so the screen hides them.
+
+The server serves the dashboard from its own origin, so the dashboard needs no CORS rules. The server builds the dashboard's files during install and has no build step of its own.
 
 ## Parity
 
 - Screens get everything through shared hooks and hold no logic.
 - One recorded set of events (a streaming reply, an approval, a reconnect) runs through both chat screens, for side-by-side comparison.
 - `DESIGN.md` and a shared token file define the look.
+- The PC screens are tested on the web dashboard in a browser, and the Android screens on a real phone. The owner checks the Windows-only parts by hand: the tray, auto-start, Credential Manager, and the installer.
 
 ## Deleting a bot
 
