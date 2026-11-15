@@ -71,12 +71,28 @@ describe("saving before compaction", () => {
     expect(calls).toEqual(["save"]);
   });
 
-  it("only compacts a finished save turn a restart left behind, even with owner messages after it", async () => {
+  it("only compacts a finished save turn a restart left behind", async () => {
+    const { calls, submissions, settled, guard: subject } = guard();
+    submissions.set("pre-compaction:2", settled);
+    subject.afterRun(bot, view([entry(1, OWNER_MESSAGE_KIND), answer(2, WINDOW - 20_000), saveEntry(3, 2), answer(SAVE_ANSWER, WINDOW - 15_000)]));
+    await settle();
+    expect(calls).toEqual(["compact"]);
+  });
+
+  it("does nothing for an unfinished save turn when its own reply is the newest", async () => {
+    const { calls, submissions, settled, guard: subject } = guard({ status: "done", stopReason: "length" });
+    submissions.set("pre-compaction:2", settled);
+    subject.afterRun(bot, view([entry(1, OWNER_MESSAGE_KIND), answer(2, WINDOW - 20_000), saveEntry(3, 2), answer(SAVE_ANSWER, WINDOW - 15_000, "length")]));
+    await settle();
+    expect(calls).toEqual([]);
+  });
+
+  it("leaves a save turn behind once the owner writes again, so a failed compaction isn't retried after every reply", async () => {
     const { calls, submissions, settled, guard: subject } = guard();
     submissions.set("pre-compaction:2", settled);
     subject.afterRun(bot, view([answer(2, WINDOW - 20_000), saveEntry(3, 2), answer(SAVE_ANSWER, 1_000), entry(95, OWNER_MESSAGE_KIND), answer(96, 1_000)]));
     await settle();
-    expect(calls).toEqual(["compact"]);
+    expect(calls).toEqual([]);
   });
 
   it("asks again at the next reply near the limit after a save turn that didn't finish", async () => {

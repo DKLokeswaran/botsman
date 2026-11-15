@@ -2,7 +2,7 @@ import type { Bot } from "@botsman/protocol";
 import type { Usage } from "@earendil-works/pi-ai";
 import { BACKGROUND_CONTEXT as context } from "@earendil-works/chord/context";
 import type { Conversation, EntryId, Harness } from "@earendil-works/pi-durable";
-import { PRE_COMPACTION_KIND, type ViewEntry } from "../events/chat-view.ts";
+import { OWNER_MESSAGE_KIND, PRE_COMPACTION_KIND, type ViewEntry } from "../events/chat-view.ts";
 import type { ChatView, EngineServices } from "./types.ts";
 
 // Pi's blocking threshold sits this far below the context window; Pi's own compaction there is the safety net.
@@ -36,7 +36,7 @@ export class CompactionGuard {
       .finally(() => (this.#saving = false));
   }
 
-  // A save turn a restart or a stop left without its compaction is settled first; then a reply near the limit starts one.
+  // A save turn a restart left without its compaction is settled first; then a reply near the limit starts one.
   #nextStep(bot: Bot, view: ChatView): (() => Promise<void>) | undefined {
     const leftover = leftoverSaveRequest(view);
     const last = lastAnswer(view);
@@ -92,11 +92,12 @@ function savePrompt(bot: Bot): string {
   ].join(" ");
 }
 
-// The request id of the newest save turn with no compaction or reset after it, whatever came after it.
+// The request id of the newest save turn with no owner message, compaction, or reset after it. Once the owner writes
+// again, a save whose compaction never happened is left behind, and the next reply near the limit asks anew.
 function leftoverSaveRequest(view: ChatView): string | undefined {
   for (let index = view.entries.length - 1; index >= 0; index--) {
     const entry = view.entries[index]!;
-    if (entry.kind === "pi.compaction" || entry.kind === "pi.reset") return undefined;
+    if (entry.kind === OWNER_MESSAGE_KIND || entry.kind === "pi.compaction" || entry.kind === "pi.reset") return undefined;
     if (entry.kind === PRE_COMPACTION_KIND) return (entry.data as { requestId?: string } | undefined)?.requestId;
   }
   return undefined;
@@ -118,13 +119,16 @@ function compacting(view: ChatView): boolean {
   return (live?.compactions?.length ?? 0) > 0;
 }
 
-// The newest reply since the last compaction or reset; replies before one no longer reflect the context size.
+// The newest reply to the owner since the last compaction or reset. Replies before a compaction no longer reflect the
+// context size, and a save turn's own replies never start another save.
 function lastAnswer(view: ChatView): { id: number; usage: Usage } | undefined {
+  let answer: { id: number; usage: Usage } | undefined;
   for (let index = view.entries.length - 1; index >= 0; index--) {
     const entry = view.entries[index]!;
-    if (entry.kind === "pi.compaction" || entry.kind === "pi.reset") return undefined;
+    if (entry.kind === PRE_COMPACTION_KIND) return undefined;
+    if (entry.kind === OWNER_MESSAGE_KIND || entry.kind === "pi.compaction" || entry.kind === "pi.reset") return answer;
     const message = entry.model?.[0];
-    if (entry.kind === "pi.assistant" && message?.role === "assistant") return { id: entry.id, usage: message.usage };
+    if (answer === undefined && entry.kind === "pi.assistant" && message?.role === "assistant") answer = { id: entry.id, usage: message.usage };
   }
-  return undefined;
+  return answer;
 }
