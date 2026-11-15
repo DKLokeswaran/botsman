@@ -24,8 +24,9 @@ When a bot-written file is full, the write fails with the current usage, and the
 Every bot edit to a memory file asks the owner, in every permission mode. Three things make this work:
 
 - **Files sit outside the bot's folder.** Bots change them only through the memory tool. A shell command can't reach them.
-- **An edit becomes a proposal.** The tool replies that the edit awaits confirmation, and the bot carries on. A routine or bot exchange never stalls on the owner.
-- **The answer arrives with the next message.** A proposal shows the conversation it came from, so a bad fact can be traced.
+- **An edit becomes a proposal, and the tool call waits for it.** The bot's reply pauses until the owner accepts or rejects, like an approval. The answer comes back as the tool's result, so the bot knows the outcome at once. A proposal shows the conversation it came from, so a bad fact can be traced.
+- **A wait has the same limits as an approval.** An unanswered proposal ends as expired after the bot's approval wait, and stopping the bot cancels it. Either way the file is unchanged, and the tool result says so.
+- **A proposal survives a restart.** The waiting tool call remembers its proposal, so after a crash it waits on the same one instead of proposing again.
 
 Notes are not covered by this. A bot tracking its projects would otherwise ask constantly.
 
@@ -55,8 +56,6 @@ Every model runs with Pi's `supportsMidConvoSystemMessages` setting off, so a re
 
 The server judges expiry from the time of the bot's last message or finished reply and the provider's cache lifetime, taken as 5 minutes. A wrong guess costs one cache rebuild. After a server restart the server doesn't know the last reply's time, so the first message may rewrite the prompt.
 
-Owner answers to proposals travel the same way: a short notice, such as "The owner accepted your proposed edit to BOT_MEMORY.md", goes with the bot's next incoming message and is stored with it. Steer and queued messages count as incoming messages.
-
 On a Claude subscription, the new prompt goes in when the `claude` process next starts. See [Claude subscription](permissions.md#claude-subscription).
 
 Pi's default on current models keeps the old prompt and adds the update after it. With the setting off, the request has only the new prompt, at the top. We checked this by inspecting the requests Pi sends, but not yet in a full bot conversation.
@@ -72,7 +71,7 @@ Pi's default on current models keeps the old prompt and adds the update after it
 
 Botsman controls compaction through Pi's settings and its manual `compact()` call. When a chat nears the limit, the server gives the bot one turn to save what matters, then starts compaction. Pi's automatic compaction stays on as the safety net, for example when a provider rejects a request as too long.
 
-In that turn the bot writes to its notes, and proposes any `BOT_MEMORY.md` changes for confirmation. The main bot can also propose `USER_MEMORY.md` changes. Proposals still wait for the owner, as every memory file edit does; notes are written at once.
+In that turn the bot writes to its notes, and proposes any `BOT_MEMORY.md` changes for confirmation. The main bot can also propose `USER_MEMORY.md` changes. Each proposal waits for the owner, as every memory file edit does, so compaction starts only after the owner has answered every proposal from that turn. Notes are written at once.
 
 | Threshold | Where |
 | --- | --- |

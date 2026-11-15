@@ -76,6 +76,22 @@ describe("crash recovery", () => {
     return client.request("GET", `/api/bots/${botId}/chat/history?limit=200`);
   }
 
+  it("keeps a memory proposal across a kill, and the resumed tool call returns the owner's answer", async () => {
+    const { root, port, client, botId } = await boot();
+    await client.send(botId, 'tool memory {"action":"propose_memory_edit","content":"Survives restarts."}');
+    await waitUntil(async () => (await client.proposals()).proposals.length === 1);
+    await restart(root, port);
+    await client.login(PASSWORD);
+    const { proposals } = await client.proposals();
+    expect(proposals).toHaveLength(1);
+    await client.answerProposal(proposals[0]!.id, "accept");
+    await waitUntil(async () => (await history(client, botId)).messages.some((message) => message.type === "tool_result"));
+    const results = (await history(client, botId)).messages.filter((message) => message.type === "tool_result");
+    expect(results).toHaveLength(1);
+    expect(results[0]).toMatchObject({ isError: false, output: expect.stringContaining("accepted") });
+    expect((await client.proposals("pending")).proposals).toHaveLength(0);
+  });
+
   it("keeps an approval across a kill, and runs the tool exactly once after it is allowed", async () => {
     const { root, port, client, botId } = await boot();
     await client.send(botId, 'tool read {"path":"/etc/hostname"}');

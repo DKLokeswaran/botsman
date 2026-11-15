@@ -11,7 +11,6 @@ import { Engine } from "./engine/engine.ts";
 import { ChatFeed } from "./events/chat-feed.ts";
 import { StreamHub } from "./events/stream-hub.ts";
 import { MemoryFiles } from "./memory/memory-files.ts";
-import { Notices } from "./memory/notices.ts";
 import { Proposals } from "./memory/proposals.ts";
 import { NotesStore } from "./notes/notes-store.ts";
 import { ApprovalStore } from "./permissions/approval-store.ts";
@@ -49,7 +48,6 @@ export async function createServices(config: Config, options: ServiceOptions = {
 
   const registry = new BotRegistry(db);
   const memoryFiles = new MemoryFiles(paths.userDir, paths.botDir);
-  const notices = new Notices(db);
   const notes = new NotesStore(db, paths.botDir);
   const approvalStore = new ApprovalStore(db);
   const sandbox = new SandboxManager({ skillsDir: paths.skillsDir, agentsDir: path.join(config.homeDir, ".agents") });
@@ -64,7 +62,7 @@ export async function createServices(config: Config, options: ServiceOptions = {
     if (approval.status === "pending") alert("approval", approval.botId, approval.id);
     feed.refreshLive(approval.botId);
   });
-  const proposals = new Proposals(db, memoryFiles, notices, (proposal: MemoryProposal) => {
+  const proposals = new Proposals(db, memoryFiles, (proposal: MemoryProposal) => {
     publish({ type: "proposal", proposal });
     if (proposal.status === "pending") alert("memory_proposal", proposal.botId, proposal.id);
   });
@@ -85,11 +83,9 @@ export async function createServices(config: Config, options: ServiceOptions = {
       deleteNote: (botId, name) => notes.delete(botId, name),
       searchNotes: (botId, query) => notes.search(botId, query),
       readMemory: (botId) => memoryFiles.snapshot(botId),
-      proposeMemoryEdit: (bot, file, content, reason, conversation) => proposals.propose({ bot, file, content, reason, conversation }).id,
+      proposeMemoryEdit: (input, wait) => proposals.proposeAndWait(input, wait),
     },
     memorySnapshot: (botId) => memoryFiles.snapshot(botId),
-    takeNotices: (botId) => notices.pending(botId),
-    markNoticesDelivered: (ids) => notices.markDelivered(ids),
     onView: (botId, view) => feed.update(botId, view),
     log,
     cacheLifetimeMs: options.cacheLifetimeMs,
@@ -109,7 +105,7 @@ export async function createServices(config: Config, options: ServiceOptions = {
       },
       deleted: async (botId: string) => {
         policy.cancelAll(botId);
-        proposals.refuseAll(botId);
+        proposals.cancelAll(botId);
         await engine.close(botId);
         feed.forget(botId);
         publish({ type: "bot_deleted", botId });
@@ -132,7 +128,7 @@ export async function createServices(config: Config, options: ServiceOptions = {
     db.close();
   }
 
-  return { config, paths, db, hub, alerts, auth, registry, bots, memoryFiles, notes, proposals, notices, approvalStore, policy, sandbox, catalog, logins, engine, feed, resumeBots, close };
+  return { config, paths, db, hub, alerts, auth, registry, bots, memoryFiles, notes, proposals, approvalStore, policy, sandbox, catalog, logins, engine, feed, resumeBots, close };
 }
 
 // A stable id for this server, which some sign-ins send as the device id.

@@ -65,19 +65,18 @@ export class BotSession {
     await this.#root.configure({ model: settings.model, thinkingLevel: settings.thinkingLevel, cwd: bot.folder }, context);
   }
 
-  // Hands the owner's message to the bot, with any memory changes and notices it hasn't seen yet.
+  // Hands the owner's message to the bot, with any memory changes it hasn't seen yet.
   async send(text: string, mode: SendMode, requestId: string | undefined): Promise<SendResult> {
     const busy = (await this.#harness.snapshot(LiveDoc, this.#root.id, context))?.run !== undefined;
     const headId = (await this.#root.context(context)).head?.id;
     const head = headId === undefined ? null : String(headId);
-    const notices = this.#services.takeNotices(this.botId);
     const now = this.#now();
     const submissionId = await this.#harness.commit(async (tx) => {
       const memory = await tx.doc(MemoryDoc, this.#root.id);
       const current = this.#services.memorySnapshot(this.botId);
       const refresh = memory.seen === null || memory.head !== head || now - Math.max(memory.lastSentAt, this.#lastRunEndedAt) > this.#cacheLifetime();
       const change = refresh ? "" : memoryChangeText(memory.seen!, current);
-      const content = [notices.text, change, text].filter((part) => part !== "").join("\n\n");
+      const content = [change, text].filter((part) => part !== "").join("\n\n");
       const id = await this.#root.submit(tx, {
         type: "input",
         content,
@@ -89,7 +88,6 @@ export class BotSession {
       Object.assign(memory, { seen: current, lastSentAt: now });
       return id;
     }, context);
-    this.#services.markNoticesDelivered(notices.ids);
     return { submissionId: String(submissionId), placed: placement(busy, mode) };
   }
 

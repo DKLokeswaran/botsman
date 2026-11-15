@@ -40,7 +40,7 @@ function textOf(message: Message | undefined): string {
   return message.content.flatMap((part) => (part.type === "text" ? [part.text] : [])).join("");
 }
 
-// The owner's own words come last, after any memory update or notice the server added.
+// The owner's own words come last, after any memory update the server added.
 function lastLine(text: string): string {
   const parts = text.split("\n\n");
   return parts[parts.length - 1]!.trim();

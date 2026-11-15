@@ -29,9 +29,9 @@ export type MemoryFileParams = Static<typeof MemoryFileParams>;
 export const MemoryFileUpdate = obj({ content: str({ maxLength: 6000 }) });
 export type MemoryFileUpdate = Static<typeof MemoryFileUpdate>;
 
-export const ProposalStatuses = ["pending", "accepted", "rejected", "refused"] as const;
+export const ProposalStatuses = ["pending", "accepted", "rejected", "expired", "cancelled"] as const;
 
-// A bot's proposed edit to a memory file, waiting for the owner's confirmation.
+// A bot's proposed edit to a memory file. The bot's tool call waits for the owner's answer until `expiresAt`.
 export const MemoryProposal = obj({
   id: str(),
   botId: str(),
@@ -42,6 +42,7 @@ export const MemoryProposal = obj({
   conversation: str(),
   status: oneOf(ProposalStatuses),
   createdAt: int(),
+  expiresAt: int(),
   answeredAt: nullable(int()),
 });
 export type MemoryProposal = Static<typeof MemoryProposal>;

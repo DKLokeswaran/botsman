@@ -89,12 +89,17 @@ describe("M1 scenario", () => {
     expect(result).toMatchObject({ isError: false, output: expect.stringContaining("sandboxed") });
   });
 
-  it("confirms a memory edit and tells the bot with its next message", async () => {
+  it("holds a memory edit until the owner accepts it, then tells the bot in the tool result", async () => {
     await server.client.send(botId, 'tool memory {"action":"propose_memory_edit","content":"The owner likes tea.","reason":"Owner said so"}');
-    await stream.waitForMessage(chat, (message) => message.type === "tool_result" && message.toolName === "memory");
-    const { proposals } = await server.client.proposals();
+    let proposals = (await server.client.proposals()).proposals;
+    while (proposals.length === 0) {
+      await new Promise((resolve) => setTimeout(resolve, 50));
+      proposals = (await server.client.proposals()).proposals;
+    }
     expect(proposals).toHaveLength(1);
     await server.client.answerProposal(proposals[0]!.id, "accept");
+    const result = await stream.waitForMessage(chat, (message) => message.type === "tool_result" && message.toolName === "memory");
+    expect(result).toMatchObject({ isError: false, output: expect.stringContaining("accepted") });
     const memory = await server.client.memory(botId);
     expect(memory.files.find((file) => file.name === "BOT_MEMORY.md")!.content).toBe("The owner likes tea.");
   });

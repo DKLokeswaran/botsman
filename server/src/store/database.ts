@@ -87,16 +87,10 @@ const MIGRATIONS: readonly string[] = [
     conversation TEXT NOT NULL,
     status TEXT NOT NULL,
     created_at INTEGER NOT NULL,
+    expires_at INTEGER NOT NULL,
     answered_at INTEGER
   );
   CREATE INDEX proposals_status ON proposals (status, created_at);
-  CREATE TABLE notices (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    bot_id TEXT NOT NULL,
-    text TEXT NOT NULL,
-    created_at INTEGER NOT NULL,
-    delivered_at INTEGER
-  );
   CREATE TABLE note_files (
     bot_id TEXT NOT NULL,
     name TEXT NOT NULL,

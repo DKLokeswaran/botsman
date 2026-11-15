@@ -29,7 +29,7 @@ Smart is a real setting the protocol and apps accept. In the server it calls the
 
 ### What counts as leaving the folder
 
-Commands are never judged, so `bash` always counts as inside: the sandbox limits what it reaches. The `read`, `write`, and `edit` tools leave when their path resolves outside the bot's folder. Any other tool without its own rule counts as leaving, so it asks. The `memory` tool doesn't go through approvals, because its edits become proposals of their own.
+Commands are never judged, so `bash` always counts as inside: the sandbox limits what it reaches. The `read`, `write`, and `edit` tools leave when their path resolves outside the bot's folder. Any other tool without its own rule counts as leaving, so it asks. The `memory` tool doesn't go through approvals, because its edits become proposals of their own, which wait for the owner in the same way.
 
 An approval doesn't widen the sandbox. An allowed read of `/etc/hostname` works because the sandbox shows `/etc`; an allowed write outside the folder still fails, because nothing outside it is writable.
 

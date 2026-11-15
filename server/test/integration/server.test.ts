@@ -1,4 +1,4 @@
-import { chatStream } from "@botsman/protocol";
+import { chatStream, type MemoryProposal } from "@botsman/protocol";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { scriptModelProvider } from "../../src/testing/script-model.ts";
 import { HttpError, type StreamClient } from "../e2e/client.ts";
@@ -137,6 +137,16 @@ describe("approvals", () => {
   });
 });
 
+// Waits for a bot's memory proposal to appear, pending.
+async function pendingProposal(botId: string): Promise<MemoryProposal> {
+  for (let attempt = 0; attempt < 100; attempt++) {
+    const proposal = (await server.client.proposals()).proposals.find((candidate) => candidate.botId === botId);
+    if (proposal !== undefined) return proposal;
+    await new Promise((resolve) => setTimeout(resolve, 50));
+  }
+  throw new Error(`No pending proposal for bot ${botId}`);
+}
+
 describe("memory", () => {
   it("lets only the main bot propose USER_MEMORY.md, and no bot a PROFILE file", async () => {
     const bot = await server.client.createBot({ name: "Plain", defaultModel: SCRIPT_MODEL_REF });
@@ -148,8 +158,9 @@ describe("memory", () => {
 
     const main = await openChat(mainId);
     await server.client.send(mainId, 'tool memory {"action":"propose_memory_edit","file":"USER_MEMORY.md","content":"Owner lives in Chennai."}');
+    await server.client.answerProposal((await pendingProposal(mainId)).id, "accept");
     const accepted = await main.stream.waitForMessage(main.chat, (message) => message.type === "tool_result" && message.toolName === "memory");
-    expect(accepted).toMatchObject({ isError: false });
+    expect(accepted).toMatchObject({ isError: false, output: expect.stringContaining("accepted") });
     main.stream.close();
   });
 
@@ -162,15 +173,47 @@ describe("memory", () => {
     stream.close();
   });
 
-  it("sends the owner's answer and memory changes with the bot's next message, not shown in chat", async () => {
+  it("holds the tool call until the owner rejects, and leaves the file unchanged", async () => {
+    const bot = await server.client.createBot({ name: "Rejected", defaultModel: SCRIPT_MODEL_REF });
+    const { stream, chat } = await openChat(bot.id);
+    await server.client.send(bot.id, 'tool memory {"action":"propose_memory_edit","content":"Likes long answers."}');
+    const proposal = await pendingProposal(bot.id);
+    expect(stream.messages.get(chat)!.some((message) => message.type === "tool_result")).toBe(false);
+    await server.client.answerProposal(proposal.id, "reject");
+    const result = await stream.waitForMessage(chat, (message) => message.type === "tool_result");
+    expect(result).toMatchObject({ isError: false, output: expect.stringContaining("rejected") });
+    expect((await server.client.memory(bot.id)).files.find((file) => file.name === "BOT_MEMORY.md")!.content).toBe("");
+    stream.close();
+  });
+
+  it("ends an unanswered proposal once the approval wait runs out", async () => {
+    const bot = await server.client.createBot({ name: "Unanswered", defaultModel: SCRIPT_MODEL_REF });
+    server.botsman.services.db.prepare("UPDATE bots SET approval_wait_ms = 300 WHERE id = ?").run(bot.id);
+    const { stream, chat } = await openChat(bot.id);
+    await server.client.send(bot.id, 'tool memory {"action":"propose_memory_edit","content":"Never answered."}');
+    const result = await stream.waitForMessage(chat, (message) => message.type === "tool_result");
+    expect(result).toMatchObject({ output: expect.stringContaining("did not answer") });
+    expect((await server.client.proposals("expired")).proposals.some((proposal) => proposal.botId === bot.id)).toBe(true);
+    stream.close();
+  });
+
+  it("cancels a waiting proposal when the bot is stopped", async () => {
+    const bot = await server.client.createBot({ name: "Stopped", defaultModel: SCRIPT_MODEL_REF });
+    await server.client.send(bot.id, 'tool memory {"action":"propose_memory_edit","content":"Stopped midway."}');
+    const proposal = await pendingProposal(bot.id);
+    await server.client.stop(bot.id);
+    expect(server.botsman.services.proposals.get(proposal.id).status).toBe("cancelled");
+  });
+
+  it("returns the answer as the tool result, and sends memory changes with the next message, not shown in chat", async () => {
     const bot = await server.client.createBot({ name: "Rememberer", defaultModel: SCRIPT_MODEL_REF });
     const { stream, chat } = await openChat(bot.id);
     await server.client.send(bot.id, "first");
     await stream.waitForMessage(chat, (message) => message.type === "assistant" && message.text === "echo: first");
     await server.client.send(bot.id, 'tool memory {"action":"propose_memory_edit","content":"Prefers short answers."}');
-    await stream.waitForMessage(chat, (message) => message.type === "tool_result");
-    const { proposals } = await server.client.proposals();
-    await server.client.answerProposal(proposals.find((proposal) => proposal.botId === bot.id)!.id, "accept");
+    await server.client.answerProposal((await pendingProposal(bot.id)).id, "accept");
+    const result = await stream.waitForMessage(chat, (message) => message.type === "tool_result");
+    expect(result).toMatchObject({ isError: false, output: expect.stringContaining("BOT_MEMORY.md now holds the content you proposed") });
     await server.client.request("PUT", `/api/bots/${bot.id}/memory/USER_PROFILE.md`, { content: "The owner is Lokes." });
     await server.client.send(bot.id, "second");
     await stream.waitForMessage(chat, (message) => message.type === "assistant" && message.text === "echo: second");
@@ -178,7 +221,6 @@ describe("memory", () => {
     const view = await server.botsman.services.engine.view(server.botsman.services.registry.get(bot.id)!);
     const sent = view.entries.filter((entry) => entry.kind === "botsman.owner-message").at(-1)!;
     const modelText = JSON.stringify(sent.model);
-    expect(modelText).toContain("accepted your proposed edit to BOT_MEMORY.md");
     expect(modelText).toContain("USER_PROFILE.md changed");
     expect(modelText).toContain("The owner is Lokes.");
     expect(stream.messages.get(chat)!.filter((message) => message.type === "user").at(-1)).toMatchObject({ text: "second" });
