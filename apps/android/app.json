@@ -1,0 +1,22 @@
+{
+  "expo": {
+    "name": "Botsman",
+    "slug": "botsman",
+    "version": "0.1.0",
+    "scheme": "botsman",
+    "orientation": "portrait",
+    "userInterfaceStyle": "automatic",
+    "icon": "./assets/icon.png",
+    "platforms": ["android"],
+    "android": {
+      "package": "dev.botsman.app",
+      "versionCode": 1,
+      "edgeToEdgeEnabled": true,
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/icon.png",
+        "backgroundColor": "#000000"
+      }
+    },
+    "plugins": ["expo-router"]
+  }
+}

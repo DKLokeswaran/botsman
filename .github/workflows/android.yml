@@ -1,0 +1,69 @@
+name: Android APK
+
+on:
+  push:
+    tags: ["android-v*"]
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - apps/android/**
+      - packages/client-core/**
+      - packages/protocol/**
+      - packages/tokens/**
+      - pnpm-lock.yaml
+      - .github/workflows/android.yml
+      - .github/actions/setup/**
+
+concurrency:
+  group: android-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  apk:
+    name: Build the APK
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    env:
+      KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+      KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+      KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+    steps:
+      - uses: actions/checkout@v7
+      - uses: ./.github/actions/setup
+      - uses: actions/setup-java@v6
+        with:
+          distribution: temurin
+          java-version: "17"
+      - uses: actions/cache@v6
+        with:
+          path: |
+            ~/.gradle/caches
+            ~/.gradle/wrapper
+          key: gradle-${{ hashFiles('pnpm-lock.yaml') }}
+          restore-keys: gradle-
+      - name: Generate the Android project
+        run: pnpm --filter @botsman/android prebuild
+      # A pull request from a fork has no keystore, so its APK keeps the debug signature.
+      - name: Build the APK for arm64 phones
+        working-directory: apps/android/android
+        run: |
+          signing=()
+          if [ -n "$KEYSTORE_BASE64" ]; then
+            echo "$KEYSTORE_BASE64" | base64 --decode > "$RUNNER_TEMP/release.p12"
+            signing=(
+              "-Pandroid.injected.signing.store.file=$RUNNER_TEMP/release.p12"
+              "-Pandroid.injected.signing.store.password=$KEYSTORE_PASSWORD"
+              "-Pandroid.injected.signing.key.alias=$KEY_ALIAS"
+              "-Pandroid.injected.signing.key.password=$KEYSTORE_PASSWORD"
+            )
+          fi
+          ./gradlew assembleRelease --no-daemon -PreactNativeArchitectures=arm64-v8a "${signing[@]}"
+      - uses: actions/upload-artifact@v7
+        with:
+          name: botsman-android
+          path: apps/android/android/app/build/outputs/apk/release/*.apk
+          retention-days: 7
+          if-no-files-found: error

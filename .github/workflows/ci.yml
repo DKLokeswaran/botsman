@@ -1,0 +1,27 @@
+name: Checks
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+concurrency:
+  group: checks-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  checks:
+    name: Type checks, tests, and the dashboard build
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v7
+      - uses: ./.github/actions/setup
+      - run: pnpm -r typecheck
+      - run: pnpm -r test
+      - run: pnpm --filter @botsman/web build
+      - name: Bundle the Android app's JavaScript
+        run: pnpm --filter @botsman/android bundle
