@@ -87,10 +87,18 @@ describe("saving before compaction", () => {
     expect(calls).toEqual([]);
   });
 
-  it("leaves a save turn behind once the owner writes again, so a failed compaction isn't retried after every reply", async () => {
+  it("compacts a finished save turn a restart left behind, even when the owner wrote during it", async () => {
     const { calls, submissions, settled, guard: subject } = guard();
     submissions.set("pre-compaction:2", settled);
-    subject.afterRun(bot, view([answer(2, WINDOW - 20_000), saveEntry(3, 2), answer(SAVE_ANSWER, 1_000), entry(95, OWNER_MESSAGE_KIND), answer(96, 1_000)]));
+    subject.afterRun(bot, view([answer(2, WINDOW - 20_000), saveEntry(3, 2), answer(SAVE_ANSWER, WINDOW - 15_000), entry(95, OWNER_MESSAGE_KIND), answer(96, WINDOW - 12_000)]));
+    await settle();
+    expect(calls).toEqual(["compact"]);
+  });
+
+  it("never starts a save from a save turn's own reply after a steered message", async () => {
+    const { calls, submissions, settled, guard: subject } = guard({ status: "done", stopReason: "length" });
+    submissions.set("pre-compaction:2", settled);
+    subject.afterRun(bot, view([entry(1, OWNER_MESSAGE_KIND), answer(2, WINDOW - 20_000), saveEntry(3, 2), answer(4, WINDOW - 18_000, "toolUse"), entry(5, OWNER_MESSAGE_KIND), answer(SAVE_ANSWER, WINDOW - 15_000, "length")]));
     await settle();
     expect(calls).toEqual([]);
   });

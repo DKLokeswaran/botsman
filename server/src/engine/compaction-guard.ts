@@ -92,12 +92,12 @@ function savePrompt(bot: Bot): string {
   ].join(" ");
 }
 
-// The request id of the newest save turn with no owner message, compaction, or reset after it. Once the owner writes
-// again, a save whose compaction never happened is left behind, and the next reply near the limit asks anew.
+// The request id of the newest save turn with no compaction or reset after it. Until it is compacted, each check
+// settles that same submission again, so only the compaction is retried.
 function leftoverSaveRequest(view: ChatView): string | undefined {
   for (let index = view.entries.length - 1; index >= 0; index--) {
     const entry = view.entries[index]!;
-    if (entry.kind === OWNER_MESSAGE_KIND || entry.kind === "pi.compaction" || entry.kind === "pi.reset") return undefined;
+    if (entry.kind === "pi.compaction" || entry.kind === "pi.reset") return undefined;
     if (entry.kind === PRE_COMPACTION_KIND) return (entry.data as { requestId?: string } | undefined)?.requestId;
   }
   return undefined;
@@ -119,16 +119,46 @@ function compacting(view: ChatView): boolean {
   return (live?.compactions?.length ?? 0) > 0;
 }
 
-// The newest reply to the owner since the last compaction or reset. Replies before a compaction no longer reflect the
-// context size, and a save turn's own replies never start another save.
+// The newest reply to the owner since the last compaction or reset. A save turn's own replies never count, so they
+// never start another save.
 function lastAnswer(view: ChatView): { id: number; usage: Usage } | undefined {
-  let answer: { id: number; usage: Usage } | undefined;
+  const start = turnStart(view);
+  if (start !== undefined && view.entries[start]!.kind === PRE_COMPACTION_KIND) return undefined;
+  return newestAnswerAfter(view, start ?? -1);
+}
+
+// Where the newest turn began: an owner message that wasn't steered into a running turn, a save turn's prompt, or a
+// compaction or reset.
+function turnStart(view: ChatView): number | undefined {
   for (let index = view.entries.length - 1; index >= 0; index--) {
-    const entry = view.entries[index]!;
-    if (entry.kind === PRE_COMPACTION_KIND) return undefined;
-    if (entry.kind === OWNER_MESSAGE_KIND || entry.kind === "pi.compaction" || entry.kind === "pi.reset") return answer;
-    const message = entry.model?.[0];
-    if (answer === undefined && entry.kind === "pi.assistant" && message?.role === "assistant") answer = { id: entry.id, usage: message.usage };
+    const kind = view.entries[index]!.kind;
+    if (kind === OWNER_MESSAGE_KIND ? !steered(view, index) : isBoundary(kind)) return index;
   }
-  return answer;
+  return undefined;
+}
+
+// Pi places a steered message after a tool round, so the reply before it stopped for tool calls.
+function steered(view: ChatView, index: number): boolean {
+  for (let before = index - 1; before >= 0; before--) {
+    const entry = view.entries[before]!;
+    if (entry.kind === "pi.assistant") {
+      const message = entry.model?.[0];
+      return message?.role === "assistant" && message.stopReason === "toolUse";
+    }
+    if (entry.kind === OWNER_MESSAGE_KIND || isBoundary(entry.kind)) return false;
+  }
+  return false;
+}
+
+function isBoundary(kind: string): boolean {
+  return kind === PRE_COMPACTION_KIND || kind === "pi.compaction" || kind === "pi.reset";
+}
+
+function newestAnswerAfter(view: ChatView, start: number): { id: number; usage: Usage } | undefined {
+  for (let index = view.entries.length - 1; index > start; index--) {
+    const entry = view.entries[index]!;
+    const message = entry.model?.[0];
+    if (entry.kind === "pi.assistant" && message?.role === "assistant") return { id: entry.id, usage: message.usage };
+  }
+  return undefined;
 }
