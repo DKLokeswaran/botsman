@@ -51,9 +51,11 @@ Two events leave nothing in the cache to protect, so the server rewrites the fro
 - The first message after the cache has expired, such as when the owner returns to a bot after a break.
 - Compaction.
 
-Every model runs with Pi's `supportsMidConvoSystemMessages` setting off, so a request has one system prompt.
+Every model runs with Pi's `supportsMidConvoSystemMessages` setting off, so a request has one system prompt. The server enforces this with a hook that collapses system messages before every request, whatever a model's catalog entry says.
 
-The server judges expiry from the time of the bot's last request and the provider's cache lifetime. A wrong guess costs one cache rebuild.
+The server judges expiry from the time of the bot's last message or finished reply and the provider's cache lifetime, taken as 5 minutes. A wrong guess costs one cache rebuild. After a server restart the server doesn't know the last reply's time, so the first message may rewrite the prompt.
+
+Owner answers to proposals travel the same way: a short notice, such as "The owner accepted your proposed edit to BOT_MEMORY.md", goes with the bot's next incoming message and is stored with it. Steer and queued messages count as incoming messages.
 
 On a Claude subscription, the new prompt goes in when the `claude` process next starts. See [Claude subscription](permissions.md#claude-subscription).
 
@@ -70,11 +72,18 @@ Pi's default on current models keeps the old prompt and adds the update after it
 
 Botsman controls compaction through Pi's settings and its manual `compact()` call. When a chat nears the limit, the server gives the bot one turn to save what matters, then starts compaction. Pi's automatic compaction stays on as the safety net, for example when a provider rejects a request as too long.
 
-In that turn the bot writes to its notes, and proposes any `BOT_MEMORY.md` changes for confirmation.
+In that turn the bot writes to its notes, and proposes any `BOT_MEMORY.md` changes for confirmation. The main bot can also propose `USER_MEMORY.md` changes. Proposals still wait for the owner, as every memory file edit does; notes are written at once.
+
+| Threshold | Where |
+| --- | --- |
+| Save turn | After a reply whose context reaches the model's context window minus 32,768 tokens |
+| Pi's own compaction | When the next request would pass the context window minus 16,384 tokens. Pi's background compaction is off, so this is the only automatic one. |
+
+The save turn shows in chat as a notice, and its request id is tied to the reply that crossed the threshold, so a restart never asks twice. Models with a context window of 32,768 tokens or less skip the save turn and rely on Pi's compaction.
 
 ## Notes
 
-Notes are plain Markdown files that hold what doesn't fit a small file, such as the projects a developer bot tracks. They live in `bots/<id>/notes/`, outside the bot's folder, so `ls` and `grep -r` in that folder never spend tokens on them. They reach the model only when the bot opens one.
+Notes are plain Markdown files that hold what doesn't fit a small file, such as the projects a developer bot tracks. A note's name is a plain file name ending in `.md`, with no folders. They live in `bots/<id>/notes/`, outside the bot's folder, so `ls` and `grep -r` in that folder never spend tokens on them. They reach the model only when the bot opens one.
 
 One `memory` tool does all of this. It searches, reads, and writes notes, and proposes edits to the memory files. Hermes has a `memory` tool too, and OpenClaw has `memory_search` and `memory_get`.
 

@@ -6,13 +6,13 @@
 | --- | --- | --- |
 | Language | TypeScript, with a little Rust and Kotlin in the app shells | Pi Durable requires it on the server |
 | Repo | One monorepo, pnpm 12.18.0 workspaces | The server and apps share code directly. See [why pnpm](#why-pnpm). |
-| Runtime | Node 24, pinned | Pi needs 22.19 or newer, and our Pi tests ran on 24.21 |
+| Runtime | Node 24, pinned to 24.21 in `.node-version` | Pi needs 22.19 or newer, and our Pi tests ran on 24.21. The server runs its TypeScript directly with Node's type stripping, with no build step. |
 | Agent engine | Pi Durable 1.5.0, exact version | Crash recovery, durable waits, and many conversations in one store |
 | Models | `pi-ai` | About 35 providers, including a built-in `opencode-go` |
 | Claude subscription | `@anthropic-ai/claude-agent-sdk`, as a custom `pi-ai` provider | Runs the owner's own Claude Code login with Pi keeping control of tools and history |
 | Skills | The loader from `pi-coding-agent` | Reads [Agent Skills](https://agentskills.io) `SKILL.md` folders |
 | MCP | `pi-mcp`, with our own adapter into Pi Durable tools | A complete client with OAuth; Pi Durable has no adapter |
-| HTTP and WebSocket | Fastify with `@fastify/websocket` | Node-only, with JSON Schema validation built in |
+| HTTP and WebSocket | Fastify 5.12.7 with `@fastify/websocket` 11.3.4 | Node-only, with JSON Schema validation built in |
 | Message schema | `pi-schema` | Already installed through Pi, no dependencies, no `eval`, and outputs plain JSON Schema. Fastify validates with it directly. Zod 4 appears only in the `claude-agent` module, because the Agent SDK's tool helper requires it. |
 | Storage | One Pi SQLite file per bot, and `server.db` through `node:sqlite` with plain SQL | Per-bot backup. A few tables need no ORM. |
 | Search | SQLite FTS5 | Built in, and tested with `node:sqlite` |
@@ -26,7 +26,8 @@
 | Alerts on Android | Our own Kotlin foreground service, as an Expo module | See [notifications](notifications.md) |
 | Bot isolation | Bubblewrap, one sandbox per bot | An allow list of paths, separate processes per bot, no root after install, and about 30 ms to start |
 | Hosting | A systemd user service, TLS from Tailscale Serve or Caddy | One process on one VPS, under a normal user |
-| Tests | Vitest, using Pi's faux model provider | Tests run with no model bills |
+| Tests | Vitest 5.0.5, using Pi's faux model provider through a scripted test model | Tests run with no model bills. M1 has no test against a real model. |
+| Type checks | TypeScript 6.0.3, `tsc` with no emit | Checks the sources Node runs as they are |
 
 ## Repo layout
 
@@ -39,6 +40,7 @@ packages/client-core    shared logic and hooks
 packages/pc-ui          React screens for Windows and web
 packages/tokens         design tokens
 server                  the Botsman server
+deploy                  install script, systemd unit, and AppArmor profile
 mockups                 clickable UI reference
 docs                    this documentation
 ```

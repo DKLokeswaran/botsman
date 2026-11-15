@@ -1,0 +1,10 @@
+# AppArmor profile that lets /usr/bin/bwrap create user namespaces on Ubuntu 24.04 and later.
+# Install as /etc/apparmor.d/bwrap and load with: sudo apparmor_parser -r /etc/apparmor.d/bwrap
+abi <abi/4.0>,
+include <tunables/global>
+
+profile bwrap /usr/bin/bwrap flags=(unconfined) {
+  userns,
+
+  include if exists <local/bwrap>
+}

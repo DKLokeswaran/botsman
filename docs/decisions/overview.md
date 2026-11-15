@@ -27,6 +27,7 @@ One Node process runs as the owner's user, as a systemd user service. It needs n
 ```text
 ~/.botsman/
   server.db                 login, tokens, bot registry, settings, encrypted model keys and sign-ins
+  secret.key                the key that encrypts model keys and signs access tokens, left out of backups
   user/USER_PROFILE.md
   user/USER_MEMORY.md
   skills/                   shared skill pool
@@ -82,6 +83,12 @@ Botsman doesn't load skills from repos cloned into a bot's folder. The bot's ski
 | `conversations` | Bot-to-bot exchanges, channels, and the loop limit. |
 | `tools` | The `memory` tool, web, messaging, and main bot tools, including `host_bash`. Skills and MCP adapters. |
 | `alerts` | Decides which events alert, and streams them to apps. |
+| `auth` | The owner's password, device sessions, and access and refresh tokens. |
+| `bots` | The bot registry, folder rules, and creating, editing, and deleting bots. |
+| `providers` | pi-ai's credential store over `server.db`, the provider list, and sign-ins. |
+| `backup` | Nightly backups and the backup command. |
+
+In M1 the `events` module receives Pi's conversation views from the engine as plain data and never imports Pi Durable itself, so the engine is the only importer. Alerts and the `server` stream are published from the service wiring in `server/src/services.ts`. `routines`, `conversations`, and the rest of `tools` come in later milestones.
 
 ### Conversations in Pi
 
@@ -91,8 +98,8 @@ Each bot's SQLite file holds its chat with the owner, routine runs, its side of 
 
 Our own schema, in the `protocol` package, defines every HTTP body and WebSocket message. Apps never see Pi's internal formats, so a Pi upgrade changes only the `engine` and `events` modules.
 
-- **Live updates.** The WebSocket sends events with a per-conversation sequence number.
-- **Reconnect.** The client sends the last sequence it saw, and the server replies with what it missed or a fresh snapshot.
+- **Live updates.** The WebSocket sends events with a per-conversation sequence number. A client signs in with its first message, since browsers can't set headers on a WebSocket.
+- **Reconnect.** The client sends the server's epoch and the last sequence it saw, and the server replies with what it missed or a fresh snapshot. The server keeps the last 1,000 events per stream in memory, and its epoch changes on every start, so a client returning after a restart gets a snapshot.
 - **Alerts stream.** A second, small stream carries only alert events, for the background connections.
 
 Rust and Kotlin message types for the alerts stream are generated from the same JSON Schema.
@@ -138,12 +145,10 @@ The apps have no permanent erase in v1. That is done on the server by hand.
 
 ## Exposure
 
-The server does not care whether its address is on a tailnet or the public internet. It requires HTTPS and treats every deployment as reachable by strangers: rate-limited login, and revocable refresh tokens. TLS comes from Tailscale Serve or a reverse proxy such as Caddy.
+The server does not care whether its address is on a tailnet or the public internet. It requires HTTPS and treats every deployment as reachable by strangers: rate-limited login, and revocable refresh tokens. TLS comes from Tailscale, a reverse proxy such as Caddy, or certificate files given to the server. The server listens on `127.0.0.1` by default and refuses any request that didn't arrive over TLS, judged from its own TLS or a trusted proxy's `X-Forwarded-Proto`. Login allows 10 password attempts per address every 15 minutes. Access tokens last 15 minutes and refresh tokens 60 days from their last use; each refresh replaces the refresh token. See [running the server](../operations/server.md).
 
 ## To settle during the build
 
-- Exactly which system paths a sandbox shows, starting from the tested list in [permissions](permissions.md#how-the-sandbox-is-set-up).
-- How Stop closes a bot's connection while other commands are running in that sandbox.
 - How snapshots of a bot's folder work.
 - Whether a bot's folder can move after creation.
 - Which web search provider to use.

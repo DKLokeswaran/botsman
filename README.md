@@ -4,7 +4,7 @@ Botsman is a personal assistant you run yourself. A small server on your VPS run
 
 The server stays on all the time, so bots can run routines, wait for your approval, and alert you while the apps are closed.
 
-No app or server code exists yet. This repo holds the plan and clickable mockups.
+The server core (milestone M1) is in `server/`, with its message schema in `packages/protocol/`. The apps come next; until then the repo also holds the plan and clickable mockups.
 
 ## What's here
 
@@ -20,8 +20,22 @@ No app or server code exists yet. This repo holds the plan and clickable mockups
 | [docs/decisions/notifications.md](docs/decisions/notifications.md) | Alerts when the apps are closed |
 | [docs/research/pi-durable.md](docs/research/pi-durable.md) | What Pi Durable is, and test results |
 | [docs/risks.md](docs/risks.md) | Known risks and how we handle them |
+| [docs/operations/server.md](docs/operations/server.md) | Installing and running the server, backups, and restore |
+| [server/](server) | The Botsman server |
+| [packages/protocol/](packages/protocol) | Every HTTP body and WebSocket message |
+| [deploy/](deploy) | Install script, systemd unit, and AppArmor profile |
 | [DESIGN.md](DESIGN.md) | The Zoetrik visual design |
 | [mockups/](mockups/README.md) | Clickable mockups of every screen |
+
+## Run the tests
+
+```bash
+pnpm install
+pnpm -r typecheck
+pnpm -r test
+```
+
+To install the server on a VPS, see [running the server](docs/operations/server.md).
 
 ## View the mockups
 

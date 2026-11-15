@@ -4,7 +4,7 @@ The server comes first. After that, Windows and Android move through the same mi
 
 ## Alpha
 
-**M1. Server core.** One Node process that hosts bots on Pi Durable: bot creation, one SQLite file per bot, login, model provider keys and sign-ins, the app protocol, streaming chat, stop, steer, queue, and catch-up after a reconnect. Includes the sandbox for each bot with Stop closing any process left running, approvals, the four memory files with confirmations, notes, and keyword search.
+**M1. Server core.** One Node process that hosts bots on Pi Durable: bot creation, one SQLite file per bot, login, model provider keys and sign-ins, the app protocol, streaming chat, stop, steer, queue, and catch-up after a reconnect. Includes the sandbox for each bot with Stop closing any process left running, approvals, the four memory files with confirmations, saving before compaction, notes, and keyword search. Also the install script with its AppArmor step, the systemd user service, and nightly backups with restore steps. The web dashboard's path answers with a fixed "coming soon" reply until M2. M1 is tested with Pi's faux provider only, with no run against a real model. Smart mode is accepted as a setting and runs like Off until the classifier exists.
 
 **M2. Apps.** It starts by installing with pnpm 12, building and launching the Windows app on Windows, and building the Android APK and opening it on a phone or emulator. Then come the `protocol`, `client-core`, `pc-ui`, and token packages, the Windows app, the web dashboard on the same screens, and the Android app: first-run setup, bot list, chat, approvals, memory, notes, bot info, bot settings, model providers, usage, and alerts through the tray and the Android foreground service.
 

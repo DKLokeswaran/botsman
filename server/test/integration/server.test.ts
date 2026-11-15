@@ -1,0 +1,256 @@
+import { chatStream } from "@botsman/protocol";
+import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { scriptModelProvider } from "../../src/testing/script-model.ts";
+import { HttpError, type StreamClient } from "../e2e/client.ts";
+import { PASSWORD, SCRIPT_MODEL_REF, setUpServer, startTestServer, type TestServer } from "../helpers.ts";
+
+let server: TestServer;
+let mainId: string;
+
+beforeAll(async () => {
+  server = await startTestServer();
+  mainId = await setUpServer(server);
+});
+
+afterAll(async () => {
+  await server?.botsman.stop();
+  server?.root.cleanup();
+});
+
+async function openChat(botId: string): Promise<{ stream: StreamClient; chat: string }> {
+  const stream = await server.client.stream();
+  const chat = chatStream(botId);
+  stream.subscribe(chat);
+  await stream.waitFor((message) => message.type === "snapshot" && message.stream === chat);
+  return { stream, chat };
+}
+
+async function expectError(promise: Promise<unknown>, status: number, code: string): Promise<void> {
+  const error = await promise.then(() => undefined, (caught: unknown) => caught);
+  expect(error).toBeInstanceOf(HttpError);
+  expect((error as HttpError).status).toBe(status);
+  expect((error as HttpError).body?.error).toBe(code);
+}
+
+describe("auth and exposure", () => {
+  it("refuses plain HTTP", async () => {
+    const response = await server.client.raw("GET", "/api/health", undefined, { "x-forwarded-proto": "http" });
+    expect(response.status).toBe(403);
+    expect(await response.json()).toMatchObject({ error: "https_required" });
+  });
+
+  it("answers the dashboard path with coming soon", async () => {
+    const response = await server.client.raw("GET", "/app/anything");
+    expect(await response.json()).toEqual({ status: "coming_soon", feature: "web-dashboard" });
+  });
+
+  it("refuses a second setup and private routes without a token", async () => {
+    await expectError(server.client.request("POST", "/api/setup", { password: PASSWORD, deviceName: "x", mainBot: { name: "Again" } }), 409, "already_set_up");
+    const anonymous = await fetch(`${server.baseUrl}/api/bots`, { headers: { "x-forwarded-proto": "https" } });
+    expect(anonymous.status).toBe(401);
+  });
+
+  it("rotates refresh tokens and revokes sessions", async () => {
+    const first = await server.client.login(PASSWORD);
+    const second = await server.client.request<{ refreshToken: string; accessToken: string }>("POST", "/api/auth/refresh", { refreshToken: first.refreshToken });
+    await expectError(server.client.request("POST", "/api/auth/refresh", { refreshToken: first.refreshToken }), 401, "unauthorized");
+    server.client.tokens = { ...first, ...second } as typeof first;
+    await server.client.request("POST", "/api/auth/logout");
+    await expectError(server.client.bots(), 401, "unauthorized");
+    await server.client.login(PASSWORD);
+  });
+
+  it("rate-limits password guesses", async () => {
+    const results: number[] = [];
+    for (let attempt = 0; attempt < 12; attempt++) {
+      results.push((await server.client.raw("POST", "/api/auth/login", { password: "wrong", deviceName: "x" })).status);
+    }
+    expect(results).toContain(429);
+  });
+});
+
+describe("bots", () => {
+  it("refuses unsafe folders and duplicate names", async () => {
+    await expectError(server.client.createBot({ name: "Bad", folder: server.root.home }), 400, "unsafe_folder");
+    await expectError(server.client.createBot({ name: "main" }), 409, "conflict");
+  });
+
+  it("deletes a bot but never the main bot, and frees its name", async () => {
+    const bot = await server.client.createBot({ name: "Temp", purpose: "Temporary" });
+    await expectError(server.client.request("DELETE", `/api/bots/${mainId}`), 403, "forbidden");
+    await server.client.request("DELETE", `/api/bots/${bot.id}`);
+    expect((await server.client.bots()).bots.map((item) => item.id)).not.toContain(bot.id);
+    await server.client.createBot({ name: "Temp" });
+  });
+
+  it("refuses to chat without a connected model", async () => {
+    const bot = await server.client.createBot({ name: "No model" });
+    await expectError(server.client.send(bot.id, "hi"), 409, "model_not_connected");
+  });
+});
+
+describe("approvals", () => {
+  it("refuses when the owner denies, and tells the bot", async () => {
+    const bot = await server.client.createBot({ name: "Denied", defaultModel: SCRIPT_MODEL_REF });
+    const { stream, chat } = await openChat(bot.id);
+    await server.client.send(bot.id, 'tool read {"path":"/etc/hostname"}');
+    const live = await stream.waitForLive(chat, (state) => state.tools.some((tool) => tool.awaitingApproval !== null));
+    await server.client.answerApproval(live.tools[0]!.awaitingApproval!, "deny");
+    const result = await stream.waitForMessage(chat, (message) => message.type === "tool_result");
+    expect(result).toMatchObject({ isError: true, output: expect.stringContaining("denied") });
+    stream.close();
+  });
+
+  it("refuses an unanswered approval once the wait runs out", async () => {
+    const bot = await server.client.createBot({ name: "Waiter", defaultModel: SCRIPT_MODEL_REF });
+    server.botsman.services.db.prepare("UPDATE bots SET approval_wait_ms = 300 WHERE id = ?").run(bot.id);
+    const { stream, chat } = await openChat(bot.id);
+    await server.client.send(bot.id, 'tool read {"path":"/etc/hostname"}');
+    const result = await stream.waitForMessage(chat, (message) => message.type === "tool_result");
+    expect(result).toMatchObject({ isError: true, output: expect.stringContaining("did not answer") });
+    expect((await server.client.approvals("expired")).approvals.some((approval) => approval.botId === bot.id)).toBe(true);
+    stream.close();
+  });
+
+  it("allow for this chat covers later calls of that tool", async () => {
+    const bot = await server.client.createBot({ name: "Granted", defaultModel: SCRIPT_MODEL_REF });
+    const { stream, chat } = await openChat(bot.id);
+    await server.client.send(bot.id, 'tool read {"path":"/etc/hostname"}');
+    const live = await stream.waitForLive(chat, (state) => state.tools.some((tool) => tool.awaitingApproval !== null));
+    await server.client.answerApproval(live.tools[0]!.awaitingApproval!, "allow_chat");
+    await stream.waitForMessage(chat, (message) => message.type === "tool_result");
+    await server.client.send(bot.id, 'tool read {"path":"/etc/os-release"}');
+    await stream.waitForMessage(chat, (message) => message.type === "tool_result" && message.output.includes("NAME"));
+    expect((await server.client.approvals()).approvals.filter((approval) => approval.botId === bot.id)).toHaveLength(0);
+    stream.close();
+  });
+
+  it("smart mode runs like off for now, without asking", async () => {
+    const bot = await server.client.createBot({ name: "Smart", defaultModel: SCRIPT_MODEL_REF });
+    await server.client.updateBot(bot.id, { permissionMode: "smart" });
+    const { stream, chat } = await openChat(bot.id);
+    await server.client.send(bot.id, 'tool read {"path":"/etc/hostname"}');
+    const result = await stream.waitForMessage(chat, (message) => message.type === "tool_result");
+    expect(result).toMatchObject({ isError: false });
+    expect((await server.client.approvals()).approvals.filter((approval) => approval.botId === bot.id)).toHaveLength(0);
+    stream.close();
+  });
+});
+
+describe("memory", () => {
+  it("lets only the main bot propose USER_MEMORY.md, and no bot a PROFILE file", async () => {
+    const bot = await server.client.createBot({ name: "Plain", defaultModel: SCRIPT_MODEL_REF });
+    const { stream, chat } = await openChat(bot.id);
+    await server.client.send(bot.id, 'tool memory {"action":"propose_memory_edit","file":"USER_MEMORY.md","content":"x"}');
+    const refused = await stream.waitForMessage(chat, (message) => message.type === "tool_result");
+    expect(refused).toMatchObject({ isError: true, output: expect.stringContaining("Only the main bot") });
+    stream.close();
+
+    const main = await openChat(mainId);
+    await server.client.send(mainId, 'tool memory {"action":"propose_memory_edit","file":"USER_MEMORY.md","content":"Owner lives in Chennai."}');
+    const accepted = await main.stream.waitForMessage(main.chat, (message) => message.type === "tool_result" && message.toolName === "memory");
+    expect(accepted).toMatchObject({ isError: false });
+    main.stream.close();
+  });
+
+  it("refuses an edit over the file's limit with the current usage", async () => {
+    const { stream, chat } = await openChat(mainId);
+    const content = "x".repeat(4100);
+    await server.client.send(mainId, `tool memory {"action":"propose_memory_edit","content":"${content}"}`);
+    const result = await stream.waitForMessage(chat, (message) => message.type === "tool_result" && message.isError);
+    expect(result).toMatchObject({ output: expect.stringContaining("limited to 4000 characters") });
+    stream.close();
+  });
+
+  it("sends the owner's answer and memory changes with the bot's next message, not shown in chat", async () => {
+    const bot = await server.client.createBot({ name: "Rememberer", defaultModel: SCRIPT_MODEL_REF });
+    const { stream, chat } = await openChat(bot.id);
+    await server.client.send(bot.id, "first");
+    await stream.waitForMessage(chat, (message) => message.type === "assistant" && message.text === "echo: first");
+    await server.client.send(bot.id, 'tool memory {"action":"propose_memory_edit","content":"Prefers short answers."}');
+    await stream.waitForMessage(chat, (message) => message.type === "tool_result");
+    const { proposals } = await server.client.proposals();
+    await server.client.answerProposal(proposals.find((proposal) => proposal.botId === bot.id)!.id, "accept");
+    await server.client.request("PUT", `/api/bots/${bot.id}/memory/USER_PROFILE.md`, { content: "The owner is Lokes." });
+    await server.client.send(bot.id, "second");
+    await stream.waitForMessage(chat, (message) => message.type === "assistant" && message.text === "echo: second");
+
+    const view = await server.botsman.services.engine.view(server.botsman.services.registry.get(bot.id)!);
+    const sent = view.entries.filter((entry) => entry.kind === "botsman.owner-message").at(-1)!;
+    const modelText = JSON.stringify(sent.model);
+    expect(modelText).toContain("accepted your proposed edit to BOT_MEMORY.md");
+    expect(modelText).toContain("USER_PROFILE.md changed");
+    expect(modelText).toContain("The owner is Lokes.");
+    expect(stream.messages.get(chat)!.filter((message) => message.type === "user").at(-1)).toMatchObject({ text: "second" });
+    stream.close();
+  });
+});
+
+describe("saving before compaction", () => {
+  let small: TestServer;
+
+  beforeAll(async () => {
+    const root = (await import("../helpers.ts")).tempRoot();
+    const { startBotsman } = await import("../../src/server.ts");
+    const { testConfig } = await import("../helpers.ts");
+    const provider = scriptModelProvider({ provider: "script-small", contextWindow: 60_000 }).provider;
+    const botsman = await startBotsman(testConfig(root.home, root.dataDir, root.root), { backups: false, log: () => {}, extraProviders: [{ provider, methods: ["api_key"] }] });
+    const { port } = botsman.http.server.address() as { port: number };
+    const { BotsmanClient } = await import("../e2e/client.ts");
+    small = { botsman, client: new BotsmanClient(`http://127.0.0.1:${port}`), baseUrl: "", root };
+  });
+
+  afterAll(async () => {
+    await small?.botsman.stop();
+    small?.root.cleanup();
+  });
+
+  it("gives the bot a turn to save, then compacts", async () => {
+    await small.client.setup(PASSWORD, { name: "Main", defaultModel: { provider: "script-small", modelId: "script-1" } });
+    await small.client.saveKey("script-small", "test-key");
+    const botId = (await small.client.bots()).bots[0]!.id;
+    const stream = await small.client.stream();
+    const chat = chatStream(botId);
+    stream.subscribe(chat);
+    await stream.waitFor((message) => message.type === "snapshot");
+    // Several long messages, so older ones can be summarized while recent ones stay verbatim.
+    for (let index = 0; index < 4; index++) {
+      await small.client.send(botId, `part${index} ${"lorem ipsum ".repeat(2700)}`);
+      await stream.waitForMessage(chat, (message) => message.type === "assistant" && message.text.startsWith(`echo: part${index}`), 20_000);
+    }
+    await stream.waitForMessage(chat, (message) => message.type === "notice" && message.kind === "pre_compaction_save", 20_000);
+    await stream.waitForMessage(chat, (message) => message.type === "notice" && message.kind === "compaction", 20_000);
+    const kinds = stream.messages.get(chat)!.map((message) => (message.type === "notice" ? message.kind : message.type));
+    expect(kinds.indexOf("pre_compaction_save")).toBeLessThan(kinds.indexOf("compaction"));
+    stream.close();
+  });
+});
+
+describe("alerts stream", () => {
+  it("alerts on an approval and replays missed alerts after a reconnect", async () => {
+    const socket = new WebSocket(`${server.baseUrl.replace("http", "ws")}/api/alerts`, { headers: { "x-forwarded-proto": "https" } } as unknown as string[]);
+    const received: { type: string; seq?: number; epoch?: string; alert?: { kind: string } }[] = [];
+    socket.onmessage = (event) => received.push(JSON.parse(String(event.data)));
+    await new Promise((resolve) => (socket.onopen = resolve));
+    socket.send(JSON.stringify({ type: "hello", token: server.client.tokens!.accessToken, epoch: "unknown", seq: 0 }));
+    const bot = await server.client.createBot({ name: "Alerter", defaultModel: SCRIPT_MODEL_REF });
+    await server.client.send(bot.id, 'tool read {"path":"/etc/hostname"}');
+    const deadline = Date.now() + 10_000;
+    while (!received.some((message) => message.alert?.kind === "approval") && Date.now() < deadline) await new Promise((resolve) => setTimeout(resolve, 20));
+    const reset = received.find((message) => message.type === "reset")!;
+    const alert = received.find((message) => message.alert?.kind === "approval")!;
+    expect(reset).toBeDefined();
+    expect(alert.seq).toBeGreaterThan(0);
+    socket.close();
+
+    const again = new WebSocket(`${server.baseUrl.replace("http", "ws")}/api/alerts`, { headers: { "x-forwarded-proto": "https" } } as unknown as string[]);
+    const replayed: { type: string; seq?: number }[] = [];
+    again.onmessage = (event) => replayed.push(JSON.parse(String(event.data)));
+    await new Promise((resolve) => (again.onopen = resolve));
+    again.send(JSON.stringify({ type: "hello", token: server.client.tokens!.accessToken, epoch: alert.epoch, seq: alert.seq! - 1 }));
+    await new Promise((resolve) => setTimeout(resolve, 300));
+    expect(replayed[0]).toMatchObject({ type: "alert", seq: alert.seq });
+    again.close();
+    await server.client.stop(bot.id);
+  });
+});
