@@ -25,10 +25,10 @@ declare module "fastify" {
   }
 }
 
-// The Fastify app: HTTPS only, JSON Schema validation through pi-schema, and bearer-token auth on every private route.
 // The largest WebSocket message a client may send.
 const MAX_SOCKET_MESSAGE_BYTES = 64 * 1024;
 
+// The Fastify app: HTTPS only, JSON Schema validation through pi-schema, and bearer-token auth on every private route.
 export async function buildHttp(services: Services): Promise<FastifyInstance> {
   const { config } = services;
   const https = config.tls === undefined ? undefined : { cert: readFileSync(config.tls.certFile), key: readFileSync(config.tls.keyFile) };

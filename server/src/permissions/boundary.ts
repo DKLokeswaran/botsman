@@ -1,4 +1,5 @@
 import path from "node:path";
+import { fileURLToPath } from "node:url";
 import { isInside, resolveReal } from "../bots/folder-policy.ts";
 
 export type BoundaryCheck =
@@ -17,8 +18,10 @@ export function checkBoundary(toolName: string, args: Record<string, unknown>, f
   if (!FILE_TOOLS.has(toolName)) {
     return { leaves: true, reason: `The ${toolName} tool acts outside the bot's folder`, description: `Run ${toolName}`, command };
   }
-  const target = toolTarget(args.path, folder);
-  if (isInside(target, resolveReal(folder))) return { leaves: false };
+  const realFolder = resolveReal(folder);
+  const targets = toolTargets(args.path, folder);
+  const target = targets.find((candidate) => !isInside(candidate, realFolder));
+  if (target === undefined) return { leaves: false };
   return {
     leaves: true,
     reason: `The path is outside the bot's folder (${folder})`,
@@ -27,11 +30,38 @@ export function checkBoundary(toolName: string, args: Record<string, unknown>, f
   };
 }
 
-// The real path a file tool acts on: Pi drops a leading `@`, and symlinks are followed to where they point.
-function toolTarget(requested: unknown, folder: string): string {
-  if (typeof requested !== "string") return resolveReal(folder);
-  const withoutAt = requested.startsWith("@") ? requested.slice(1) : requested;
-  return resolveReal(path.resolve(folder, withoutAt));
+// Spaces Pi turns into plain spaces before using a path.
+const UNICODE_SPACES = /[\u00A0\u2000-\u200A\u202F\u205F\u3000]/g;
+
+// Every real path a file tool might act on. Pi drops a leading `@`, expands `~` to the bot's folder (its home in the
+// sandbox), turns `file://` URLs into paths, and `read` also tries other spellings of a missing file. Symlinks are
+// followed to where they point.
+function toolTargets(requested: unknown, folder: string): string[] {
+  if (typeof requested !== "string") return [resolveReal(folder)];
+  return [...new Set(spellings(resolveLikePi(requested, folder)))].map(resolveReal);
+}
+
+function resolveLikePi(requested: string, folder: string): string {
+  const normalized = requested.replace(UNICODE_SPACES, " ");
+  const withoutAt = normalized.startsWith("@") ? normalized.slice(1) : normalized;
+  if (withoutAt === "~") return folder;
+  if (withoutAt.startsWith("~/")) return path.join(folder, withoutAt.slice(2));
+  return path.resolve(folder, fromFileUrl(withoutAt));
+}
+
+function fromFileUrl(candidate: string): string {
+  if (!candidate.startsWith("file://")) return candidate;
+  try {
+    return fileURLToPath(candidate);
+  } catch {
+    return candidate;
+  }
+}
+
+// The spellings `read` tries when a path doesn't exist.
+function spellings(resolved: string): string[] {
+  const nfd = resolved.normalize("NFD");
+  return [resolved, resolved.replace(/ (AM|PM)\./gi, "\u202F$1."), nfd, resolved.replace(/'/g, "\u2019"), nfd.replace(/'/g, "\u2019")];
 }
 
 function capitalize(text: string): string {

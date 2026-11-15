@@ -78,14 +78,22 @@ function savePrompt(bot: Bot): string {
   ].join(" ");
 }
 
-// True when the newest input is a save turn with no compaction or reset after it.
+// True when the newest input is a save turn whose last reply finished, with no compaction or reset after it.
+// A save turn that failed or was stopped saved nothing, so the next reply near the limit asks again instead.
 function saveAwaitingCompaction(view: ChatView): boolean {
+  let lastReplyFinished: boolean | undefined;
   for (let index = view.entries.length - 1; index >= 0; index--) {
-    const kind = view.entries[index]!.kind;
-    if (kind === PRE_COMPACTION_KIND) return true;
-    if (kind === OWNER_MESSAGE_KIND || kind === "pi.compaction" || kind === "pi.reset") return false;
+    const entry = view.entries[index]!;
+    if (entry.kind === PRE_COMPACTION_KIND) return lastReplyFinished === true;
+    if (entry.kind === OWNER_MESSAGE_KIND || entry.kind === "pi.compaction" || entry.kind === "pi.reset") return false;
+    if (entry.kind === "pi.assistant" && lastReplyFinished === undefined) lastReplyFinished = finished(entry);
   }
   return false;
+}
+
+function finished(entry: ChatView["entries"][number]): boolean {
+  const message = entry.model?.[0];
+  return message?.role === "assistant" && message.stopReason !== "error" && message.stopReason !== "aborted";
 }
 
 function compacting(view: ChatView): boolean {

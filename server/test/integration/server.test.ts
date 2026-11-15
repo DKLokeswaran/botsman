@@ -70,6 +70,7 @@ describe("auth and exposure", () => {
 
   it("caps password guesses overall, so a faked X-Forwarded-For can't pose as many addresses", async () => {
     const other = await startTestServer();
+    await setUpServer(other);
     const results: number[] = [];
     for (let attempt = 0; attempt < 32; attempt++) {
       const response = await other.client.raw("POST", "/api/auth/login", { password: "wrong", deviceName: "x" }, { "x-forwarded-for": `10.0.0.${attempt}` });

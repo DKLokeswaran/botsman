@@ -59,10 +59,10 @@ Every night at `BOTSMAN_BACKUP_HOUR`, the server writes one backup folder named 
 | --- | --- |
 | `data/server.db` and every `data/bots/<id>/session.sqlite` | SQLite's online backup, safe while the server runs |
 | Memory files, notes, and the default bot folders | Copied as files, under `data/` |
-| Bot folders outside `~/.botsman` | Copied as files, under `folders/<bot id>/` |
+| Bot folders outside `~/.botsman`, deleted bots' included | Copied as files, under `folders/<bot id>/` |
 | `secret.key` | Never copied |
 
-A backup is written to `<name>.partial` and renamed only once complete. Each backup is a full copy, so a bot folder holding large repos costs that much disk every night.
+A backup is written to `<name>.partial` and renamed only once complete. Each backup is a full copy, so a bot folder holding large repos costs that much disk every night. A deleted bot's folder outside `~/.botsman` stays in every backup until the owner removes the bot's folder from disk.
 
 Leaving `secret.key` out means a stolen backup can't decrypt provider keys. It also means a restore onto a new server needs the keys entered again, unless the owner keeps their own copy of `secret.key`.
 

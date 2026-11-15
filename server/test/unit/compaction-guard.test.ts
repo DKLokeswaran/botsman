@@ -30,7 +30,7 @@ function guard() {
 }
 
 const bot = { id: "b1", isMain: false } as Bot;
-const answer = (id: number, tokens: number) => ({ id, kind: "pi.assistant", model: [{ role: "assistant", usage: { totalTokens: tokens } }] });
+const answer = (id: number, tokens: number, stopReason = "stop") => ({ id, kind: "pi.assistant", model: [{ role: "assistant", stopReason, usage: { totalTokens: tokens } }] });
 const entry = (id: number, kind: string) => ({ id, kind });
 const view = (entries: object[]): ChatView => ({ entries, docs: {} }) as unknown as ChatView;
 const settle = () => new Promise((resolve) => setTimeout(resolve, 10));
@@ -48,6 +48,13 @@ describe("saving before compaction", () => {
     subject.afterRun(bot, view([entry(1, OWNER_MESSAGE_KIND), answer(2, WINDOW - 20_000), entry(3, PRE_COMPACTION_KIND), answer(4, WINDOW - 19_000)]));
     await settle();
     expect(calls).toEqual(["compact"]);
+  });
+
+  it.each(["error", "aborted"])("doesn't compact after a save turn whose reply ended with %s", async (stopReason) => {
+    const { calls, guard: subject } = guard();
+    subject.afterRun(bot, view([entry(1, OWNER_MESSAGE_KIND), answer(2, WINDOW - 20_000), entry(3, PRE_COMPACTION_KIND), answer(4, 0, stopReason)]));
+    await settle();
+    expect(calls).toEqual([]);
   });
 
   it("does nothing once the chat was compacted after the last reply", async () => {

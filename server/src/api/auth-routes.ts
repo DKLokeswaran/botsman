@@ -8,13 +8,17 @@ const PUBLIC = { public: true };
 
 export function registerAuthRoutes(app: FastifyInstance, services: Services): void {
   const { auth, bots } = services;
-  // Ten password attempts per address and thirty in all every fifteen minutes. The overall cap holds even when a
-  // local process fakes X-Forwarded-For to look like many addresses.
+  // Wrong passwords: ten per address and thirty in all every fifteen minutes. Only failures count, so the owner's own
+  // sign-ins never use the budget. The overall cap holds when a local process fakes X-Forwarded-For.
   const perAddress = new RateLimiter(10, 15 * 60_000);
   const overall = new RateLimiter(30, 15 * 60_000);
   const limit = (ip: string) => {
-    const allowed = perAddress.take(ip) && overall.take("all");
-    if (!allowed) throw new ApiError(429, "rate_limited", "Too many sign-in attempts; wait and try again");
+    if (!overall.allows("all") || !perAddress.allows(ip)) throw new ApiError(429, "rate_limited", "Too many sign-in attempts; wait and try again");
+  };
+  const countFailure = (ip: string, error: unknown) => {
+    if (!(error instanceof ApiError) || error.status !== 401) return;
+    perAddress.record(ip);
+    overall.record("all");
   };
 
   app.get("/api/setup", { config: PUBLIC }, async (): Promise<SetupStatus> => ({ needsSetup: !auth.hasOwner() }));
@@ -22,6 +26,7 @@ export function registerAuthRoutes(app: FastifyInstance, services: Services): vo
   // First-run setup: sets the password, creates the main bot, and signs this device in.
   app.post<{ Body: SetupRequest }>("/api/setup", { config: PUBLIC, schema: { body: SetupRequest } }, async (request): Promise<Tokens> => {
     limit(request.ip);
+    perAddress.record(request.ip);
     if (auth.hasOwner()) throw new ApiError(409, "already_set_up", "The server is already set up");
     // A setup that failed after creating the main bot keeps that bot.
     if (services.registry.mainBot() === undefined) await bots.create(request.body.mainBot, true);
@@ -31,7 +36,12 @@ export function registerAuthRoutes(app: FastifyInstance, services: Services): vo
 
   app.post<{ Body: LoginRequest }>("/api/auth/login", { config: PUBLIC, schema: { body: LoginRequest } }, async (request): Promise<Tokens> => {
     limit(request.ip);
-    return auth.login(request.body.password, request.body.deviceName);
+    try {
+      return await auth.login(request.body.password, request.body.deviceName);
+    } catch (error) {
+      countFailure(request.ip, error);
+      throw error;
+    }
   });
 
   app.post<{ Body: RefreshRequest }>("/api/auth/refresh", { config: PUBLIC, schema: { body: RefreshRequest } }, async (request): Promise<Tokens> => auth.refresh(request.body.refreshToken));

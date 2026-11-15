@@ -1,4 +1,4 @@
-// Counts attempts per key in a fixed window, so login can refuse a flood of guesses.
+// Counts events per key in a fixed window, so login can refuse a flood of wrong passwords.
 export class RateLimiter {
   readonly #limit: number;
   readonly #windowMs: number;
@@ -11,20 +11,30 @@ export class RateLimiter {
     this.#now = now;
   }
 
-  // Records one attempt and says whether it is allowed.
-  take(key: string): boolean {
-    const now = this.#now();
-    const window = this.#windows.get(key);
-    if (window === undefined || now - window.start >= this.#windowMs) {
-      this.#windows.set(key, { start: now, count: 1 });
-      this.#forgetOld(now);
-      return true;
-    }
-    window.count++;
-    return window.count <= this.#limit;
+  // Whether the key is still under its limit in the current window.
+  allows(key: string): boolean {
+    const window = this.#current(key);
+    return window === undefined || window.count < this.#limit;
   }
 
-  #forgetOld(now: number): void {
+  // Counts one event for the key.
+  record(key: string): void {
+    const window = this.#current(key);
+    if (window !== undefined) {
+      window.count++;
+      return;
+    }
+    this.#forgetOld();
+    this.#windows.set(key, { start: this.#now(), count: 1 });
+  }
+
+  #current(key: string): { start: number; count: number } | undefined {
+    const window = this.#windows.get(key);
+    return window !== undefined && this.#now() - window.start < this.#windowMs ? window : undefined;
+  }
+
+  #forgetOld(): void {
+    const now = this.#now();
     for (const [key, window] of this.#windows) {
       if (now - window.start >= this.#windowMs) this.#windows.delete(key);
     }

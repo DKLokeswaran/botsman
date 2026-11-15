@@ -25,6 +25,20 @@ describe("folder boundary for file tools", () => {
     expect(checkBoundary("read", { path: "@notes.md" }, dir).leaves).toBe(false);
   });
 
+  it.each([["file:///etc/hostname"], ["~/etc-link/hostname"], ["etc\u00A0link/hostname"], ["it's/hostname"]])("resolves %s the way Pi does", (requested) => {
+    const dir = folder();
+    symlinkSync("/etc", path.join(dir, "etc-link"));
+    symlinkSync("/etc", path.join(dir, "etc link"));
+    symlinkSync("/etc", path.join(dir, "it\u2019s"));
+    expect(checkBoundary("read", { path: requested }, dir).leaves).toBe(true);
+  });
+
+  it("keeps paths inside the folder inside, whatever their spelling", () => {
+    const dir = folder();
+    expect(checkBoundary("read", { path: "~/notes.md" }, dir).leaves).toBe(false);
+    expect(checkBoundary("write", { path: `file://${dir}/a.txt` }, dir).leaves).toBe(false);
+  });
+
   it("follows a symlink inside the folder to where it points", () => {
     const dir = folder();
     symlinkSync("/etc", path.join(dir, "etc-link"));
@@ -52,6 +66,9 @@ describe("settings", () => {
     expect(() => loadConfig({ BOTSMAN_BACKUP_HOUR: "3am" })).toThrow("BOTSMAN_BACKUP_HOUR");
     expect(() => loadConfig({ BOTSMAN_BACKUP_KEEP: "0" })).toThrow("BOTSMAN_BACKUP_KEEP");
     expect(() => loadConfig({ BOTSMAN_PORT: "70000" })).toThrow("BOTSMAN_PORT");
+    expect(() => loadConfig({ BOTSMAN_PORT: " " })).toThrow("BOTSMAN_PORT");
+    expect(() => loadConfig({ BOTSMAN_PORT: "0x10" })).toThrow("BOTSMAN_PORT");
+    expect(() => loadConfig({ BOTSMAN_BACKUP_KEEP: "1e2" })).toThrow("BOTSMAN_BACKUP_KEEP");
     expect(loadConfig({ BOTSMAN_BACKUP_HOUR: "23" }).backupHour).toBe(23);
   });
 });

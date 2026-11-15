@@ -50,7 +50,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
 function integerSetting(env: NodeJS.ProcessEnv, name: string, fallback: number, min: number, max: number): number {
   const raw = env[name];
   if (raw === undefined || raw === "") return fallback;
-  const value = Number(raw);
+  const value = /^\d+$/.test(raw) ? Number(raw) : Number.NaN;
   if (!Number.isInteger(value) || value < min || value > max) throw new Error(`${name} must be a whole number from ${min} to ${max}; got "${raw}"`);
   return value;
 }
