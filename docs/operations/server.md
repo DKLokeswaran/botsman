@@ -13,9 +13,9 @@ The script:
 
 1. Checks for Node 24. If pnpm 12.18.0 is not on the `PATH`, installs it under `~/.local`, which works when Node is installed system-wide.
 2. Installs bubblewrap through `apt-get`, after refreshing the package lists, if it is missing. This needs `sudo`.
-3. On hosts that restrict user namespaces, such as Ubuntu 24.04 and later, installs `deploy/apparmor-bwrap` as `/etc/apparmor.d/bwrap` and loads it, unless `bwrap` can already create a sandbox. This needs `sudo`. Because the check tries `bwrap` itself, running the script again loads a profile that was copied but failed to load.
+3. On hosts that restrict user namespaces, such as Ubuntu 24.04 and later, installs `deploy/apparmor-bwrap` as `/etc/apparmor.d/bwrap` and loads it, unless `bwrap` can already create a sandbox. This needs `sudo`. Because the check tries `bwrap` itself, running the script again loads a profile that was copied but failed to load. If `bwrap` still fails after loading, the script prints a warning and carries on.
 4. Runs `pnpm install --frozen-lockfile`.
-5. Installs `deploy/botsman.service` as a systemd user unit, starts it, and turns on lingering so it keeps running after the owner logs out. Lingering uses `sudo` when logind refuses it without.
+5. Installs `deploy/botsman.service` as a systemd user unit, starts it, and turns on lingering so it keeps running after the owner logs out. Lingering uses `sudo` when logind refuses it without. If that fails too, the script prints the command to run by hand and carries on.
 
 Nothing else needs root. Ubuntu adds `~/.local/bin` to the `PATH` at the next login, so `pnpm` is on hand for commands such as the backup. The server runs its TypeScript sources directly on Node 24, with no build step.
 

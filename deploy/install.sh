@@ -42,8 +42,9 @@ bwrap_works() {
 }
 
 # Ubuntu 24.04 and later block user namespaces unless a program has a profile. The profile covers /usr/bin/bwrap only;
-# the restriction stays on for everything else. Checking bwrap itself, not the profile file, also repairs a profile
-# that was copied but never loaded.
+# the restriction stays on for everything else. Checking bwrap itself, not the profile file, also loads a profile
+# that was copied but never loaded. If bwrap still fails afterwards, the profile was not the cause, so the script
+# says so and carries on; the server explains the failure in /api/health and runs no bots.
 install_apparmor_profile() {
   local restricted="/proc/sys/kernel/apparmor_restrict_unprivileged_userns"
   if [ ! -f "$restricted" ] || [ "$(cat "$restricted")" != "1" ]; then return; fi
@@ -51,6 +52,7 @@ install_apparmor_profile() {
   say "Installing the AppArmor profile for bwrap (needs sudo)"
   sudo install -m 0644 "$REPO/deploy/apparmor-bwrap" /etc/apparmor.d/bwrap
   sudo apparmor_parser -r /etc/apparmor.d/bwrap
+  bwrap_works || echo "warning: bwrap still can't create a sandbox, so bots won't run. /api/health gives the reason."
 }
 
 install_dependencies() {
@@ -66,7 +68,8 @@ install_service() {
   systemctl --user daemon-reload
   systemctl --user enable --now botsman.service
   # Keeps the service running while the owner is logged out.
-  loginctl enable-linger "$USER" 2>/dev/null || sudo loginctl enable-linger "$USER"
+  loginctl enable-linger "$USER" 2>/dev/null || sudo loginctl enable-linger "$USER" ||
+    echo "Run 'sudo loginctl enable-linger $USER' so Botsman keeps running after you log out."
 }
 
 check_node
