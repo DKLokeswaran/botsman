@@ -22,6 +22,22 @@ describe("protocol schemas", () => {
   });
 });
 
+describe("protocol version", () => {
+  it("fits inside the range a server accepts", () => {
+    expect(protocol.protocolFit(2, { oldest: 1, current: 3 })).toBe("fits");
+    expect(protocol.protocolFit(1, { oldest: 1, current: 1 })).toBe("fits");
+  });
+
+  it("names the side to update when it does not fit", () => {
+    expect(protocol.protocolFit(1, { oldest: 2, current: 3 })).toBe("update_app");
+    expect(protocol.protocolFit(4, { oldest: 2, current: 3 })).toBe("update_server");
+  });
+
+  it("keeps the oldest accepted number at or below the current one", () => {
+    expect(protocol.OLDEST_ACCEPTED_PROTOCOL).toBeLessThanOrEqual(protocol.PROTOCOL_VERSION);
+  });
+});
+
 function isSchema(value: unknown): boolean {
   return typeof value === "object" && value !== null && ("type" in value || "anyOf" in value || "enum" in value);
 }

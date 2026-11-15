@@ -12,7 +12,7 @@ test("normalizes what an owner types as the address", () => {
 });
 
 test("returns the parsed body of a successful reply", async () => {
-  const health = { ok: true, version: "0.1.0", sandbox: { ok: true, reason: null } };
+  const health = { ok: true, version: "0.1.0", protocol: { oldest: 1, current: 1 }, sandbox: { ok: true, reason: null } };
   const client = new ApiClient({ baseUrl: "https://bots.example.com", fetch: reply(200, health) });
   expect(await client.health()).toEqual(health);
 });
