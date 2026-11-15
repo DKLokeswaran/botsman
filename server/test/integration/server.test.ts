@@ -82,6 +82,18 @@ describe("auth and exposure", () => {
     other.root.cleanup();
   });
 
+  it("counts parallel guesses before checking them, and never counts a correct password", async () => {
+    const other = await startTestServer();
+    await setUpServer(other);
+    for (let attempt = 0; attempt < 12; attempt++) await other.client.login(PASSWORD);
+    const guess = () => other.client.raw("POST", "/api/auth/login", { password: "wrong", deviceName: "x" }).then((response) => response.status);
+    const statuses = await Promise.all(Array.from({ length: 20 }, guess));
+    expect(statuses.filter((status) => status === 401)).toHaveLength(10);
+    expect(statuses.filter((status) => status === 429)).toHaveLength(10);
+    await other.botsman.stop();
+    other.root.cleanup();
+  });
+
   it("closes a WebSocket that sends a message over 64 KiB", async () => {
     const socket = new WebSocket(`${server.baseUrl.replace("http", "ws")}/api/ws`, { headers: { "x-forwarded-proto": "https" } } as unknown as string[]);
     await new Promise((resolve) => (socket.onopen = resolve));

@@ -8,12 +8,12 @@ import { OWNER_MESSAGE_KIND, PRE_COMPACTION_KIND } from "../../src/events/chat-v
 const WINDOW = 200_000;
 
 // A guard over a fake conversation that records what it is asked to do.
-function guard() {
+function guard(saveOutcome: "done" | "unanswered" = "done") {
   const calls: string[] = [];
   const root = {
     submit: async () => {
       calls.push("save");
-      return { wait: async () => undefined };
+      return { wait: async () => ({ status: saveOutcome }) };
     },
     compact: async () => {
       calls.push("compact");
@@ -41,6 +41,13 @@ describe("saving before compaction", () => {
     subject.afterRun(bot, view([entry(1, OWNER_MESSAGE_KIND), answer(2, WINDOW - 20_000)]));
     await settle();
     expect(calls).toEqual(["save", "compact"]);
+  });
+
+  it("doesn't compact when the save turn is stopped or fails", async () => {
+    const { calls, guard: subject } = guard("unanswered");
+    subject.afterRun(bot, view([entry(1, OWNER_MESSAGE_KIND), answer(2, WINDOW - 20_000)]));
+    await settle();
+    expect(calls).toEqual(["save"]);
   });
 
   it("only compacts when a restart left a save turn without its compaction", async () => {

@@ -16,3 +16,4 @@ Accepted low-severity issues. Each row is a real issue that has not been fixed y
 | Finished provider sign-ins stay in memory until restart | `server/src/providers/provider-logins.ts` | Small, owner-started objects |
 | `install.sh` installs pnpm with `npm install --global` whenever the version differs, which fails with EACCES when Node's global prefix is root-owned | `deploy/install.sh` | The error is visible and the step can be run by hand |
 | Only the guard's pure logic is tested for a restart between the save turn and its compaction; `BotSession`'s check on open has no integration test | `server/src/engine/bot-session.ts` | The guard's decisions are covered; only the wiring isn't |
+| No test covers a rate-limit window expiring, or a sign-in error other than a wrong password giving its count back | `server/src/auth/rate-limit.ts`, `server/src/api/auth-routes.ts` | Parallel and correct-password cases are covered |

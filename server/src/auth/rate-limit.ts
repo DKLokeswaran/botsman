@@ -28,6 +28,12 @@ export class RateLimiter {
     this.#windows.set(key, { start: this.#now(), count: 1 });
   }
 
+  // Takes back one counted event, for an attempt that turned out not to count.
+  forgive(key: string): void {
+    const window = this.#current(key);
+    if (window !== undefined && window.count > 0) window.count--;
+  }
+
   #current(key: string): { start: number; count: number } | undefined {
     const window = this.#windows.get(key);
     return window !== undefined && this.#now() - window.start < this.#windowMs ? window : undefined;

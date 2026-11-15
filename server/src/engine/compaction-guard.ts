@@ -59,8 +59,9 @@ export class CompactionGuard {
       { type: "input", content: savePrompt(bot), entry: { kind: PRE_COMPACTION_KIND, data: {} }, whenBusy: "followUp", requestId: `pre-compaction:${answerId}` },
       context,
     );
-    await submission.wait(context);
-    await this.#compact();
+    // A save turn that failed or was stopped saved nothing; the next reply near the limit asks again.
+    const settled = await submission.wait(context);
+    if (settled.status === "done") await this.#compact();
   }
 
   async #compact(): Promise<void> {
