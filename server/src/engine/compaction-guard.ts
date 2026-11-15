@@ -119,8 +119,8 @@ function compacting(view: ChatView): boolean {
   return (live?.compactions?.length ?? 0) > 0;
 }
 
-// The newest reply to the owner since the last compaction or reset. A save turn's own replies never count, so they
-// never start another save.
+// The newest reply in the current turn, the one the owner's latest message started. It is undefined while that message
+// has no reply yet, and when the current turn is a save turn, so a save turn's own replies never start another save.
 function lastAnswer(view: ChatView): { id: number; usage: Usage } | undefined {
   const start = turnStart(view);
   if (start !== undefined && view.entries[start]!.kind === PRE_COMPACTION_KIND) return undefined;
@@ -137,7 +137,8 @@ function turnStart(view: ChatView): number | undefined {
   return undefined;
 }
 
-// Pi places a steered message after a tool round, so the reply before it stopped for tool calls.
+// Pi places a steered message after a tool round, so the reply before it, past any messages sent alongside it,
+// stopped for tool calls.
 function steered(view: ChatView, index: number): boolean {
   for (let before = index - 1; before >= 0; before--) {
     const entry = view.entries[before]!;
@@ -145,7 +146,7 @@ function steered(view: ChatView, index: number): boolean {
       const message = entry.model?.[0];
       return message?.role === "assistant" && message.stopReason === "toolUse";
     }
-    if (entry.kind === OWNER_MESSAGE_KIND || isBoundary(entry.kind)) return false;
+    if (isBoundary(entry.kind)) return false;
   }
   return false;
 }
