@@ -1,3 +1,5 @@
+import { mkdirSync, writeFileSync } from "node:fs";
+import path from "node:path";
 import { chatStream } from "@botsman/protocol";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { scriptModelProvider } from "../../src/testing/script-model.ts";
@@ -39,9 +41,43 @@ describe("auth and exposure", () => {
     expect(await response.json()).toMatchObject({ error: "https_required" });
   });
 
-  it("answers the dashboard path with coming soon", async () => {
-    const response = await server.client.raw("GET", "/app/anything");
-    expect(await response.json()).toEqual({ status: "coming_soon", feature: "web-dashboard" });
+  it("says so when the dashboard is not built", async () => {
+    const response = await server.client.raw("GET", "/app/");
+    expect(response.status).toBe(503);
+    expect(await response.json()).toMatchObject({ error: "dashboard_missing" });
+  });
+
+  it("serves the dashboard's files, and its page for any other path", async () => {
+    const dashboard = path.join(server.root.root, "dashboard");
+    mkdirSync(path.join(dashboard, "assets"), { recursive: true });
+    writeFileSync(path.join(dashboard, "index.html"), "<html>dashboard</html>");
+    writeFileSync(path.join(dashboard, "assets", "app-abc123.js"), "console.log(1)");
+
+    const script = await server.client.raw("GET", "/app/assets/app-abc123.js");
+    expect(await script.text()).toBe("console.log(1)");
+    expect(script.headers.get("content-type")).toContain("text/javascript");
+    expect(script.headers.get("cache-control")).toContain("immutable");
+
+    for (const url of ["/app/", "/app/chat/main", "/app/assets/missing.js"]) {
+      const page = await server.client.raw("GET", url);
+      expect(await page.text()).toBe("<html>dashboard</html>");
+      expect(page.headers.get("content-security-policy")).toContain("default-src 'self'");
+      expect(page.headers.get("cache-control")).toBe("no-cache");
+    }
+  });
+
+  it("keeps dashboard requests inside the dashboard folder", async () => {
+    writeFileSync(path.join(server.root.root, "outside.txt"), "kept-outside");
+    for (const url of ["/app/..%2Foutside.txt", "/app/%2e%2e/outside.txt", "/app/..%5Coutside.txt"]) {
+      const response = await server.client.raw("GET", url);
+      expect(await response.text()).not.toContain("kept-outside");
+    }
+  });
+
+  it("sends the bare address to the dashboard", async () => {
+    const response = await fetch(`${server.baseUrl}/`, { redirect: "manual", headers: { "x-forwarded-proto": "https" } });
+    expect(response.status).toBe(302);
+    expect(response.headers.get("location")).toBe("/app/");
   });
 
   it("refuses a second setup and private routes without a token", async () => {

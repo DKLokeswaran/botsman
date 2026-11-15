@@ -34,6 +34,7 @@ export const ErrorCodes = [
   "model_not_connected",
   "unsafe_folder",
   "memory_limit",
+  "dashboard_missing",
   "internal",
 ] as const;
 export type ErrorCode = (typeof ErrorCodes)[number];

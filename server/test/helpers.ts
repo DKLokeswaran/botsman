@@ -29,6 +29,7 @@ export function testConfig(home: string, dataDir: string, root: string): Config 
     backupHour: 3,
     backupKeep: 3,
     scriptModel: true,
+    dashboardDir: path.join(root, "dashboard"),
   };
 }
 

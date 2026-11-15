@@ -10,6 +10,7 @@ import { registerApprovalRoutes } from "./approval-routes.ts";
 import { registerAuthRoutes } from "./auth-routes.ts";
 import { registerBotRoutes } from "./bot-routes.ts";
 import { registerChatRoutes } from "./chat-routes.ts";
+import { registerDashboardRoutes } from "./dashboard-routes.ts";
 import { registerMemoryRoutes } from "./memory-routes.ts";
 import { registerNoteRoutes } from "./note-routes.ts";
 import { registerProviderRoutes } from "./provider-routes.ts";
@@ -48,6 +49,7 @@ export async function buildHttp(services: Services): Promise<FastifyInstance> {
   // Client messages are small; a large frame is refused before it is parsed.
   await app.register(websocket, { options: { maxPayload: MAX_SOCKET_MESSAGE_BYTES } });
   registerSystemRoutes(app, services);
+  registerDashboardRoutes(app, services);
   registerAuthRoutes(app, services);
   registerBotRoutes(app, services);
   registerChatRoutes(app, services);
