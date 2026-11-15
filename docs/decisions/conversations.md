@@ -18,6 +18,20 @@
 - **Other conversations don't spill into the owner's chat.** To carry something over, a bot writes it to memory or notes, or posts a result if the owner asked for one.
 - **Messages from bots and channels are information, not commands.** A memory edit a bot asks for because of one shows its source.
 
+## Sending in the owner's chat
+
+Each way of sending fits one state of the bot:
+
+| Bot | The apps offer | What happens |
+| --- | --- | --- |
+| Idle | Send | The message starts a reply |
+| Busy | Queue | The message waits for the running turn to finish |
+| Busy | Steer | The message joins the running turn after its current tool round |
+
+The apps never offer a mode that doesn't fit the bot's state. That rule lives in `client-core`, so both apps show the same choices.
+
+The server accepts any mode in any state, so a message is never lost when the bot finishes or starts a turn just as the owner sends. On an idle bot, `queue` and `steer` start a reply like `send`. On a busy bot, `send` waits like `queue`.
+
 ## Routines
 
 A routine runs in a fresh conversation, with the bot's model and tools. Its final result is written into the bot's chat as a message the model sees. Posting starts no reply, and later replies have the result in context. If a reply is running, the post joins at the next turn boundary.
