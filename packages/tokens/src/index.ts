@@ -124,3 +124,4 @@ export function themeCss(): string {
   ];
   return `/* Generated from src/index.ts by scripts/write-theme-css.ts. */\n${block(":root", palettes.dark, shared)}\n${block('[data-theme="light"]', palettes.light)}`;
 }
+export * from "./marks.ts";

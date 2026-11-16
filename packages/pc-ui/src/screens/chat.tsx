@@ -5,6 +5,7 @@ import { Avatar } from "../components/avatar.tsx";
 import { ChatItemView } from "../components/chat-items.tsx";
 import { Composer } from "../components/composer.tsx";
 import { Button } from "../components/ui/button.tsx";
+import { botInfoHref } from "../use-route.ts";
 
 // One bot's chat with the owner.
 export function ChatScreen({ botId }: { botId: string }) {
@@ -18,11 +19,13 @@ export function ChatScreen({ botId }: { botId: string }) {
   return (
     <section className="flex h-full min-w-0 flex-1 flex-col">
       <header className="flex items-center gap-3 border-b border-border px-4 py-3">
-        <Avatar bot={bot} />
-        <div className="min-w-0">
-          <h1 className="truncate font-display text-base font-bold uppercase">{bot.name}</h1>
-          <p className="truncate text-xs text-muted-foreground">{chatSubtitle(state.settings, state.totals.usage.cost)}</p>
-        </div>
+        <a href={botInfoHref(bot.id)} aria-label={`${bot.name} info`} className="flex min-w-0 items-center gap-3 rounded-lg hover:opacity-80">
+          <Avatar bot={bot} />
+          <div className="min-w-0">
+            <h1 className="truncate font-display text-base font-bold uppercase">{bot.name}</h1>
+            <p className="truncate text-xs text-muted-foreground">{chatSubtitle(state.settings, state.totals.usage.cost)}</p>
+          </div>
+        </a>
       </header>
       {reconnecting ? (
         <p role="status" className="border-b border-border bg-card px-4 py-1.5 text-center text-xs text-primary">

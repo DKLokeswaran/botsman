@@ -11,3 +11,4 @@ export * from "./session.ts";
 export * from "./store.ts";
 export * from "./stream-connection.ts";
 export * from "./updates.ts";
+export * from "./bot-settings.ts";

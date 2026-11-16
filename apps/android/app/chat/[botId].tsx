@@ -28,15 +28,17 @@ export default function ChatScreen() {
           <Pressable accessibilityRole="button" accessibilityLabel="Back to bots" onPress={() => router.back()} hitSlop={12}>
             <Text style={[styles.back, { color: colors.foreground }]}>‹</Text>
           </Pressable>
-          <Avatar bot={bot} size={36} />
-          <View style={styles.headerText}>
-            <Text numberOfLines={1} style={[styles.name, { color: colors.foreground }]}>
-              {bot.name.toUpperCase()}
-            </Text>
-            <Text numberOfLines={1} style={[styles.sub, { color: colors.mutedForeground }]}>
-              {chatSubtitle(state.settings, state.totals.usage.cost)}
-            </Text>
-          </View>
+          <Pressable accessibilityRole="button" accessibilityLabel={`${bot.name} info`} onPress={() => router.push({ pathname: "/bot/[botId]", params: { botId: bot.id } })} style={styles.headerLink}>
+            <Avatar bot={bot} size={36} />
+            <View style={styles.headerText}>
+              <Text numberOfLines={1} style={[styles.name, { color: colors.foreground }]}>
+                {bot.name.toUpperCase()}
+              </Text>
+              <Text numberOfLines={1} style={[styles.sub, { color: colors.mutedForeground }]}>
+                {chatSubtitle(state.settings, state.totals.usage.cost)}
+              </Text>
+            </View>
+          </Pressable>
         </View>
         {reconnecting ? <Text style={[styles.banner, { color: colors.primary, backgroundColor: colors.card, borderBottomColor: colors.border }]}>Reconnecting…</Text> : null}
         <LegendList
@@ -69,6 +71,7 @@ export default function ChatScreen() {
 const styles = StyleSheet.create({
   screen: { flex: 1 },
   header: { flexDirection: "row", alignItems: "center", gap: space[3], paddingHorizontal: space[3], paddingVertical: space[2], borderBottomWidth: 1 },
+  headerLink: { flex: 1, flexDirection: "row", alignItems: "center", gap: space[3], minWidth: 0 },
   headerText: { flex: 1, minWidth: 0 },
   back: { fontSize: 30, lineHeight: 32, paddingHorizontal: space[1] },
   name: { fontFamily: fontFamilies.display, fontSize: 15 },

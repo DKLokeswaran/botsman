@@ -4,20 +4,29 @@ import type { Approval, Bot } from "@botsman/protocol";
 import { Avatar } from "../components/avatar.tsx";
 import { Button } from "../components/ui/button.tsx";
 import { UpdateNotice } from "../components/update-notice.tsx";
-import { chatHref, useRoute } from "../use-route.ts";
+import { chatHref, type Route, useRoute } from "../use-route.ts";
+import { BotInfoScreen } from "./bot-info.tsx";
+import { BotSettingsScreen } from "./bot-settings.tsx";
 import { ChatScreen } from "./chat.tsx";
 
 // The main window: the bot list beside the open chat. Home is the main bot's chat.
 export function Shell({ app, client }: { app: AppController; client: BotsmanClient }) {
   const route = useRoute();
   const { status, bots } = useServerState();
-  const openBotId = route.name === "chat" ? route.botId : bots[0]?.id;
+  const openBotId = route.name === "home" ? bots[0]?.id : route.botId;
   return (
     <div className="flex h-screen">
       <Sidebar app={app} client={client} openBotId={openBotId} />
-      {status === "loading" || openBotId === undefined ? <p className="p-6 text-muted-foreground">Loading…</p> : <ChatScreen key={openBotId} botId={openBotId} />}
+      {status === "loading" || openBotId === undefined ? <p className="p-6 text-muted-foreground">Loading…</p> : <MainPane route={route.name} botId={openBotId} />}
     </div>
   );
+}
+
+// The page beside the bot list. Home is the main bot's chat.
+function MainPane({ route, botId }: { route: Route["name"]; botId: string }) {
+  if (route === "bot") return <BotInfoScreen key={botId} botId={botId} />;
+  if (route === "bot-settings") return <BotSettingsScreen key={botId} botId={botId} />;
+  return <ChatScreen key={botId} botId={botId} />;
 }
 
 function Sidebar({ app, client, openBotId }: { app: AppController; client: BotsmanClient; openBotId: string | undefined }) {
