@@ -3,7 +3,7 @@ import path from "node:path";
 import { chatStream } from "@botsman/protocol";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { scriptModelProvider } from "../../src/testing/script-model.ts";
-import { HttpError, type StreamClient } from "../e2e/client.ts";
+import { BotsmanClient, HttpError, type StreamClient } from "../e2e/client.ts";
 import { PASSWORD, SCRIPT_MODEL_REF, setUpServer, startTestServer, type TestServer } from "../helpers.ts";
 
 let server: TestServer;
@@ -136,6 +136,83 @@ describe("auth and exposure", () => {
     const closed = new Promise<number>((resolve) => (socket.onclose = (event) => resolve(event.code)));
     socket.send("x".repeat(70 * 1024));
     expect(await closed).toBe(1009);
+  });
+});
+
+describe("dashboard sign-in with cookies", () => {
+  // Its own server, so the sign-in limits other tests use up don't apply here.
+  let server: TestServer;
+  let mainId: string;
+  beforeAll(async () => {
+    server = await startTestServer();
+    mainId = await setUpServer(server);
+  });
+  afterAll(async () => {
+    await server.botsman.stop();
+    server.root.cleanup();
+  });
+
+  const origin = () => ({ origin: server.baseUrl });
+  const cookiesOf = (response: Response) => response.headers.getSetCookie().map((line) => line.split(";")[0]!).join("; ");
+  const signIn = () => server.client.raw("POST", "/api/auth/login", { password: PASSWORD, deviceName: "browser", cookie: true }, origin());
+
+  it("keeps the tokens in cookies that page scripts can't read", async () => {
+    const response = await signIn();
+    expect(response.status).toBe(200);
+    const body = (await response.json()) as Record<string, unknown>;
+    expect(Object.keys(body).sort()).toEqual(["accessExpiresAt", "refreshExpiresAt", "sessionId"]);
+    const lines = response.headers.getSetCookie();
+    expect(lines).toHaveLength(2);
+    for (const line of lines) expect(line).toMatch(/HttpOnly; Secure; SameSite=Strict$/);
+    expect(lines.find((line) => line.startsWith("botsman_refresh="))).toContain("Path=/api/auth;");
+  });
+
+  it("refuses a cookie sign-in that another site started", async () => {
+    const noOrigin = await server.client.raw("POST", "/api/auth/login", { password: PASSWORD, deviceName: "browser", cookie: true });
+    const otherSite = await server.client.raw("POST", "/api/auth/login", { password: PASSWORD, deviceName: "browser", cookie: true }, { origin: "https://evil.example" });
+    expect([noOrigin.status, otherSite.status]).toEqual([403, 403]);
+  });
+
+  it("reads with the cookie, and changes things only from the dashboard's own pages", async () => {
+    const cookie = cookiesOf(await signIn());
+    const anonymous = new BotsmanClient(server.baseUrl);
+    expect((await anonymous.raw("GET", "/api/bots", undefined, { cookie })).status).toBe(200);
+    expect((await anonymous.raw("PATCH", `/api/bots/${mainId}`, { description: "x" }, { cookie })).status).toBe(403);
+    expect((await anonymous.raw("PATCH", `/api/bots/${mainId}`, { description: "x" }, { cookie, origin: "https://evil.example" })).status).toBe(403);
+    expect((await anonymous.raw("PATCH", `/api/bots/${mainId}`, { description: "" }, { cookie, ...origin() })).status).toBe(200);
+  });
+
+  it("renews the cookies, and the old refresh cookie stops working", async () => {
+    const anonymous = new BotsmanClient(server.baseUrl);
+    const first = cookiesOf(await signIn());
+    const renewed = await anonymous.raw("POST", "/api/auth/refresh", {}, { cookie: first, ...origin() });
+    expect(renewed.status).toBe(200);
+    expect(renewed.headers.getSetCookie()).toHaveLength(2);
+    expect((await anonymous.raw("POST", "/api/auth/refresh", {}, { cookie: first, ...origin() })).status).toBe(401);
+    expect((await anonymous.raw("POST", "/api/auth/refresh", {}, { cookie: cookiesOf(renewed) })).status).toBe(403);
+  });
+
+  it("clears the cookies on sign-out", async () => {
+    const cookie = cookiesOf(await signIn());
+    const anonymous = new BotsmanClient(server.baseUrl);
+    const response = await anonymous.raw("POST", "/api/auth/logout", undefined, { cookie, ...origin() });
+    expect(response.headers.getSetCookie().every((line) => line.includes("Max-Age=0"))).toBe(true);
+    expect((await anonymous.raw("GET", "/api/bots", undefined, { cookie })).status).toBe(401);
+  });
+
+  it("opens the socket with the cookie, but only from the dashboard's own pages", async () => {
+    const cookie = cookiesOf(await signIn());
+    const open = async (headers: Record<string, string>) => {
+      const socket = new WebSocket(`${server.baseUrl.replace(/^http/, "ws")}/api/ws`, { headers: { "x-forwarded-proto": "https", cookie, ...headers } } as unknown as string[]);
+      await new Promise<void>((resolve, reject) => ((socket.onopen = () => resolve()), (socket.onerror = () => reject(new Error("socket failed")))));
+      const reply = new Promise<string>((resolve) => (socket.onmessage = (event) => resolve(JSON.parse(String(event.data)).type)));
+      socket.send(JSON.stringify({ type: "hello", token: "" }));
+      const type = await reply;
+      socket.close();
+      return type;
+    };
+    expect(await open(origin())).toBe("ready");
+    expect(await open({ origin: "https://evil.example" })).toBe("error");
   });
 });
 
