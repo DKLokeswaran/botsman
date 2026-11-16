@@ -1,7 +1,6 @@
-import { characterCount, MEMORY_FILES, memoryAudience, pendingMemoryEdits } from "@botsman/client-core";
-import { useAction, useBot, useBotsmanClient, useMemory, useNeedsYou } from "@botsman/client-core/react";
-import type { MemoryFile, MemoryFileName } from "@botsman/protocol";
-import { useState } from "react";
+import { characterCount, MEMORY_FILES, memoryAudience } from "@botsman/client-core";
+import { useBot, useMemoryEditor, useMemoryScreen } from "@botsman/client-core/react";
+import type { MemoryFile } from "@botsman/protocol";
 import { ApprovalCard } from "../components/approval-card.tsx";
 import { ErrorText, Page } from "../components/page.tsx";
 import { Button } from "../components/ui/button.tsx";
@@ -11,13 +10,8 @@ import { botInfoHref } from "../use-route.ts";
 // The four memory files a bot loads, with its memory edits waiting for the owner.
 export function MemoryScreen({ botId }: { botId: string }) {
   const bot = useBot(botId);
-  const memory = useMemory(botId);
-  const pending = pendingMemoryEdits(useNeedsYou(), botId);
-  const [open, setOpen] = useState<MemoryFileName>("BOT_PROFILE.md");
-  const [savedFile, setSavedFile] = useState<MemoryFileName>();
+  const { memory, pending, open, setOpen, file, info, saved, onSaved, onEdit } = useMemoryScreen(botId);
   if (bot === undefined) return <p className="p-6 text-muted-foreground">This bot no longer exists.</p>;
-  const file = memory.value?.files.find((candidate) => candidate.name === open);
-  const info = MEMORY_FILES.find((candidate) => candidate.name === open)!;
   return (
     <Page title="Memory" subtitle={bot.name} back={botInfoHref(bot.id)}>
       {pending.map((approval) => (
@@ -32,22 +26,14 @@ export function MemoryScreen({ botId }: { botId: string }) {
       </div>
       <p className="text-sm text-muted-foreground">{info.about}</p>
       <ErrorText>{memory.error}</ErrorText>
-      {file === undefined ? <p className="text-sm text-muted-foreground">Loading…</p> : <FileEditor key={`${file.name}\n${file.content}`} botId={bot.id} file={file} label={`${file.name} · ${memoryAudience(info.shared, bot.name)}`} saved={savedFile === file.name} onSaved={() => (setSavedFile(file.name), memory.reload())} onEdit={() => setSavedFile(undefined)} />}
+      {file === undefined ? <p className="text-sm text-muted-foreground">Loading…</p> : <FileEditor key={`${file.name}\n${file.content}`} botId={bot.id} file={file} label={`${file.name} · ${memoryAudience(info.shared, bot.name)}`} saved={saved} onSaved={onSaved} onEdit={onEdit} />}
     </Page>
   );
 }
 
 // A memory file shown as it reads, with Edit to change it. Saving or cancelling returns to reading.
 function FileEditor({ botId, file, label, saved, onSaved, onEdit }: { botId: string; file: MemoryFile; label: string; saved: boolean; onSaved: () => void; onEdit: () => void }) {
-  const client = useBotsmanClient();
-  const [editing, setEditing] = useState(false);
-  const [text, setText] = useState(file.content);
-  const save = useAction(async () => {
-    await client.saveMemory(botId, file.name, text);
-    onSaved();
-  });
-  const over = text.length > file.limit;
-  const cancel = () => (setText(file.content), setEditing(false));
+  const { editing, startEditing, text, setText, over, canSave, save, cancel } = useMemoryEditor(botId, file, onSaved);
   return (
     <div className="flex flex-col gap-2">
       <span className="text-sm font-medium">{label}</span>
@@ -62,7 +48,7 @@ function FileEditor({ botId, file, label, saved, onSaved, onEdit }: { botId: str
       <div className="flex gap-2">
         {editing ? (
           <>
-            <Button variant="primary" disabled={over || text === file.content || save.busy} onClick={() => void save.run()}>
+            <Button variant="primary" disabled={!canSave} onClick={() => void save.run()}>
               Save
             </Button>
             <Button variant="text" onClick={cancel}>
@@ -70,7 +56,7 @@ function FileEditor({ botId, file, label, saved, onSaved, onEdit }: { botId: str
             </Button>
           </>
         ) : (
-          <Button onClick={() => setEditing(true)}>Edit</Button>
+          <Button onClick={startEditing}>Edit</Button>
         )}
       </div>
     </div>

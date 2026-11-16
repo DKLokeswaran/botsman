@@ -1,8 +1,7 @@
-import { characterCount, MEMORY_FILES, memoryAudience, pendingMemoryEdits } from "@botsman/client-core";
-import { useAction, useBot, useBotsmanClient, useMemory, useNeedsYou } from "@botsman/client-core/react";
-import type { MemoryFile, MemoryFileName } from "@botsman/protocol";
+import { characterCount, MEMORY_FILES, memoryAudience } from "@botsman/client-core";
+import { useBot, useMemoryEditor, useMemoryScreen } from "@botsman/client-core/react";
+import type { MemoryFile } from "@botsman/protocol";
 import { useLocalSearchParams } from "expo-router";
-import { useState } from "react";
 import { StyleSheet, Text, TextInput, View } from "react-native";
 import { ApprovalCard } from "../../src/chat/approval-card";
 import { fontFamilies, radius, space, useTheme } from "../../src/theme";
@@ -14,13 +13,8 @@ import { ErrorText, Note, Page, pageStyles, Segmented } from "../../src/ui/page"
 export default function MemoryScreen() {
   const { botId } = useLocalSearchParams<{ botId: string }>();
   const bot = useBot(botId);
-  const memory = useMemory(botId);
-  const pending = pendingMemoryEdits(useNeedsYou(), botId);
-  const [open, setOpen] = useState<MemoryFileName>("BOT_PROFILE.md");
-  const [savedFile, setSavedFile] = useState<MemoryFileName>();
+  const { memory, pending, open, setOpen, file, info, saved, onSaved, onEdit } = useMemoryScreen(botId);
   if (bot === undefined) return <Page title="Memory"><Note>This bot no longer exists.</Note></Page>;
-  const file = memory.value?.files.find((candidate) => candidate.name === open);
-  const info = MEMORY_FILES.find((candidate) => candidate.name === open)!;
   return (
     <Page title="Memory" subtitle={bot.name}>
       {pending.map((approval) => (
@@ -29,7 +23,7 @@ export default function MemoryScreen() {
       <Segmented label="Memory file" options={MEMORY_FILES.map((candidate) => ({ value: candidate.name, label: candidate.name.replace(".md", "").replace("_", " ") }))} value={open} onChange={setOpen} />
       <Note>{info.about}</Note>
       <ErrorText>{memory.error}</ErrorText>
-      {file === undefined ? <Note>Loading…</Note> : <FileEditor key={`${file.name}\n${file.content}`} botId={bot.id} file={file} label={`${file.name} · ${memoryAudience(info.shared, bot.name)}`} saved={savedFile === file.name} onSaved={() => (setSavedFile(file.name), memory.reload())} onEdit={() => setSavedFile(undefined)} />}
+      {file === undefined ? <Note>Loading…</Note> : <FileEditor key={`${file.name}\n${file.content}`} botId={bot.id} file={file} label={`${file.name} · ${memoryAudience(info.shared, bot.name)}`} saved={saved} onSaved={onSaved} onEdit={onEdit} />}
     </Page>
   );
 }
@@ -37,14 +31,7 @@ export default function MemoryScreen() {
 // A memory file shown as it reads, with Edit to change it. Saving or cancelling returns to reading.
 function FileEditor({ botId, file, label, saved, onSaved, onEdit }: { botId: string; file: MemoryFile; label: string; saved: boolean; onSaved: () => void; onEdit: () => void }) {
   const { colors } = useTheme();
-  const client = useBotsmanClient();
-  const [editing, setEditing] = useState(false);
-  const [text, setText] = useState(file.content);
-  const save = useAction(async () => {
-    await client.saveMemory(botId, file.name, text);
-    onSaved();
-  });
-  const over = text.length > file.limit;
+  const { editing, startEditing, text, setText, over, canSave, save, cancel } = useMemoryEditor(botId, file, onSaved);
   return (
     <View style={styles.group}>
       <Text style={[pageStyles.rowTitle, { color: colors.foreground }]}>{label}</Text>
@@ -66,11 +53,11 @@ function FileEditor({ botId, file, label, saved, onSaved, onEdit }: { botId: str
       {saved && !editing ? <Note>Saved. Each bot gets the change with its next message.</Note> : null}
       {editing ? (
         <View style={styles.row}>
-          <Button label="Save" variant="primary" disabled={over || text === file.content || save.busy} onPress={() => void save.run()} />
-          <Button label="Cancel" variant="text" onPress={() => (setText(file.content), setEditing(false))} />
+          <Button label="Save" variant="primary" disabled={!canSave} onPress={() => void save.run()} />
+          <Button label="Cancel" variant="text" onPress={cancel} />
         </View>
       ) : (
-        <Button label="Edit" onPress={() => setEditing(true)} />
+        <Button label="Edit" onPress={startEditing} />
       )}
     </View>
   );

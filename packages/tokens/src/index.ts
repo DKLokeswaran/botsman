@@ -96,10 +96,6 @@ export const radius = { md: 4, lg: 8 } as const;
 // The 4-pixel spacing scale.
 export const space = { 1: 4, 2: 8, 3: 12, 4: 16, 5: 24, 6: 32, 7: 64, 8: 128 } as const;
 
-export const fontSizes = [9, 10, 12, 13, 14, 16, 22, 24, 28, 30, 40] as const;
-
-export const motion = { durationMs: 200, easing: "ease" } as const;
-
 // Reading width of a chat column, in pixels.
 export const readingWidth = 720;
 

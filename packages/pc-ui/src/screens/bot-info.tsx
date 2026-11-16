@@ -1,4 +1,4 @@
-import { botNameProblem, effortLabel, photoAvatar } from "@botsman/client-core";
+import { botNameProblem, modelDefaultLabel, photoAvatar } from "@botsman/client-core";
 import { useAction, useBot, useBotsmanClient } from "@botsman/client-core/react";
 import type { Avatar as AvatarValue, Bot } from "@botsman/protocol";
 import { MARK_IDS, MARKS } from "@botsman/tokens";
@@ -38,7 +38,7 @@ function ModelDefault({ bot }: { bot: Bot }) {
           <span className="block font-semibold">Model default</span>
           <span className="block text-xs text-muted-foreground">Used by chats that haven't picked their own</span>
         </span>
-        <span className="text-muted-foreground">{bot.defaultModel === null ? "None" : `${bot.defaultModel.modelId} · ${effortLabel(bot.thinkingLevel)}`} ▾</span>
+        <span className="text-muted-foreground">{modelDefaultLabel(bot)} ▾</span>
       </button>
       {open ? <ModelPicker bot={bot} onClose={() => setOpen(false)} className="w-full" /> : null}
     </div>

@@ -1,5 +1,5 @@
-import { type ChatController, exactCommand, modelChipLabel, runCommand, type SendMode, type SlashCommand, type SlashScreen, slashMatches } from "@botsman/client-core";
-import { useAction, useModels } from "@botsman/client-core/react";
+import { type ChatController, modelChipLabel, type SendMode, type SlashCommand, type SlashScreen } from "@botsman/client-core";
+import { useComposer, useModels } from "@botsman/client-core/react";
 import type { Bot, ChatSettings } from "@botsman/protocol";
 import { router } from "expo-router";
 import { useState } from "react";
@@ -11,32 +11,15 @@ import { MarkIcon } from "../ui/avatar";
 import { Button } from "../ui/button";
 import { ModelSheet } from "../ui/model-sheet";
 
-// Where the owner writes. Below the text: a commands button, the model chip that opens the model picker, and Send, or
-// Queue, Steer, and Stop while the bot works. A message starting with / offers commands.
+// Where the owner writes. A message starting with / offers commands. Below the text: the attach and image buttons, the
+// model chip that opens the model picker, and Send, or Queue, Steer, and Stop while the bot works.
 export function Composer({ chat, bot, settings, sendModes, busy }: { chat: ChatController; bot: Bot; settings: ChatSettings; sendModes: SendMode[]; busy: boolean }) {
   const { colors } = useTheme();
   const { models } = useModels();
   const [picking, setPicking] = useState(false);
   // The box grows with the text up to 40% of the screen, then scrolls.
   const maxHeight = useWindowDimensions().height * 0.4;
-  const [text, setText] = useState("");
-  const stop = useAction(() => chat.stop());
-  const command = useAction(async (picked: SlashCommand) => {
-    setText("");
-    const action = await runCommand(picked, chat);
-    if (action.kind === "open") openScreen(action.screen, chat.botId);
-  });
-  const matches = slashMatches(text);
-  const empty = text.trim() === "";
-
-  const send = (mode: SendMode) => {
-    const message = text.trim();
-    if (message === "") return;
-    const named = exactCommand(message);
-    if (named !== undefined) return void command.run(named);
-    setText("");
-    void chat.send(message, mode);
-  };
+  const { text, setText, matches, empty, send, command, stop } = useComposer(chat, openScreen);
 
   return (
     <View style={[styles.composer, { backgroundColor: colors.card, borderColor: colors.border }]}>

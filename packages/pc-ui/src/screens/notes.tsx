@@ -1,7 +1,4 @@
-import { newNoteName, noteNameProblem } from "@botsman/client-core";
-import { useAction, useBot, useBotsmanClient, useNotes } from "@botsman/client-core/react";
-import type { Note } from "@botsman/protocol";
-import { useEffect, useState } from "react";
+import { useBot, useNote, useNoteEditor, useNoteList } from "@botsman/client-core/react";
 import { ErrorText, Page } from "../components/page.tsx";
 import { Button } from "../components/ui/button.tsx";
 import { ReadOnlyText } from "../components/read-only-text.tsx";
@@ -11,22 +8,19 @@ import { botInfoHref, noteHref, notesHref } from "../use-route.ts";
 // A bot's notes, with keyword search.
 export function NotesScreen({ botId }: { botId: string }) {
   const bot = useBot(botId);
-  const [query, setQuery] = useState("");
-  const notes = useNotes(botId, query);
+  const { query, setQuery, error, rows, emptyText, newName } = useNoteList(botId);
   if (bot === undefined) return <p className="p-6 text-muted-foreground">This bot no longer exists.</p>;
-  const all = notes.value?.notes ?? [];
-  const rows = notes.value?.hits?.map((hit) => ({ name: hit.name, detail: hit.snippet })) ?? all.map((note) => ({ name: note.name, detail: `${note.size.toLocaleString("en-US")} bytes` }));
   return (
     <Page title="Notes" subtitle={bot.name} back={botInfoHref(bot.id)}>
       <div className="flex items-center justify-between gap-3">
         <p className="text-sm text-muted-foreground">Longer records this bot keeps. A bot opens a note only when it needs it, and its edits here don't ask you.</p>
-        <Button variant="primary" onClick={() => (window.location.hash = noteHref(bot.id, newNoteName(all.map((note) => note.name))))}>
+        <Button variant="primary" onClick={() => (window.location.hash = noteHref(bot.id, newName()))}>
           New note
         </Button>
       </div>
       <Field label="Search" placeholder="Search by keyword" value={query} onChange={(event) => setQuery(event.target.value)} />
-      <ErrorText>{notes.error}</ErrorText>
-      {notes.value !== undefined && rows.length === 0 ? <p className="text-sm text-muted-foreground">{query.trim() === "" ? "No notes yet." : "No note matches that."}</p> : null}
+      <ErrorText>{error}</ErrorText>
+      {emptyText === undefined ? null : <p className="text-sm text-muted-foreground">{emptyText}</p>}
       {rows.map((row) => (
         <a key={row.name} href={noteHref(bot.id, row.name)} className="flex flex-col rounded-lg border border-border px-3 py-2.5 hover:bg-accent">
           <span className="text-sm font-semibold">{row.name}</span>
@@ -39,12 +33,8 @@ export function NotesScreen({ botId }: { botId: string }) {
 
 // One note to read, edit, rename, or delete. A name with no file yet starts a new note.
 export function NoteScreen({ botId, name }: { botId: string; name: string }) {
-  const client = useBotsmanClient();
   const bot = useBot(botId);
-  const [loaded, setLoaded] = useState<Note | null>();
-  useEffect(() => {
-    client.note(botId, name).then(setLoaded, () => setLoaded(null));
-  }, [client, botId, name]);
+  const loaded = useNote(botId, name);
   if (bot === undefined) return <p className="p-6 text-muted-foreground">This bot no longer exists.</p>;
   return (
     <Page title={name} subtitle={`${bot.name} · Notes`} back={notesHref(bot.id)}>
@@ -55,30 +45,21 @@ export function NoteScreen({ botId, name }: { botId: string; name: string }) {
 
 // A note shown as it reads, with Edit and Delete. A new note opens ready to write.
 function NoteEditor({ botId, name, content, isNew }: { botId: string; name: string; content: string; isNew: boolean }) {
-  const client = useBotsmanClient();
-  const [editing, setEditing] = useState(isNew);
-  const [saved, setSaved] = useState(content);
-  const [fileName, setFileName] = useState(name);
-  const [text, setText] = useState(content);
-  const [asking, setAsking] = useState(false);
-  const problem = noteNameProblem(fileName);
-  const save = useAction(async () => {
-    await client.saveNote(botId, fileName, text, isNew ? undefined : name);
-    setSaved(text);
-    setEditing(false);
-    window.location.hash = noteHref(botId, fileName);
-  });
-  const remove = useAction(async () => {
-    await client.deleteNote(botId, name);
-    window.location.hash = notesHref(botId);
-  });
+  const { editing, startEditing, saved, fileName, setFileName, text, setText, problem, save, cancel, asking, setAsking, remove } = useNoteEditor(
+    botId,
+    name,
+    content,
+    isNew,
+    (savedName) => (window.location.hash = noteHref(botId, savedName)),
+    () => (window.location.hash = notesHref(botId)),
+  );
   if (!editing)
     return (
       <div className="flex flex-col gap-3">
         <ReadOnlyText text={saved} />
         <ErrorText>{remove.error}</ErrorText>
         <div className="flex flex-wrap gap-2">
-          <Button onClick={() => setEditing(true)}>Edit</Button>
+          <Button onClick={startEditing}>Edit</Button>
           {asking ? (
             <>
               <Button variant="danger" disabled={remove.busy} onClick={() => void remove.run()}>
@@ -109,7 +90,7 @@ function NoteEditor({ botId, name, content, isNew }: { botId: string; name: stri
           Save
         </Button>
         {isNew ? null : (
-          <Button variant="text" onClick={() => (setText(saved), setFileName(name), setEditing(false))}>
+          <Button variant="text" onClick={cancel}>
             Cancel
           </Button>
         )}

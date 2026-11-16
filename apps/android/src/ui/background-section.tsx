@@ -1,7 +1,6 @@
-import { type BackgroundAlerts, type BackgroundStatus, backgroundLine, backgroundSteps, makerGuide } from "@botsman/client-core";
-import { useStore } from "@botsman/client-core/react";
+import { type BackgroundAlerts, backgroundLine, backgroundSteps, makerGuide } from "@botsman/client-core";
+import { useBackgroundStatus } from "@botsman/client-core/react";
 import * as Linking from "expo-linking";
-import { useEffect, useState } from "react";
 import { AppState, StyleSheet, Text, View } from "react-native";
 import { phoneSettings } from "../background-alerts";
 import { useTheme } from "../theme";
@@ -10,8 +9,7 @@ import { Note, pageStyles, SectionTitle, ToggleRow } from "./page";
 
 // The background connection: whether it runs, and the phone settings that keep it alive.
 export function BackgroundSection({ background }: { background: BackgroundAlerts }) {
-  const enabled = useStore(background.enabled) ?? true;
-  const status = useBackgroundStatus(background, enabled);
+  const { enabled, status } = useBackgroundStatus(background, onReturnToApp);
   return (
     <>
       <SectionTitle>Alerts when the app is closed</SectionTitle>
@@ -36,20 +34,10 @@ function StepRow({ step, maker }: { step: ReturnType<typeof backgroundSteps>[num
   );
 }
 
-// The connection's status, read again when the owner comes back from the phone's settings and every few seconds.
-function useBackgroundStatus(background: BackgroundAlerts, enabled: boolean): BackgroundStatus | undefined {
-  const [status, setStatus] = useState<BackgroundStatus>();
-  useEffect(() => {
-    const read = () => void background.status().then(setStatus);
-    read();
-    const timer = setInterval(read, 3_000);
-    const subscription = AppState.addEventListener("change", (state) => state === "active" && read());
-    return () => {
-      clearInterval(timer);
-      subscription.remove();
-    };
-  }, [background, enabled]);
-  return status;
+// Reads the status again when the owner comes back from the phone's settings.
+function onReturnToApp(read: () => void): () => void {
+  const subscription = AppState.addEventListener("change", (state) => state === "active" && read());
+  return () => subscription.remove();
 }
 
 const styles = StyleSheet.create({

@@ -1,8 +1,8 @@
-import { type ChatController, effortChoices, shownEffort, effortLabel, modelLabel, type PickerScope, pickerValue, sameModel } from "@botsman/client-core";
+import { type ChatController, effortChoices, shownEffort, effortLabel, modelLabel, PICKER_SCOPES, type PickerScope, pickerValue, sameModel } from "@botsman/client-core";
 import { useAction, useBotsmanClient, useModels } from "@botsman/client-core/react";
 import type { Bot, ChatSettings, ModelRef, ThinkingLevel } from "@botsman/protocol";
 import { useState } from "react";
-import { ErrorText } from "./page.tsx";
+import { ErrorText, Segmented } from "./page.tsx";
 
 const POPOVER = "absolute top-full left-4 z-10 mt-2 w-80";
 
@@ -19,13 +19,7 @@ export function ModelPicker({ chat, bot, onClose, className = POPOVER }: { chat?
   const current = models.find((model) => sameModel(model, value.model));
   return (
     <div role="dialog" aria-label="Model and reasoning" className={`flex flex-col gap-3 rounded-xl border border-border bg-card p-3 text-sm ${className}`}>
-      {chat === undefined ? null : <div role="radiogroup" aria-label="Applies to" className="flex rounded-lg border border-border p-0.5">
-        {(["chat", "bot"] as const).map((option) => (
-          <button key={option} type="button" role="radio" aria-checked={option === scope} onClick={() => setScope(option)} className={`flex-1 rounded-md px-2 py-1 font-semibold ${option === scope ? "bg-primary text-primary-foreground" : "hover:bg-accent"}`}>
-            {option === "chat" ? "This chat" : "Bot default"}
-          </button>
-        ))}
-      </div>}
+      {chat === undefined ? null : <Segmented label="Applies to" options={PICKER_SCOPES} value={scope} onChange={setScope} compact />}
       <p className="text-xs text-muted-foreground">{value.note}</p>
       <h4 className="font-semibold">Model</h4>
       {loading ? <p className="text-muted-foreground">Loading…</p> : null}

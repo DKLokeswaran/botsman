@@ -1,5 +1,5 @@
-import { ALERT_CHOICES, THEME_MODES, formatMessageTime, liveSessions } from "@botsman/client-core";
-import { useAction, useBotsmanClient, useServerState, useSessions } from "@botsman/client-core/react";
+import { ALERT_CHOICES, THEME_MODES, deviceDetail } from "@botsman/client-core";
+import { useAlertSettings, useBotsmanClient, useDevices } from "@botsman/client-core/react";
 import type { DeviceSession } from "@botsman/protocol";
 import { router } from "expo-router";
 import { StyleSheet, Text, View } from "react-native";
@@ -14,9 +14,8 @@ import { AppVersion } from "../src/ui/app-version";
 export default function SettingsScreen() {
   const app = useAppController();
   const client = useBotsmanClient();
-  const { alertSettings } = useServerState();
+  const { alertSettings, save } = useAlertSettings();
   const themeMode = useThemeMode();
-  const save = useAction((kind: string, on: boolean) => client.updateAlertSettings({ [kind]: on }));
   return (
     <Page title="Settings" subtitle={new URL(client.baseUrl).host}>
       <SectionTitle>Alerts</SectionTitle>
@@ -42,18 +41,13 @@ export default function SettingsScreen() {
 }
 
 function Devices() {
-  const client = useBotsmanClient();
-  const sessions = useSessions();
-  const revoke = useAction(async (sessionId: string) => {
-    await client.revokeSession(sessionId);
-    sessions.reload();
-  });
+  const { devices, error, revoke } = useDevices();
   return (
     <>
       <SectionTitle>Signed-in devices</SectionTitle>
-      <ErrorText>{sessions.error ?? revoke.error}</ErrorText>
-      {sessions.value === undefined ? <Note>Loading…</Note> : null}
-      {liveSessions(sessions.value ?? []).map((session) => (
+      <ErrorText>{error}</ErrorText>
+      {devices === undefined ? <Note>Loading…</Note> : null}
+      {(devices ?? []).map((session) => (
         <DeviceRow key={session.id} session={session} busy={revoke.busy} onRevoke={() => void revoke.run(session.id)} />
       ))}
     </>
@@ -66,7 +60,7 @@ function DeviceRow({ session, busy, onRevoke }: { session: DeviceSession; busy: 
     <View style={[pageStyles.row, { borderColor: colors.border }]}>
       <View style={styles.grow}>
         <Text style={[pageStyles.rowTitle, { color: colors.foreground }]}>{session.deviceName}</Text>
-        <Text style={[pageStyles.small, { color: colors.mutedForeground }]}>{session.current ? "This device" : `Last used ${formatMessageTime(session.lastUsedAt, Date.now())}`}</Text>
+        <Text style={[pageStyles.small, { color: colors.mutedForeground }]}>{deviceDetail(session)}</Text>
       </View>
       {session.current ? null : <Button label="Sign out" variant="danger" disabled={busy} onPress={onRevoke} />}
     </View>

@@ -22,12 +22,9 @@ import {
   type ModelInfo,
   type ModelList,
   type Ok,
-  PROTOCOL_VERSION,
-  type ProtocolFit,
   type Provider,
   type ProviderList,
   type ProviderLogin,
-  protocolFit,
   SERVER_STREAM,
   type ServerEvent,
   type ServerSnapshot,
@@ -86,11 +83,6 @@ export class BotsmanClient {
 
   health(): Promise<Health> {
     return this.#api.health();
-  }
-
-  // Whether this app and the server speak a protocol in common, and which side to update when they don't.
-  async protocolFit(): Promise<ProtocolFit> {
-    return protocolFit(PROTOCOL_VERSION, (await this.health()).protocol);
   }
 
   chat(botId: string): ChatController {

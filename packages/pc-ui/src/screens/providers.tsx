@@ -2,7 +2,7 @@ import { loginView, providerStatus } from "@botsman/client-core";
 import { useAction, useBotsmanClient, useLogin, useProviders } from "@botsman/client-core/react";
 import type { Provider } from "@botsman/protocol";
 import { useState } from "react";
-import { ErrorText, Page } from "../components/page.tsx";
+import { ErrorText, Page, Segmented } from "../components/page.tsx";
 import { Button } from "../components/ui/button.tsx";
 import { Field } from "../components/ui/field.tsx";
 
@@ -63,13 +63,7 @@ function ConnectForm({ provider, onDone }: { provider: Provider; onDone: () => v
   return (
     <div className="flex flex-col gap-3 border-t border-border pt-3">
       {provider.methods.length < 2 ? null : (
-        <div role="radiogroup" aria-label="How to connect" className="flex rounded-lg border border-border p-0.5">
-          {provider.methods.map((option) => (
-            <button key={option} type="button" role="radio" aria-checked={option === method} onClick={() => setMethod(option)} className={`flex-1 rounded-md px-3 py-1.5 text-sm font-semibold ${option === method ? "bg-primary text-primary-foreground" : "hover:bg-accent"}`}>
-              {option === "api_key" ? "API key" : (provider.oauthLabel ?? "Sign in")}
-            </button>
-          ))}
-        </div>
+        <Segmented label="How to connect" options={provider.methods.map((option) => ({ value: option, label: option === "api_key" ? "API key" : (provider.oauthLabel ?? "Sign in") }))} value={method} onChange={setMethod} />
       )}
       {method === "api_key" ? <ApiKeyForm provider={provider} onDone={onDone} /> : <SignIn provider={provider} />}
     </div>

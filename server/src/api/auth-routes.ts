@@ -1,6 +1,6 @@
 import { type AlertsToken, IdParams, LoginRequest, RefreshRequest, SetupRequest, type DeviceSessionList, type Ok, type SessionInfo, type SetupStatus, type Tokens } from "@botsman/protocol";
-import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
-import { REFRESH_COOKIE, clearedCookies, readCookie, sameOrigin, sessionCookies, sessionInfo } from "../auth/cookies.ts";
+import type { FastifyInstance, FastifyReply } from "fastify";
+import { REFRESH_COOKIE, clearedCookies, readCookie, requireOwnPage, sessionCookies, sessionInfo } from "../auth/cookies.ts";
 import { RateLimiter } from "../auth/rate-limit.ts";
 import { ApiError } from "../errors.ts";
 import type { Services } from "../services.ts";
@@ -88,9 +88,4 @@ function signedIn(reply: FastifyReply, tokens: Tokens, asCookies: boolean): Toke
   if (!asCookies) return tokens;
   reply.header("set-cookie", sessionCookies(tokens, Date.now()));
   return sessionInfo(tokens);
-}
-
-// Cookie sessions are only started or renewed from the dashboard's own pages.
-function requireOwnPage(request: FastifyRequest): void {
-  if (!sameOrigin(request.headers.origin, request.host)) throw new ApiError(403, "forbidden", "This request must come from the dashboard");
 }

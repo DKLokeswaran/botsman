@@ -1,5 +1,5 @@
-import { type ChatController, exactCommand, modelChipLabel, runCommand, type SendMode, type SlashCommand, type SlashScreen, slashMatches } from "@botsman/client-core";
-import { useAction, useModels } from "@botsman/client-core/react";
+import { type ChatController, modelChipLabel, type SendMode, type SlashCommand, type SlashScreen } from "@botsman/client-core";
+import { useComposer, useModels } from "@botsman/client-core/react";
 import type { Bot, ChatSettings } from "@botsman/protocol";
 import { ICONS } from "@botsman/tokens";
 import { type KeyboardEvent, useEffect, useLayoutEffect, useRef, useState } from "react";
@@ -8,36 +8,19 @@ import { memoryHref, notesHref } from "../use-route.ts";
 import { ModelPicker } from "./model-picker.tsx";
 import { Button } from "./ui/button.tsx";
 
-// Where the owner writes. Enter sends in the first offered mode, and Shift+Enter starts a new line. Below the text: a
-// commands button, the model chip that opens the model picker, and Send, or Queue, Steer, and Stop while the bot works.
+// Where the owner writes. Enter sends in the first offered mode, and Shift+Enter starts a new line. A message starting
+// with / offers commands. Below the text: the attach and image buttons, the model chip that opens the model picker, and Send, or Queue, Steer, and Stop while the bot works.
 export function Composer({ chat, bot, settings, sendModes, busy }: { chat: ChatController; bot: Bot; settings: ChatSettings; sendModes: SendMode[]; busy: boolean }) {
-  const [text, setText] = useState("");
+  const { text, setText, matches, empty, send, command, stop } = useComposer(chat, (screen, botId) => (window.location.hash = screenHref(screen, botId)));
   const [picking, setPicking] = useState(false);
   const { models } = useModels();
-  const stop = useAction(() => chat.stop());
-  const command = useAction(async (picked: SlashCommand) => {
-    setText("");
-    const action = await runCommand(picked, chat);
-    if (action.kind === "open") window.location.hash = screenHref(action.screen, chat.botId);
-  });
-  const matches = slashMatches(text);
   const grow = useAutoGrow(text);
-
-  const send = (mode: SendMode) => {
-    const message = text.trim();
-    if (message === "") return;
-    const named = exactCommand(message);
-    if (named !== undefined) return void command.run(named);
-    setText("");
-    void chat.send(message, mode);
-  };
   const onKeyDown = (event: KeyboardEvent<HTMLTextAreaElement>) => {
     if (event.key !== "Enter" || event.shiftKey || event.nativeEvent.isComposing) return;
     event.preventDefault();
     send(sendModes[0]!);
   };
 
-  const empty = text.trim() === "";
   const box = useCloseOnOutside(picking, () => setPicking(false));
   return (
     <div ref={box} className="relative flex flex-col gap-2 rounded-xl border border-border bg-card p-3">

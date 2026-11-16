@@ -1,5 +1,6 @@
 import type { ChatMessage, LiveState, LiveTool, ModelRef, ToolCall, Usage } from "@botsman/protocol";
 import type { ChatState, PendingSend } from "./chat-state.ts";
+import { formatMessageTime } from "./format.ts";
 
 // One tool call as a chat shows it: what ran, how far it got, and its result once there is one.
 export type ToolLine = {
@@ -201,4 +202,21 @@ export function runText(run: RunItem): string {
 // Whether newly streamed text fades in: only on the run's streaming edge, and only while the reply is short.
 export function fadesIn(text: string, streaming: boolean): boolean {
   return streaming && text.length <= FADE_LIMIT;
+}
+
+const TOOL_VERBS: Record<ToolLine["status"], string> = { waiting: "Waiting", running: "Running", done: "Ran", failed: "Failed" };
+
+// The word a tool line starts with, for how far its call got.
+export function toolVerb(status: ToolLine["status"]): string {
+  return TOOL_VERBS[status];
+}
+
+// The small line under a message the bot hasn't taken yet.
+export function queuedNote(mode: "steer" | "queue"): string {
+  return mode === "steer" ? "Steering the reply" : "Queued";
+}
+
+// A message's time, for the small line beside it. Entries without a time show none.
+export function messageTime(at: number | null, now = Date.now()): string | undefined {
+  return at === null ? undefined : formatMessageTime(at, now);
 }

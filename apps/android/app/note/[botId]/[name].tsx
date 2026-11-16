@@ -1,8 +1,5 @@
-import { noteNameProblem } from "@botsman/client-core";
-import { useAction, useBot, useBotsmanClient } from "@botsman/client-core/react";
-import type { Note as NoteValue } from "@botsman/protocol";
+import { useBot, useNote, useNoteEditor } from "@botsman/client-core/react";
 import { router, useLocalSearchParams } from "expo-router";
-import { useEffect, useState } from "react";
 import { StyleSheet, TextInput, View } from "react-native";
 import { fontFamilies, radius, space, useTheme } from "../../../src/theme";
 import { Button } from "../../../src/ui/button";
@@ -13,12 +10,8 @@ import { ErrorText, Note, Page } from "../../../src/ui/page";
 // One note to read, edit, rename, or delete. A name with no file yet starts a new note.
 export default function NoteScreen() {
   const { botId, name } = useLocalSearchParams<{ botId: string; name: string }>();
-  const client = useBotsmanClient();
   const bot = useBot(botId);
-  const [loaded, setLoaded] = useState<NoteValue | null>();
-  useEffect(() => {
-    client.note(botId, name).then(setLoaded, () => setLoaded(null));
-  }, [client, botId, name]);
+  const loaded = useNote(botId, name);
   if (bot === undefined) return <Page title="Note"><Note>This bot no longer exists.</Note></Page>;
   return (
     <Page title={name} subtitle={`${bot.name} · Notes`}>
@@ -30,29 +23,20 @@ export default function NoteScreen() {
 // A note shown as it reads, with Edit and Delete. A new note opens ready to write.
 function NoteEditor({ botId, name, content, isNew }: { botId: string; name: string; content: string; isNew: boolean }) {
   const { colors } = useTheme();
-  const client = useBotsmanClient();
-  const [editing, setEditing] = useState(isNew);
-  const [saved, setSaved] = useState(content);
-  const [fileName, setFileName] = useState(name);
-  const [text, setText] = useState(content);
-  const [asking, setAsking] = useState(false);
-  const problem = noteNameProblem(fileName);
-  const save = useAction(async () => {
-    await client.saveNote(botId, fileName, text, isNew ? undefined : name);
-    setSaved(text);
-    setEditing(false);
-    if (fileName !== name) router.replace({ pathname: "/note/[botId]/[name]", params: { botId, name: fileName } });
-  });
-  const remove = useAction(async () => {
-    await client.deleteNote(botId, name);
-    router.back();
-  });
+  const { editing, startEditing, saved, fileName, setFileName, text, setText, problem, save, cancel, asking, setAsking, remove } = useNoteEditor(
+    botId,
+    name,
+    content,
+    isNew,
+    (savedName) => savedName !== name && router.replace({ pathname: "/note/[botId]/[name]", params: { botId, name: savedName } }),
+    () => router.back(),
+  );
   if (!editing)
     return (
       <View style={styles.group}>
         <ReadOnlyText text={saved} />
         <ErrorText>{remove.error}</ErrorText>
-        <Button label="Edit" onPress={() => setEditing(true)} />
+        <Button label="Edit" onPress={startEditing} />
         {asking ? (
           <View style={styles.row}>
             <Button label="Delete this note" variant="danger" disabled={remove.busy} onPress={() => void remove.run()} />
@@ -70,7 +54,7 @@ function NoteEditor({ botId, name, content, isNew }: { botId: string; name: stri
       <ErrorText>{problem ?? save.error}</ErrorText>
       <View style={styles.row}>
         <Button label="Save" variant="primary" disabled={problem !== undefined || save.busy} onPress={() => void save.run()} />
-        {isNew ? null : <Button label="Cancel" variant="text" onPress={() => (setText(saved), setFileName(name), setEditing(false))} />}
+        {isNew ? null : <Button label="Cancel" variant="text" onPress={cancel} />}
       </View>
     </View>
   );

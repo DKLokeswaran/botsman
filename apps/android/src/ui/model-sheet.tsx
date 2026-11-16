@@ -1,4 +1,4 @@
-import { type ChatController, effortChoices, effortLabel, modelLabel, type PickerScope, pickerValue, sameModel, shownEffort } from "@botsman/client-core";
+import { type ChatController, effortChoices, effortLabel, modelLabel, PICKER_SCOPES, type PickerScope, pickerValue, sameModel, shownEffort } from "@botsman/client-core";
 import { useAction, useBotsmanClient, useModels } from "@botsman/client-core/react";
 import type { Bot, ChatSettings, ModelRef, ThinkingLevel } from "@botsman/protocol";
 import { router } from "expo-router";
@@ -25,7 +25,7 @@ export function ModelSheet({ visible, bot, chat, onClose }: { visible: boolean; 
       <Pressable accessibilityLabel="Close" style={styles.backdrop} onPress={onClose} />
       <SafeAreaView edges={["bottom"]} style={[styles.sheet, { backgroundColor: colors.card, borderColor: colors.border }]}>
         <View style={styles.body}>
-          {chat === undefined ? null : <Segmented label="Applies to" options={[{ value: "chat" as const, label: "This chat" }, { value: "bot" as const, label: "Bot default" }]} value={scope} onChange={setScope} />}
+          {chat === undefined ? null : <Segmented label="Applies to" options={PICKER_SCOPES} value={scope} onChange={setScope} />}
           <Note>{value.note}</Note>
           <Text style={[styles.label, { color: colors.foreground }]}>Model</Text>
           {loading ? <Note>Loading…</Note> : null}

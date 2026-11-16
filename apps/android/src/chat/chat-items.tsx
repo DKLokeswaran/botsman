@@ -1,7 +1,7 @@
-import { type ChatController, type ChatItem, formatMessageTime, formatUsage, type RunItem, type RunStep, runText, showsWorking, type ToolLine, workLabel } from "@botsman/client-core";
+import { type ChatController, type ChatItem, formatUsage, messageTime, queuedNote, type RunItem, type RunStep, runText, showsWorking, type ToolLine, toolVerb, workLabel } from "@botsman/client-core";
 
 type WorkStep = Extract<RunStep, { kind: "work" }>;
-import { useAction } from "@botsman/client-core/react";
+import { useAction, useCopied } from "@botsman/client-core/react";
 import * as Clipboard from "expo-clipboard";
 import { useState } from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
@@ -15,17 +15,12 @@ type ItemOf<Kind extends ChatItem["kind"]> = Extract<ChatItem, { kind: Kind }>;
 // Draws one item of a chat.
 export function ChatItemView({ item, chat, botName }: { item: ChatItem; chat: ChatController; botName: string }) {
   const { colors } = useTheme();
-  if (item.kind === "user") return <OwnerMessage text={item.text} note={timeLabel(item.at)} />;
+  if (item.kind === "user") return <OwnerMessage text={item.text} note={messageTime(item.at)} />;
   if (item.kind === "run") return <Run item={item} botName={botName} />;
-  if (item.kind === "queued") return <OwnerMessage text={item.text} note={item.mode === "steer" ? "Steering the reply" : "Queued"} muted />;
+  if (item.kind === "queued") return <OwnerMessage text={item.text} note={queuedNote(item.mode)} muted />;
   if (item.kind === "pending") return <PendingMessage item={item} chat={chat} />;
   if (item.kind === "failure") return <Failure text={item.text} chat={chat} />;
   return <Text style={[styles.notice, { color: colors.mutedForeground }]}>{item.text}</Text>;
-}
-
-// A message's time, for the small line beside it. Entries without a time show none.
-function timeLabel(at: number | null): string | undefined {
-  return at === null ? undefined : formatMessageTime(at, Date.now());
 }
 
 function OwnerMessage({ text, note, muted = false }: { text: string; note?: string | undefined; muted?: boolean }) {
@@ -80,7 +75,7 @@ function Run({ item, botName }: { item: RunItem; botName: string }) {
     <View style={styles.reply}>
       <View style={styles.nameLine}>
         <Text style={[styles.name, { color: colors.foreground }]}>{botName.toUpperCase()}</Text>
-        <Text style={[styles.small, { color: colors.mutedForeground }]}>{timeLabel(item.at)}</Text>
+        <Text style={[styles.small, { color: colors.mutedForeground }]}>{messageTime(item.at)}</Text>
       </View>
       {item.steps.map((step, index) =>
         step.kind === "text" ? (
@@ -99,19 +94,14 @@ function Run({ item, botName }: { item: RunItem; botName: string }) {
 // Under a finished run: its tokens and cost, and Copy for everything it said.
 function RunFooter({ item }: { item: RunItem }) {
   const { colors } = useTheme();
-  const [copied, setCopied] = useState(false);
+  const { copied, copy } = useCopied(Clipboard.setStringAsync);
   const text = runText(item);
-  const copy = async () => {
-    await Clipboard.setStringAsync(text);
-    setCopied(true);
-    setTimeout(() => setCopied(false), 1500);
-  };
   if (item.usage === null && text === "") return null;
   return (
     <View style={styles.footer}>
       {item.usage === null ? null : <Text style={[styles.small, { color: colors.mutedForeground }]}>{formatUsage(item.usage)}</Text>}
       {text === "" ? null : (
-        <Pressable accessibilityRole="button" onPress={() => void copy()} hitSlop={8}>
+        <Pressable accessibilityRole="button" onPress={() => void copy(text)} hitSlop={8}>
           <Text style={[styles.small, styles.copy, { color: colors.mutedForeground }]}>{copied ? "Copied" : "Copy"}</Text>
         </Pressable>
       )}
@@ -125,12 +115,7 @@ function WorkFold({ step, live }: { step: WorkStep; live: boolean }) {
   const [open, setOpen] = useState(false);
   return (
     <View style={styles.tool}>
-      <Pressable accessibilityRole="button" accessibilityState={{ expanded: open }} onPress={() => setOpen(!open)} hitSlop={8}>
-        <Text style={[styles.body, { color: colors.mutedForeground }]}>
-          {open ? "▾ " : "▸ "}
-          {workLabel(step, live)}
-        </Text>
-      </Pressable>
+      <FoldHeader label={workLabel(step, live)} open={open} onToggle={() => setOpen(!open)} />
       {open ? (
         <View style={[styles.fold, { borderColor: colors.border }]}>
           {step.thinking === "" ? null : (
@@ -148,35 +133,32 @@ function WorkFold({ step, live }: { step: WorkStep; live: boolean }) {
   );
 }
 
-const TOOL_VERBS: Record<ToolLine["status"], string> = { waiting: "Waiting", running: "Running", done: "Ran", failed: "Failed" };
-
-// One tool call: a line that opens to its output, and the approval card while it waits for the owner.
+// One tool call: a line that opens to its output.
 function ToolLineView({ tool }: { tool: ToolLine }) {
+  const { colors } = useTheme();
+  const [open, setOpen] = useState(false);
   return (
-    <View style={styles.tool}>
-      <Foldout label={`${TOOL_VERBS[tool.status]}: ${tool.summary}`} body={tool.output} startOpen={false} failed={tool.status === "failed"} mono />
+    <View>
+      <FoldHeader label={`${toolVerb(tool.status)}: ${tool.summary}`} open={open} onToggle={() => setOpen(!open)} failed={tool.status === "failed"} />
+      {open && tool.output !== "" ? (
+        <Text selectable style={[styles.output, { color: colors.mutedForeground, borderColor: colors.border, backgroundColor: colors.card }]}>
+          {tool.output}
+        </Text>
+      ) : null}
     </View>
   );
 }
 
-// A line that opens and closes on a tap, for thinking and tool output.
-function Foldout({ label, body, startOpen, failed = false, mono = false }: { label: string; body: string; startOpen: boolean; failed?: boolean; mono?: boolean }) {
+// The line a fold shows, which opens and closes it on a tap.
+function FoldHeader({ label, open, onToggle, failed = false }: { label: string; open: boolean; onToggle: () => void; failed?: boolean }) {
   const { colors } = useTheme();
-  const [open, setOpen] = useState(startOpen);
   return (
-    <View>
-      <Pressable accessibilityRole="button" accessibilityState={{ expanded: open }} onPress={() => setOpen(!open)} hitSlop={8}>
-        <Text style={[styles.body, { color: failed ? colors.destructive : colors.mutedForeground }]}>
-          {open ? "▾ " : "▸ "}
-          {label}
-        </Text>
-      </Pressable>
-      {open && body !== "" ? (
-        <Text selectable style={[mono ? styles.output : styles.thinking, { color: colors.mutedForeground, borderColor: colors.border, backgroundColor: mono ? colors.card : "transparent" }]}>
-          {body}
-        </Text>
-      ) : null}
-    </View>
+    <Pressable accessibilityRole="button" accessibilityState={{ expanded: open }} onPress={onToggle} hitSlop={8}>
+      <Text style={[styles.body, { color: failed ? colors.destructive : colors.mutedForeground }]}>
+        {open ? "▾ " : "▸ "}
+        {label}
+      </Text>
+    </Pressable>
   );
 }
 
@@ -197,6 +179,5 @@ const styles = StyleSheet.create({
   copy: { fontFamily: fontFamilies.bodySemiBold },
   fold: { borderLeftWidth: 1, paddingLeft: space[3], gap: space[2] },
   thinkingText: { fontFamily: fontFamilies.body, fontSize: 14, lineHeight: 21 },
-  thinking: { fontFamily: fontFamilies.body, fontSize: 14, lineHeight: 21, borderLeftWidth: 1, paddingLeft: space[3], marginTop: space[1] },
   output: { fontFamily: fontFamilies.mono, fontSize: 12, borderWidth: 1, borderRadius: radius.md, padding: space[3], marginTop: space[1] },
 });

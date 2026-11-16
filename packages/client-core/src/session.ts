@@ -40,10 +40,6 @@ export class Session {
     this.#api = new ApiClient({ baseUrl: options.baseUrl, fetch: options.fetch, accessToken: () => this.#held?.accessToken });
   }
 
-  get baseUrl(): string {
-    return this.#api.baseUrl;
-  }
-
   get usesCookies(): boolean {
     return this.#options.tokenStore === undefined;
   }

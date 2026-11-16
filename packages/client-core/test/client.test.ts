@@ -1,6 +1,6 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { alertText, BackgroundAlerts, BotsmanClient, type LocalCache, type SocketLike, type BackgroundAlertsService, type ChatState, modelProblem, newNoteName, noteNameProblem, offeredSendModes, suggestedModel } from "../src/index.ts";
-import type { Alert, Tokens } from "@botsman/protocol";
+import { type Alert, PROTOCOL_VERSION, protocolFit, type Tokens } from "@botsman/protocol";
 import { scriptSwitches } from "@botsman/server/src/testing/script-model.ts";
 import { memoryTokenStore, PASSWORD, proxiedFetch, type Rig, startRig, until } from "./real-server.ts";
 
@@ -24,7 +24,7 @@ describe("session", () => {
   });
 
   it("speaks a protocol the server accepts", async () => {
-    expect(await rig.client.protocolFit()).toBe("fits");
+    expect(protocolFit(PROTOCOL_VERSION, (await rig.client.health()).protocol)).toBe("fits");
   });
 
   it("renews an access token the server no longer accepts, and repeats the request", async () => {

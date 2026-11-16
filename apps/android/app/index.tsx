@@ -4,7 +4,6 @@ import type { Approval, Bot } from "@botsman/protocol";
 import { router } from "expo-router";
 import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
-import { useAppController } from "../src/app-context";
 import { fontFamilies, radius, space, useTheme } from "../src/theme";
 import { Avatar } from "../src/ui/avatar";
 
@@ -13,7 +12,6 @@ const CONNECTION_LABELS = { offline: "Offline", connecting: "Connecting…", onl
 // The phone's home screen: what needs the owner, then the bots, with the main bot first.
 export default function BotListScreen() {
   const { colors } = useTheme();
-  const app = useAppController();
   const { status } = useServerState();
   const bots = useBots();
   const needsYou = useNeedsYou();
@@ -138,7 +136,6 @@ const styles = StyleSheet.create({
   rowEnd: { alignItems: "flex-end", gap: space[1] },
   badge: { fontFamily: fontFamilies.mono, fontSize: 12, minWidth: 20, textAlign: "center", paddingHorizontal: 6, borderRadius: 10, overflow: "hidden" },
   dot: { width: 6, height: 6, borderRadius: 3, marginHorizontal: space[1] },
-  update: { paddingHorizontal: space[3], paddingBottom: space[2] },
   footer: { flexDirection: "row", alignItems: "center", gap: space[2], borderTopWidth: 1, padding: space[3] },
   status: { flex: 1, fontFamily: fontFamilies.body, fontSize: 12 },
 });

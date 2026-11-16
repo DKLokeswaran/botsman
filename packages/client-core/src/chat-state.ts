@@ -1,6 +1,5 @@
-import type { ChatEvent, ChatHistoryPage, ChatMessage, ChatSettings, ChatSnapshot, ChatTotals, LiveState, SendMessageRequest } from "@botsman/protocol";
-
-type SendMode = NonNullable<SendMessageRequest["mode"]>;
+import type { ChatEvent, ChatHistoryPage, ChatMessage, ChatSettings, ChatSnapshot, ChatTotals, LiveState } from "@botsman/protocol";
+import type { SendMode } from "./send-rule.ts";
 
 // A message the owner sent that the chat has not shown yet, or that failed to send.
 export type PendingSend = { requestId: string; text: string; mode: SendMode; failed: string | undefined };

@@ -124,7 +124,10 @@ Its main parts:
 | `StreamConnection` | The live socket. It reconnects with a growing delay, pings to notice a silent drop, and asks each stream for what it missed. |
 | `ChatController` | One bot's chat. A sent message shows at once as pending, and a failed one stays with Retry and Discard. A retry reuses the request id, so the server can't run it twice. |
 | `chatItems` | Turns a chat's state into the list both apps draw: replies with their tool calls and results inside them, then what is live, queued, and pending. |
-| `offeredSendModes` | The send rule: Send while idle, Queue or Steer while busy. | The `pc-ui` package holds the Windows and web screens, and Android builds its own on the same hooks.
+| `offeredSendModes` | The send rule: Send while idle, Queue or Steer while busy. |
+| Screen hooks | Each screen's state and actions, such as the message box, the memory and note editors, the new-bot form, signed-in devices, and the background status. Both apps call the same hook and pass in only what differs, such as how to move to another screen. |
+
+The `pc-ui` package holds the Windows and web screens, and Android builds its own on the same hooks.
 
 Android's screens are separate, because the best Android chat needs native views. Between Android and the other two apps, roughly 40% of client code is shared, by estimate: nearly all logic and none of the screens.
 

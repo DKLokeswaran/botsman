@@ -46,6 +46,20 @@ export function ToggleRow({ title, detail, on, onChange, disabled = false }: { t
   );
 }
 
+// One choice out of a few, as a row of buttons. `compact` is the smaller size used inside a popover.
+export function Segmented<T extends string>({ label, options, value, onChange, compact = false }: { label: string; options: readonly { value: T; label: string }[]; value: T; onChange: (value: T) => void; compact?: boolean }) {
+  const size = compact ? "px-2 py-1" : "px-3 py-1.5 text-sm";
+  return (
+    <div role="radiogroup" aria-label={label} className="flex rounded-lg border border-border p-0.5">
+      {options.map((option) => (
+        <button key={option.value} type="button" role="radio" aria-checked={option.value === value} onClick={() => onChange(option.value)} className={`flex-1 rounded-md font-semibold ${size} ${option.value === value ? "bg-primary text-primary-foreground" : "hover:bg-accent"}`}>
+          {option.label}
+        </button>
+      ))}
+    </div>
+  );
+}
+
 export function ErrorText({ children }: { children: string | undefined }) {
   return children === undefined ? null : <p className="text-sm text-destructive">{children}</p>;
 }

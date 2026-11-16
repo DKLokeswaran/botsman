@@ -1,7 +1,7 @@
-import { ALERT_CHOICES, THEME_MODES, type ThemeMode, type AppController, type BotsmanClient, formatMessageTime, liveSessions } from "@botsman/client-core";
-import { useAction, useServerState, useSessions } from "@botsman/client-core/react";
+import { ALERT_CHOICES, THEME_MODES, type ThemeMode, type AppController, type BotsmanClient, deviceDetail } from "@botsman/client-core";
+import { useAlertSettings, useDevices } from "@botsman/client-core/react";
 import type { DeviceSession } from "@botsman/protocol";
-import { ErrorText, LinkRow, Page, ToggleRow } from "../components/page.tsx";
+import { ErrorText, LinkRow, Page, Segmented, ToggleRow } from "../components/page.tsx";
 import { Button } from "../components/ui/button.tsx";
 import { AppVersion } from "../components/app-version.tsx";
 import type { Autostart, NotificationPermission } from "../platform.ts";
@@ -15,8 +15,7 @@ export type ThemeChoice = [ThemeMode, (mode: ThemeMode) => void];
 
 // Alerts, signed-in devices, providers, the theme, the app's version, and the server this app uses.
 export function SettingsScreen({ app, client, notifications, autostart, theme }: { app: AppController; client: BotsmanClient; notifications: NotificationChoice; autostart: Autostart | undefined; theme: ThemeChoice }) {
-  const { alertSettings } = useServerState();
-  const save = useAction((kind: string, on: boolean) => client.updateAlertSettings({ [kind]: on }));
+  const { alertSettings, save } = useAlertSettings();
   return (
     <Page title="Settings" subtitle={new URL(client.baseUrl).host} back="#/">
       <h2 className="font-display text-sm font-bold uppercase">Alerts</h2>
@@ -29,15 +28,9 @@ export function SettingsScreen({ app, client, notifications, autostart, theme }:
       <BrowserNotifications choice={notifications} />
       {app.background === undefined ? null : <BackgroundSection background={app.background} autostart={autostart} />}
       <LinkRow href="#/providers" title="Model providers" detail="Keys and sign-ins for the models your bots use" />
-      <Devices client={client} />
+      <Devices />
       <h2 className="font-display text-sm font-bold uppercase">Mode</h2>
-      <div role="radiogroup" aria-label="Mode" className="flex rounded-lg border border-border p-0.5">
-        {THEME_MODES.map((option) => (
-          <button key={option.mode} type="button" role="radio" aria-checked={option.mode === theme[0]} onClick={() => theme[1](option.mode)} className={`flex-1 rounded-md px-3 py-1.5 text-sm font-semibold ${option.mode === theme[0] ? "bg-primary text-primary-foreground" : "hover:bg-accent"}`}>
-            {option.label}
-          </button>
-        ))}
-      </div>
+      <Segmented label="Mode" options={THEME_MODES.map((option) => ({ value: option.mode, label: option.label }))} value={theme[0]} onChange={theme[1]} />
       <h2 className="font-display text-sm font-bold uppercase">This app</h2>
       <AppVersion updates={app.updates} />
       <div className="flex gap-2">
@@ -68,18 +61,14 @@ function BrowserNotifications({ choice }: { choice: NotificationChoice }) {
   );
 }
 
-function Devices({ client }: { client: BotsmanClient }) {
-  const sessions = useSessions();
-  const revoke = useAction(async (sessionId: string) => {
-    await client.revokeSession(sessionId);
-    sessions.reload();
-  });
+function Devices() {
+  const { devices, error, revoke } = useDevices();
   return (
     <>
       <h2 className="font-display text-sm font-bold uppercase">Signed-in devices</h2>
-      <ErrorText>{sessions.error ?? revoke.error}</ErrorText>
-      {sessions.value === undefined ? <p className="text-sm text-muted-foreground">Loading…</p> : null}
-      {liveSessions(sessions.value ?? []).map((session) => (
+      <ErrorText>{error}</ErrorText>
+      {devices === undefined ? <p className="text-sm text-muted-foreground">Loading…</p> : null}
+      {(devices ?? []).map((session) => (
         <DeviceRow key={session.id} session={session} busy={revoke.busy} onRevoke={() => void revoke.run(session.id)} />
       ))}
     </>
@@ -91,7 +80,7 @@ function DeviceRow({ session, busy, onRevoke }: { session: DeviceSession; busy: 
     <div className="flex items-center justify-between gap-3 rounded-lg border border-border px-3 py-2.5">
       <span>
         <span className="block text-sm font-semibold">{session.deviceName}</span>
-        <span className="block text-xs text-muted-foreground">{session.current ? "This device" : `Last used ${formatMessageTime(session.lastUsedAt, Date.now())}`}</span>
+        <span className="block text-xs text-muted-foreground">{deviceDetail(session)}</span>
       </span>
       {session.current ? null : (
         <Button variant="danger" disabled={busy} onClick={onRevoke}>

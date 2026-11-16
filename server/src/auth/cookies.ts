@@ -1,4 +1,6 @@
 import type { SessionInfo, Tokens } from "@botsman/protocol";
+import type { FastifyRequest } from "fastify";
+import { ApiError } from "../errors.ts";
 
 // The web dashboard keeps its tokens in cookies that page scripts can't read. The apps send a bearer token instead.
 export const ACCESS_COOKIE = "botsman_access";
@@ -33,8 +35,13 @@ export function sessionInfo(tokens: Tokens): SessionInfo {
   return { sessionId: tokens.sessionId, accessExpiresAt: tokens.accessExpiresAt, refreshExpiresAt: tokens.refreshExpiresAt };
 }
 
-// Whether a request's Origin header names this server. Cookies ride along on requests another site starts,
-// so anything that acts on a cookie must come from the dashboard's own pages.
+// Refuses a request that didn't come from the dashboard's own pages. Cookies ride along on requests another site
+// starts, so anything that acts on a cookie must pass this.
+export function requireOwnPage(request: FastifyRequest): void {
+  if (!sameOrigin(request.headers.origin, request.host)) throw new ApiError(403, "forbidden", "This request must come from the dashboard");
+}
+
+// Whether a request's Origin header names this server.
 export function sameOrigin(origin: string | undefined, host: string): boolean {
   if (origin === undefined) return false;
   try {

@@ -1,17 +1,9 @@
-import { type AlertKind, type AlertSettings, type AlertSettingsUpdate } from "@botsman/protocol";
+import { type AlertKind, AlertKinds, type AlertSettings, type AlertSettingsUpdate } from "@botsman/protocol";
 import { type Database, readSetting, writeSetting } from "./database.ts";
 
 const KEY = "alert_settings";
 
-const ALL_ON: AlertSettings = {
-  approval: true,
-  question: true,
-  routine_result: true,
-  failure: true,
-  channel_mention: true,
-  routine_created: true,
-  skill_created: true,
-};
+const ALL_ON = Object.fromEntries(AlertKinds.map((kind) => [kind, true])) as AlertSettings;
 
 // The owner's alert choices, kept in server.db so every device shares them. Every kind starts on.
 export class AlertSettingsStore {

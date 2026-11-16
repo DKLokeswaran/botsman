@@ -1,4 +1,5 @@
-import type { Avatar, ModelInfo, ModelRef, PermissionMode } from "@botsman/protocol";
+import type { Avatar, Bot, ModelInfo, ModelRef, PermissionMode } from "@botsman/protocol";
+import { effortLabel } from "./format.ts";
 
 // What each permission mode does, as bot settings explains it. Smart says it runs like Off until the classifier exists.
 export const PERMISSION_MODES: readonly { mode: PermissionMode; label: string; note: string }[] = [
@@ -47,7 +48,7 @@ export function photoAvatar(dataUrl: string): Avatar {
 
 // The model a new bot starts with: the main bot's default when it is still connected, else the first connected model.
 export function suggestedModel(models: readonly ModelInfo[], mainDefault: ModelRef | null | undefined): ModelRef | null {
-  const main = models.find((model) => model.provider === mainDefault?.provider && model.id === mainDefault?.modelId);
+  const main = models.find((model) => sameModel(model, mainDefault ?? null));
   const pick = main ?? models[0];
   return pick === undefined ? null : { provider: pick.provider, modelId: pick.id };
 }
@@ -59,4 +60,9 @@ export function modelLabel(model: ModelInfo): string {
 
 export function sameModel(model: ModelInfo, ref: ModelRef | null): boolean {
   return ref !== null && model.provider === ref.provider && model.id === ref.modelId;
+}
+
+// A bot's default model and effort, as bot info's Model default row shows it.
+export function modelDefaultLabel(bot: Pick<Bot, "defaultModel" | "thinkingLevel">): string {
+  return bot.defaultModel === null ? "None" : `${bot.defaultModel.modelId} · ${effortLabel(bot.thinkingLevel)}`;
 }

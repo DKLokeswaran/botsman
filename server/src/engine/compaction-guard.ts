@@ -30,10 +30,7 @@ export class CompactionGuard {
     if (this.#saving || compacting(view)) return;
     const work = this.#nextStep(bot, view);
     if (work === undefined) return;
-    this.#saving = true;
-    work()
-      .catch((error) => this.#services.log(`bot ${this.#botId}: save before compaction failed: ${String(error)}`))
-      .finally(() => (this.#saving = false));
+    this.#runWhileSaving(work, "save before compaction failed");
   }
 
   // The owner asked to compact: a save turn tied to the newest reply, then compaction, or compaction at once in a chat
@@ -42,11 +39,16 @@ export class CompactionGuard {
     if (this.#saving || compacting(view)) return false;
     const last = newestAnswerAfter(view, -1);
     const work = last === undefined ? () => this.#compact() : () => this.#settleSave(bot, `owner-compaction:${last.id}`, "owner");
+    this.#runWhileSaving(work, "compaction the owner asked for failed");
+    return true;
+  }
+
+  // Runs a save turn or compaction, marking the guard busy until it settles and logging a failure.
+  #runWhileSaving(work: () => Promise<unknown>, failure: string): void {
     this.#saving = true;
     work()
-      .catch((error) => this.#services.log(`bot ${this.#botId}: compaction the owner asked for failed: ${String(error)}`))
+      .catch((error) => this.#services.log(`bot ${this.#botId}: ${failure}: ${String(error)}`))
       .finally(() => (this.#saving = false));
-    return true;
   }
 
   // A save turn a restart left without its compaction is settled first; then a reply near the limit starts one.

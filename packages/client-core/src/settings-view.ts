@@ -1,5 +1,6 @@
 import type { AlertKind, DeviceSession } from "@botsman/protocol";
 import type { BackgroundStatus } from "./background-alerts.ts";
+import { formatMessageTime } from "./format.ts";
 
 // The alert kinds that can happen today, as settings lists them. Routine, question, channel, and skill alerts arrive
 // with the milestones that add them.
@@ -13,7 +14,12 @@ export function liveSessions(sessions: readonly DeviceSession[]): DeviceSession[
   return sessions.filter((session) => session.revokedAt === null).sort((a, b) => Number(b.current === true) - Number(a.current === true) || b.lastUsedAt - a.lastUsedAt);
 }
 
-export type BackgroundStep = { label: string; detail: string; done: boolean; action: "notifications" | "battery" | "guide" | undefined };
+// The line under a device in the signed-in list.
+export function deviceDetail(session: DeviceSession, now = Date.now()): string {
+  return session.current ? "This device" : `Last used ${formatMessageTime(session.lastUsedAt, now)}`;
+}
+
+export type BackgroundStep = { label: string; detail: string; action: "notifications" | "battery" | "guide" | undefined };
 
 // Phone makers known to stop background apps, by the name Android reports, with their dontkillmyapp.com page.
 const STRICT_MAKERS: Record<string, string> = { samsung: "Samsung", xiaomi: "Xiaomi", oneplus: "OnePlus", huawei: "Huawei", oppo: "Oppo", vivo: "Vivo", realme: "Realme" };
@@ -23,11 +29,11 @@ const STRICT_MAKERS: Record<string, string> = { samsung: "Samsung", xiaomi: "Xia
 export function backgroundSteps(status: BackgroundStatus): BackgroundStep[] {
   const steps: BackgroundStep[] = [];
   if (status.notificationsAllowed !== null)
-    steps.push({ label: "Notifications", detail: status.notificationsAllowed ? "Allowed" : "Turned off for Botsman", done: status.notificationsAllowed, action: status.notificationsAllowed ? undefined : "notifications" });
+    steps.push({ label: "Notifications", detail: status.notificationsAllowed ? "Allowed" : "Turned off for Botsman", action: status.notificationsAllowed ? undefined : "notifications" });
   if (status.batteryUnrestricted !== null)
-    steps.push({ label: "Battery", detail: status.batteryUnrestricted ? "Unrestricted" : "Android may pause the connection to save battery", done: status.batteryUnrestricted, action: status.batteryUnrestricted ? undefined : "battery" });
+    steps.push({ label: "Battery", detail: status.batteryUnrestricted ? "Unrestricted" : "Android may pause the connection to save battery", action: status.batteryUnrestricted ? undefined : "battery" });
   const maker = status.maker === null ? undefined : STRICT_MAKERS[status.maker];
-  if (maker !== undefined) steps.push({ label: "Phone maker", detail: `${maker} can stop background apps. Its steps are on dontkillmyapp.com.`, done: false, action: "guide" });
+  if (maker !== undefined) steps.push({ label: "Phone maker", detail: `${maker} can stop background apps. Its steps are on dontkillmyapp.com.`, action: "guide" });
   return steps;
 }
 

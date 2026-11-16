@@ -1,17 +1,17 @@
-import { botNameProblem, effortLabel, photoAvatar } from "@botsman/client-core";
+import { botNameProblem, modelDefaultLabel, photoAvatar } from "@botsman/client-core";
 import { useAction, useBot, useBotsmanClient } from "@botsman/client-core/react";
 import type { Avatar as AvatarValue, Bot } from "@botsman/protocol";
 import { MARK_IDS, MARKS } from "@botsman/tokens";
 import { router, useLocalSearchParams } from "expo-router";
 import { useState } from "react";
-import { Pressable, StyleSheet, Text, View } from "react-native";
+import { Pressable, StyleSheet, View } from "react-native";
 import { pickPhoto } from "../../src/photo";
 import { radius, space, useTheme } from "../../src/theme";
 import { Avatar, MarkIcon } from "../../src/ui/avatar";
 import { Button } from "../../src/ui/button";
 import { Field } from "../../src/ui/field";
 import { ModelSheet } from "../../src/ui/model-sheet";
-import { ErrorText, LinkRow, Note, Page, pageStyles } from "../../src/ui/page";
+import { ErrorText, LinkRow, Note, Page } from "../../src/ui/page";
 
 // A bot's name, description, and face, with links to its other screens, and delete.
 export default function BotInfoScreen() {
@@ -84,7 +84,7 @@ function NameForm({ bot }: { bot: Bot }) {
 // The bot's default model and reasoning effort, which opens the picker for them.
 function ModelDefault({ bot }: { bot: Bot }) {
   const [open, setOpen] = useState(false);
-  const current = bot.defaultModel === null ? "None" : `${bot.defaultModel.modelId} · ${effortLabel(bot.thinkingLevel)}`;
+  const current = modelDefaultLabel(bot);
   return (
     <>
       <LinkRow title="Model default" detail={`${current} · used by chats that haven't picked their own`} onPress={() => setOpen(true)} />
@@ -121,5 +121,4 @@ const styles = StyleSheet.create({
   marks: { flexDirection: "row", flexWrap: "wrap", gap: space[2] },
   mark: { width: 44, height: 44, borderWidth: 1, borderRadius: radius.md, alignItems: "center", justifyContent: "center" },
   confirm: { borderWidth: 1, borderRadius: radius.md, padding: space[3], gap: space[2] },
-  grow: { flex: 1 },
 });

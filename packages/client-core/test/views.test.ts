@@ -46,10 +46,10 @@ describe("background alerts checklist", () => {
   const status = { running: true, connected: true, notificationsAllowed: false, batteryUnrestricted: true, maker: "samsung" };
 
   it("asks for what's missing, and links a strict maker's guide", () => {
-    expect(backgroundSteps(status).map((step) => [step.label, step.done, step.action])).toEqual([
-      ["Notifications", false, "notifications"],
-      ["Battery", true, undefined],
-      ["Phone maker", false, "guide"],
+    expect(backgroundSteps(status).map((step) => [step.label, step.action])).toEqual([
+      ["Notifications", "notifications"],
+      ["Battery", undefined],
+      ["Phone maker", "guide"],
     ]);
     expect(backgroundSteps({ ...status, maker: "google" }).map((step) => step.label)).not.toContain("Phone maker");
   });

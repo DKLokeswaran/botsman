@@ -1,13 +1,12 @@
-import { type BackgroundAlerts, type BackgroundStatus, backgroundLine } from "@botsman/client-core";
-import { useAction, useStore } from "@botsman/client-core/react";
+import { type BackgroundAlerts, backgroundLine } from "@botsman/client-core";
+import { useAction, useBackgroundStatus } from "@botsman/client-core/react";
 import { useEffect, useState } from "react";
 import type { Autostart } from "../platform.ts";
 import { ErrorText, ToggleRow } from "./page.tsx";
 
 // The alerts connection that runs while the window is hidden, and starting with the computer.
 export function BackgroundSection({ background, autostart }: { background: BackgroundAlerts; autostart: Autostart | undefined }) {
-  const enabled = useStore(background.enabled) ?? true;
-  const status = useBackgroundStatus(background, enabled);
+  const { enabled, status } = useBackgroundStatus(background);
   return (
     <>
       <h2 className="font-display text-sm font-bold uppercase">Alerts when the window is closed</h2>
@@ -32,16 +31,4 @@ function StartWithComputer({ autostart }: { autostart: Autostart }) {
       <ErrorText>{change.error}</ErrorText>
     </>
   );
-}
-
-// The connection's status, read again every few seconds while settings is open.
-function useBackgroundStatus(background: BackgroundAlerts, enabled: boolean): BackgroundStatus | undefined {
-  const [status, setStatus] = useState<BackgroundStatus>();
-  useEffect(() => {
-    const read = () => void background.status().then(setStatus);
-    read();
-    const timer = setInterval(read, 3_000);
-    return () => clearInterval(timer);
-  }, [background, enabled]);
-  return status;
 }

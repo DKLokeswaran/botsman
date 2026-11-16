@@ -1,5 +1,6 @@
 import type { Bot, ChatSettings, LoginStep, ModelInfo, ModelRef, ProviderLogin, ThinkingLevel } from "@botsman/protocol";
 import { ThinkingLevels } from "@botsman/protocol";
+import { sameModel } from "./bot-settings.ts";
 
 type Prompt = Extract<LoginStep, { type: "prompt" }>;
 
@@ -47,11 +48,17 @@ export function effortChoices(model: ModelInfo | undefined): readonly ThinkingLe
 export function modelProblem(models: readonly ModelInfo[], model: ModelRef | null): string | undefined {
   if (models.length === 0) return "Connect a model provider to start chatting.";
   if (model === null) return "Choose a model for this chat.";
-  const found = models.some((candidate) => candidate.provider === model.provider && candidate.id === model.modelId);
+  const found = models.some((candidate) => sameModel(candidate, model));
   return found ? undefined : `${model.modelId} isn't available. Connect its provider or choose another model.`;
 }
 
 export type PickerScope = "chat" | "bot";
+
+// What the picker can change, as its switch labels them.
+export const PICKER_SCOPES: readonly { value: PickerScope; label: string }[] = [
+  { value: "chat", label: "This chat" },
+  { value: "bot", label: "Bot default" },
+];
 
 // What the picker changes in each scope, and the line that explains it.
 export function pickerValue(scope: PickerScope, chat: ChatSettings, bot: Pick<Bot, "name" | "defaultModel" | "thinkingLevel">): { model: ModelRef | null; thinkingLevel: ThinkingLevel; note: string } {

@@ -1,6 +1,6 @@
 import { chatSubtitle, contextTokens, modelProblem } from "@botsman/client-core";
 import { useBot, useChat, useConnectionStatus, useModels } from "@botsman/client-core/react";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef } from "react";
 import { Avatar } from "../components/avatar.tsx";
 import { ChatItemView } from "../components/chat-items.tsx";
 import { Composer } from "../components/composer.tsx";

@@ -3,7 +3,7 @@ import type { ErrorBody } from "@botsman/protocol";
 import { compile } from "@earendil-works/pi-schema";
 import websocket from "@fastify/websocket";
 import Fastify, { type FastifyInstance, type FastifyReply, type FastifyRequest } from "fastify";
-import { ACCESS_COOKIE, readCookie, sameOrigin } from "../auth/cookies.ts";
+import { ACCESS_COOKIE, readCookie, requireOwnPage } from "../auth/cookies.ts";
 import { ApiError } from "../errors.ts";
 import type { Services } from "../services.ts";
 import { registerAlertsSocket } from "./alerts-socket.ts";
@@ -84,7 +84,7 @@ function cookieToken(request: FastifyRequest): string {
   const token = readCookie(request.headers.cookie, ACCESS_COOKIE);
   if (token === undefined) throw new ApiError(401, "unauthorized", "Sign in first");
   const reads = request.method === "GET" || request.method === "HEAD";
-  if (!reads && !sameOrigin(request.headers.origin, request.host)) throw new ApiError(403, "forbidden", "This request must come from the dashboard");
+  if (!reads) requireOwnPage(request);
   return token;
 }
 

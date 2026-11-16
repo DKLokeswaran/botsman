@@ -1,8 +1,7 @@
-import { type ChatController, type ChatItem, formatMessageTime, formatUsage, type RunItem, type RunStep, runText, showsWorking, type ToolLine, workLabel } from "@botsman/client-core";
+import { type ChatController, type ChatItem, formatUsage, messageTime, queuedNote, type RunItem, type RunStep, runText, showsWorking, type ToolLine, toolVerb, workLabel } from "@botsman/client-core";
 
 type WorkStep = Extract<RunStep, { kind: "work" }>;
-import { useAction } from "@botsman/client-core/react";
-import { useState } from "react";
+import { useAction, useCopied } from "@botsman/client-core/react";
 import { ApprovalCard } from "./approval-card.tsx";
 import { Markdown } from "./markdown.tsx";
 import { Button } from "./ui/button.tsx";
@@ -11,17 +10,12 @@ type ItemOf<Kind extends ChatItem["kind"]> = Extract<ChatItem, { kind: Kind }>;
 
 // Draws one item of a chat.
 export function ChatItemView({ item, chat, botName }: { item: ChatItem; chat: ChatController; botName: string }) {
-  if (item.kind === "user") return <OwnerMessage text={item.text} note={timeLabel(item.at)} />;
+  if (item.kind === "user") return <OwnerMessage text={item.text} note={messageTime(item.at)} />;
   if (item.kind === "run") return <Run item={item} botName={botName} />;
-  if (item.kind === "queued") return <OwnerMessage text={item.text} note={item.mode === "steer" ? "Steering the reply" : "Queued"} muted />;
+  if (item.kind === "queued") return <OwnerMessage text={item.text} note={queuedNote(item.mode)} muted />;
   if (item.kind === "pending") return <PendingMessage item={item} chat={chat} />;
   if (item.kind === "failure") return <Failure text={item.text} chat={chat} />;
   return <p className="text-center text-xs text-muted-foreground">{item.text}</p>;
-}
-
-// A message's time, for the small line beside it. Entries without a time show none.
-function timeLabel(at: number | null): string | undefined {
-  return at === null ? undefined : formatMessageTime(at, Date.now());
 }
 
 function OwnerMessage({ text, note, muted = false }: { text: string; note?: string | undefined; muted?: boolean }) {
@@ -72,7 +66,7 @@ function Run({ item, botName }: { item: RunItem; botName: string }) {
     <article className="flex flex-col gap-2">
       <div className="flex items-baseline gap-2">
         <span className="font-display text-sm font-bold uppercase">{botName}</span>
-        <span className="text-xs text-muted-foreground">{timeLabel(item.at)}</span>
+        <span className="text-xs text-muted-foreground">{messageTime(item.at)}</span>
       </div>
       {item.steps.map((step, index) =>
         step.kind === "text" ? <Markdown key={step.id} text={step.text} /> : <WorkFold key={step.id} step={step} live={item.working && index === item.steps.length - 1} />,
@@ -86,19 +80,14 @@ function Run({ item, botName }: { item: RunItem; botName: string }) {
 
 // Under a finished run: its tokens and cost, and Copy for everything it said.
 function RunFooter({ item }: { item: RunItem }) {
-  const [copied, setCopied] = useState(false);
+  const { copied, copy } = useCopied((text) => navigator.clipboard.writeText(text));
   const text = runText(item);
-  const copy = async () => {
-    await navigator.clipboard.writeText(text);
-    setCopied(true);
-    setTimeout(() => setCopied(false), 1500);
-  };
   if (item.usage === null && text === "") return null;
   return (
     <div className="flex items-center gap-3 text-xs text-muted-foreground">
       {item.usage === null ? null : <span>{formatUsage(item.usage)}</span>}
       {text === "" ? null : (
-        <button type="button" className="rounded-md px-1.5 py-0.5 font-semibold hover:bg-accent hover:text-foreground" onClick={() => void copy()}>
+        <button type="button" className="rounded-md px-1.5 py-0.5 font-semibold hover:bg-accent hover:text-foreground" onClick={() => void copy(text)}>
           {copied ? "Copied" : "Copy"}
         </button>
       )}
@@ -124,18 +113,14 @@ function WorkFold({ step, live }: { step: WorkStep; live: boolean }) {
   );
 }
 
-const TOOL_VERBS: Record<ToolLine["status"], string> = { waiting: "Waiting", running: "Running", done: "Ran", failed: "Failed" };
-
-// One tool call: a line that opens to its output, and the approval card while it waits for the owner.
+// One tool call: a line that opens to its output.
 function ToolLineView({ tool }: { tool: ToolLine }) {
   return (
-    <div className="flex flex-col gap-2">
-      <details className="text-sm text-muted-foreground">
-        <summary className={`cursor-pointer select-none ${tool.status === "failed" ? "text-destructive" : ""}`}>
-          {TOOL_VERBS[tool.status]}: <span className="font-mono text-xs">{tool.summary}</span>
-        </summary>
-        {tool.output === "" ? null : <pre className="mt-1 max-h-64 overflow-auto rounded-lg border border-border bg-card p-3 font-mono text-xs whitespace-pre-wrap">{tool.output}</pre>}
-      </details>
-    </div>
+    <details className="text-sm text-muted-foreground">
+      <summary className={`cursor-pointer select-none ${tool.status === "failed" ? "text-destructive" : ""}`}>
+        {toolVerb(tool.status)}: <span className="font-mono text-xs">{tool.summary}</span>
+      </summary>
+      {tool.output === "" ? null : <pre className="mt-1 max-h-64 overflow-auto rounded-lg border border-border bg-card p-3 font-mono text-xs whitespace-pre-wrap">{tool.output}</pre>}
+    </details>
   );
 }
