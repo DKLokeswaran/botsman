@@ -117,7 +117,7 @@ test("the context in use is the newest reply's total, until a clear or compactio
   const replied = [user("1", "hi"), assistant("2", "a", { usage: usage(0) }), assistant("3", "b", { usage: { ...usage(0), totalTokens: 900 } })];
   expect(contextTokens(replied)).toBe(900);
   expect(contextTokens([...replied, { type: "notice", id: "4", kind: "reset", text: "cleared" }])).toBe(0);
-  expect(chatSubtitle({ model: { provider: "a", modelId: "m" }, thinkingLevel: "off" }, 0, [{ provider: "a", id: "m", name: "M", contextWindow: 1000, reasoning: false }], 250)).toBe("m · Off · 25% context · $0.00 this chat");
+  expect(chatSubtitle({ model: { provider: "a", modelId: "m" }, thinkingLevel: "off" }, 0, [{ provider: "a", id: "m", name: "M", contextWindow: 1000, reasoning: false }], 250)).toBe("m · Off · 250/1k context · $0.00 this chat");
 });
 
 test("a tool summary is one short line", () => {

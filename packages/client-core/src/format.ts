@@ -32,8 +32,14 @@ export function formatUsage(usage: Usage): string {
 export function chatSubtitle(settings: ChatSettings, totalCost: number, models: readonly ModelInfo[] = [], contextTokens = 0): string {
   const model = settings.model === null ? "No model chosen" : settings.model.modelId;
   const info = models.find((candidate) => sameModel(candidate, settings.model));
-  const context = info === undefined || info.contextWindow === 0 ? [] : [`${Math.round((contextTokens / info.contextWindow) * 100)}% context`];
+  const context = info === undefined || info.contextWindow === 0 ? [] : [`${formatTokens(contextTokens)}/${compactCount(info.contextWindow)} context`];
   return [model, effortLabel(shownEffort(info, settings.thinkingLevel)), ...context, `${formatCost(totalCost)} this chat`].join(" · ");
+}
+
+// A context window as a short round number, such as 200k or 1M.
+function compactCount(tokens: number): string {
+  if (tokens >= 1_000_000) return `${Number((tokens / 1_000_000).toFixed(1))}M`;
+  return tokens >= 1000 ? `${Math.round(tokens / 1000)}k` : String(tokens);
 }
 
 // The tokens the chat's context holds now: everything the newest reply's request carried, plus what it wrote. A clear
