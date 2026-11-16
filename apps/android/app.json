@@ -7,7 +7,9 @@
     "orientation": "portrait",
     "userInterfaceStyle": "automatic",
     "icon": "./assets/icon.png",
-    "platforms": ["android"],
+    "platforms": [
+      "android"
+    ],
     "android": {
       "package": "dev.botsman.app",
       "versionCode": 1,
@@ -17,6 +19,25 @@
         "backgroundColor": "#000000"
       }
     },
-    "plugins": ["expo-router"]
+    "plugins": [
+      "expo-router",
+      "expo-secure-store",
+      [
+        "expo-font",
+        {
+          "fonts": [
+            "node_modules/@expo-google-fonts/orbitron/700Bold/Orbitron_700Bold.ttf",
+            "node_modules/@expo-google-fonts/orbitron/900Black/Orbitron_900Black.ttf",
+            "node_modules/@expo-google-fonts/inter/400Regular/Inter_400Regular.ttf",
+            "node_modules/@expo-google-fonts/inter/500Medium/Inter_500Medium.ttf",
+            "node_modules/@expo-google-fonts/inter/600SemiBold/Inter_600SemiBold.ttf",
+            "node_modules/@expo-google-fonts/fragment-mono/400Regular/FragmentMono_400Regular.ttf"
+          ]
+        }
+      ]
+    ],
+    "experiments": {
+      "typedRoutes": false
+    }
   }
 }

@@ -1,88 +1,115 @@
-import { useServerHealth, type ServerHealthState } from "@botsman/client-core/react";
-import { chatStream } from "@botsman/protocol";
-import { fonts, palettes, radius, space } from "@botsman/tokens";
-import { LegendList } from "@legendapp/list/react-native";
-import { useState } from "react";
-import { Pressable, StyleSheet, Text, TextInput, View } from "react-native";
-import { EnrichedMarkdownText } from "react-native-enriched-markdown";
-import { KeyboardAvoidingView } from "react-native-keyboard-controller";
+import { formatCountdown } from "@botsman/client-core";
+import { useBots, useBotsmanClient, useConnectionStatus, useNeedsYou, useNow, useServerState } from "@botsman/client-core/react";
+import type { Approval, Bot } from "@botsman/protocol";
+import { Link } from "expo-router";
+import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
-import { BotsmanAlerts } from "../modules/botsman-alerts";
+import { useAppController } from "../src/app-context";
+import { fontFamilies, radius, space, useTheme } from "../src/theme";
+import { Avatar } from "../src/ui/avatar";
+import { Button } from "../src/ui/button";
 
-const colors = palettes.dark;
+const CONNECTION_LABELS = { offline: "Offline", connecting: "Connecting…", online: "Connected", reconnecting: "Reconnecting…" };
 
-type Row = { label: string; value: string };
-
-const SAMPLE_MARKDOWN = "A reply with **bold**, `code`, and a list:\n\n- first\n- second\n\n```ts\nconst answer = 42;\n```";
-
-// Asks for a server address and shows whether a Botsman server answers there.
-export default function ServerCheckScreen() {
-  const [address, setAddress] = useState("");
-  const { state, check } = useServerHealth(fetch);
-
+// The phone's home screen: what needs the owner, then the bots, with the main bot first.
+export default function BotListScreen() {
+  const { colors } = useTheme();
+  const app = useAppController();
+  const client = useBotsmanClient();
+  const { status } = useServerState();
+  const bots = useBots();
+  const needsYou = useNeedsYou();
+  const connection = useConnectionStatus();
+  const waitingBots = new Set(needsYou.map((approval) => approval.botId));
   return (
     <SafeAreaView style={styles.screen}>
-      <KeyboardAvoidingView behavior="padding" style={styles.body}>
-        <Text style={styles.title}>BOTSMAN</Text>
-        <LegendList data={rowsOf(state)} keyExtractor={(row) => row.label} renderItem={({ item }) => <RowView row={item} />} style={styles.list} />
-        <EnrichedMarkdownText markdown={SAMPLE_MARKDOWN} />
-        <View style={styles.form}>
-          <TextInput
-            style={styles.input}
-            value={address}
-            onChangeText={setAddress}
-            placeholder="bots.example.com"
-            placeholderTextColor={colors.mutedForeground}
-            autoCapitalize="none"
-            autoCorrect={false}
-            keyboardType="url"
-            accessibilityLabel="Server address"
-          />
-          <Pressable style={styles.button} onPress={() => void check(address)} disabled={state.status === "checking"} accessibilityRole="button">
-            <Text style={styles.buttonText}>Check</Text>
-          </Pressable>
-        </View>
-      </KeyboardAvoidingView>
+      <Text style={[styles.wordmark, { color: colors.foreground }]}>BOTSMAN</Text>
+      <ScrollView contentContainerStyle={styles.list}>
+        {needsYou.length === 0 ? null : <SectionTitle>Needs you</SectionTitle>}
+        {needsYou.map((approval) => (
+          <NeedsYouRow key={approval.id} approval={approval} bot={bots.find((bot) => bot.id === approval.botId)} />
+        ))}
+        <SectionTitle>Bots</SectionTitle>
+        {status === "loading" ? <Text style={[styles.sub, { color: colors.mutedForeground }]}>Loading…</Text> : null}
+        {bots.map((bot) => (
+          <BotRow key={bot.id} bot={bot} needsYou={waitingBots.has(bot.id)} />
+        ))}
+      </ScrollView>
+      <View style={[styles.footer, { borderTopColor: colors.border }]}>
+        <Text accessibilityRole="text" style={[styles.status, { color: colors.mutedForeground }]}>
+          {CONNECTION_LABELS[connection]}
+        </Text>
+        <Button label="Sign out" onPress={() => void client.session.signOut()} />
+        <Button label="Change server" onPress={() => void app.changeServer()} />
+      </View>
     </SafeAreaView>
   );
 }
 
-function RowView({ row }: { row: Row }) {
+function SectionTitle({ children }: { children: string }) {
+  const { colors } = useTheme();
+  return <Text style={[styles.section, { color: colors.primary }]}>{children}</Text>;
+}
+
+function NeedsYouRow({ approval, bot }: { approval: Approval; bot: Bot | undefined }) {
+  const { colors } = useTheme();
+  const now = useNow();
+  const kind = approval.memoryEdit === null ? "Approval" : "Memory edit";
   return (
-    <View style={styles.row}>
-      <Text style={styles.rowLabel}>{row.label}</Text>
-      <Text style={styles.rowValue}>{row.value}</Text>
-    </View>
+    <Link href={{ pathname: "/chat/[botId]", params: { botId: approval.botId } }} asChild>
+      <Pressable style={({ pressed }) => [styles.row, pressed && { backgroundColor: colors.accent }]}>
+        <View style={[styles.dot, { backgroundColor: colors.primary }]} />
+        <View style={styles.rowText}>
+          <Text style={[styles.sub, { color: colors.mutedForeground }]}>
+            {bot?.name ?? "Bot"} · {kind}
+          </Text>
+          <Text numberOfLines={1} style={[styles.rowTitle, { color: colors.foreground }]}>
+            {approval.description}
+          </Text>
+        </View>
+        <Text style={[styles.mono, { color: colors.mutedForeground }]}>{formatCountdown(approval.expiresAt, now)}</Text>
+      </Pressable>
+    </Link>
   );
 }
 
-// The lines the list shows: the device, a protocol value, and the server's answer.
-function rowsOf(state: ServerHealthState): Row[] {
-  const fixed: Row[] = [
-    { label: "Device", value: BotsmanAlerts.deviceSummary() },
-    { label: "Protocol", value: chatStream("main") },
-  ];
-  if (state.status === "idle") return fixed;
-  if (state.status === "checking") return [...fixed, { label: "Server", value: "Checking…" }];
-  if (state.status === "failed") return [...fixed, { label: "Server", value: state.message }];
-  return [
-    ...fixed,
-    { label: "Server", value: state.baseUrl },
-    { label: "Version", value: state.health.version },
-    { label: "Sandboxes", value: state.health.sandbox.ok ? "Working" : (state.health.sandbox.reason ?? "Not working") },
-  ];
+function BotRow({ bot, needsYou }: { bot: Bot; needsYou: boolean }) {
+  const { colors } = useTheme();
+  return (
+    <Link href={{ pathname: "/chat/[botId]", params: { botId: bot.id } }} asChild>
+      <Pressable style={({ pressed }) => [styles.row, pressed && { backgroundColor: colors.accent }]}>
+        <Avatar bot={bot} size={44} />
+        <View style={styles.rowText}>
+          <View style={styles.nameLine}>
+            <Text numberOfLines={1} style={[styles.botName, { color: colors.foreground }]}>
+              {bot.name.toUpperCase()}
+            </Text>
+            {bot.isMain ? <Text style={[styles.sub, { color: colors.mutedForeground }]}>Main</Text> : null}
+          </View>
+          <Text numberOfLines={1} style={[styles.rowTitle, { color: colors.mutedForeground }]}>
+            {bot.description}
+          </Text>
+        </View>
+        {needsYou ? <Text style={[styles.needs, { color: colors.foreground }]}>Needs you</Text> : null}
+      </Pressable>
+    </Link>
+  );
 }
 
 const styles = StyleSheet.create({
-  screen: { flex: 1, backgroundColor: colors.background },
-  body: { flex: 1, padding: space[4], gap: space[4] },
-  title: { color: colors.foreground, fontFamily: fonts.display, fontSize: 30, fontWeight: "900", letterSpacing: 0.3 },
-  list: { flex: 1 },
-  row: { flexDirection: "row", justifyContent: "space-between", gap: space[4], paddingVertical: space[2], borderBottomWidth: 1, borderBottomColor: colors.border },
-  rowLabel: { color: colors.mutedForeground, fontSize: 14 },
-  rowValue: { color: colors.green, fontSize: 14, flexShrink: 1, textAlign: "right" },
-  form: { flexDirection: "row", gap: space[2] },
-  input: { flex: 1, color: colors.foreground, borderWidth: 1, borderColor: colors.input, borderRadius: radius.md, paddingHorizontal: space[3], paddingVertical: space[2], fontSize: 14 },
-  button: { backgroundColor: colors.primary, borderRadius: radius.md, paddingHorizontal: space[4], justifyContent: "center" },
-  buttonText: { color: colors.primaryForeground, fontWeight: "600" },
+  screen: { flex: 1 },
+  wordmark: { fontFamily: fontFamilies.display, fontSize: 18, letterSpacing: 6, paddingHorizontal: space[4], paddingVertical: space[4] },
+  list: { paddingHorizontal: space[2], paddingBottom: space[4] },
+  section: { fontFamily: fontFamilies.bodySemiBold, fontSize: 14, paddingHorizontal: space[2], paddingTop: space[4], paddingBottom: space[2] },
+  row: { flexDirection: "row", alignItems: "center", gap: space[3], paddingHorizontal: space[2], paddingVertical: space[3], borderRadius: radius.md },
+  rowText: { flex: 1, minWidth: 0 },
+  nameLine: { flexDirection: "row", alignItems: "baseline", gap: space[2] },
+  botName: { fontFamily: fontFamilies.display, fontSize: 14, flexShrink: 1 },
+  rowTitle: { fontFamily: fontFamilies.body, fontSize: 14 },
+  sub: { fontFamily: fontFamilies.body, fontSize: 12 },
+  mono: { fontFamily: fontFamilies.mono, fontSize: 12 },
+  needs: { fontFamily: fontFamilies.bodySemiBold, fontSize: 12 },
+  dot: { width: 6, height: 6, borderRadius: 3, marginHorizontal: space[1] },
+  footer: { flexDirection: "row", alignItems: "center", gap: space[2], borderTopWidth: 1, padding: space[3] },
+  status: { flex: 1, fontFamily: fontFamilies.body, fontSize: 12 },
 });

@@ -111,6 +111,9 @@ export class BotsmanClient {
   }
 }
 
+// A request id only has to differ from the app's other recent sends, so a runtime without `crypto.randomUUID`,
+// such as React Native's, makes one from the time and a random number.
 function randomId(): string {
-  return globalThis.crypto.randomUUID();
+  const crypto = globalThis.crypto as { randomUUID?: () => string } | undefined;
+  return crypto?.randomUUID?.() ?? `${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}`;
 }
