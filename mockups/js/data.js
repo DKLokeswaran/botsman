@@ -11,8 +11,7 @@ const HB = {
     { name: "skills", hint: "Skills this bot can use" },
     { name: "memory", hint: "Open this bot's memory files" },
     { name: "notes", hint: "Open this bot's notes" },
-    { name: "usage", hint: "Tokens and cost for this chat" },
-    { name: "help", hint: "Commands in this chat" }
+    { name: "usage", hint: "Tokens and cost by day and by bot" }
   ],
   marks: ["junior", "atlas", "ledger", "quartermaster", "scribe", "nightwatch", "diamond", "waves"],
   bots: [
