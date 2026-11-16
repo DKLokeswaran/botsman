@@ -101,6 +101,12 @@ function BotRow({ bot, needsYou }: { bot: Bot; needsYou: boolean }) {
       </View>
       <View style={styles.rowEnd}>
         <Text style={[styles.sub, { color: colors.mutedForeground }]}>{text.time}</Text>
+        {text.working ? (
+          <View style={styles.working}>
+            <View style={[styles.dot, { backgroundColor: colors.primary }]} />
+            <Text style={[styles.needs, { color: colors.foreground }]}>Working</Text>
+          </View>
+        ) : null}
         {needsYou ? <Text style={[styles.needs, { color: colors.foreground }]}>Needs you</Text> : null}
         {text.unread === "" ? null : (
           <Text accessibilityLabel={`${text.unread} unread`} style={[styles.badge, { backgroundColor: colors.primary, color: colors.primaryForeground }]}>
@@ -128,6 +134,7 @@ const styles = StyleSheet.create({
   mono: { fontFamily: fontFamilies.mono, fontSize: 12 },
   needs: { fontFamily: fontFamilies.bodySemiBold, fontSize: 12 },
   newBot: { paddingHorizontal: space[2], paddingVertical: space[3] },
+  working: { flexDirection: "row", alignItems: "center", gap: space[1] },
   rowEnd: { alignItems: "flex-end", gap: space[1] },
   badge: { fontFamily: fontFamilies.mono, fontSize: 12, minWidth: 20, textAlign: "center", paddingHorizontal: 6, borderRadius: 10, overflow: "hidden" },
   dot: { width: 6, height: 6, borderRadius: 3, marginHorizontal: space[1] },

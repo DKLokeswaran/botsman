@@ -67,7 +67,7 @@ export async function createServices(config: Config, options: ServiceOptions = {
     if (message.type === "assistant" && message.usage !== null) usage.record(botId, message.at ?? Date.now(), message.usage);
   };
   const feed = new ChatFeed(hub, (botId) => approvalStore.pendingByCall(botId), (botId) => alert("failure", botId, botId), logUsage);
-  const activity = new BotActivityTracker(db, (botId) => feed.messages(botId), (line) => publish({ type: "activity", activity: line }));
+  const activity = new BotActivityTracker(db, (botId) => feed.messages(botId), (botId) => feed.working(botId), (line) => publish({ type: "activity", activity: line }));
 
   const memoryEdits = new MemoryEdits(memoryFiles);
   const policy = new PermissionPolicy(approvalStore, (bot, toolName, args) => memoryEdits.describe(bot, toolName, args), (approval: Approval) => {

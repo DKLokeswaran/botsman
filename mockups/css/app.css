@@ -553,3 +553,6 @@ html[data-device="phone"] .dock { padding-bottom: 18px; }
 
 /* A memory file or note before Edit, drawn as it reads. */
 .read-only { border: 1px solid var(--border); border-radius: var(--r); padding: 10px 12px; max-height: 60vh; overflow-y: auto; }
+
+/* Stop is the one red action in the message box, as in the apps. */
+.ghost.stop { color: var(--destructive); border-color: var(--destructive); }

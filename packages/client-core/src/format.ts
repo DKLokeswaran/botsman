@@ -76,12 +76,14 @@ export function formatMessageTime(at: number, now: number): string {
   return new Date(at).toLocaleDateString(undefined, { day: "numeric", month: "short" });
 }
 
-// What a bot list row shows: the newest message or else the bot's purpose, when the chat last moved, and the unread badge.
-export function botRowText(description: string, activity: BotActivity | undefined, now: number): { subtitle: string; time: string; unread: string } {
+// What a bot list row shows: the newest message or else the bot's purpose, when the chat last moved, the unread badge,
+// and whether the bot is working right now.
+export function botRowText(description: string, activity: BotActivity | undefined, now: number): { subtitle: string; time: string; unread: string; working: boolean } {
   return {
     subtitle: activity?.preview || description,
     time: activity?.lastAt == null ? "" : formatMessageTime(activity.lastAt, now),
     unread: formatUnread(activity?.unread ?? 0),
+    working: activity?.working === true,
   };
 }
 

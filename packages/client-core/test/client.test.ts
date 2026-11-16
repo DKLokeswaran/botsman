@@ -154,6 +154,16 @@ describe("alert settings", () => {
   });
 });
 
+describe("bot list working state", () => {
+  it("shows a bot as working while it replies, and idle after", async () => {
+    const bot = await rig.client.createBot({ name: "Busy", defaultModel: { provider: "script", modelId: "script-1" } });
+    await rig.client.session.request("POST", `/api/bots/${bot.id}/chat/messages`, { text: "slow 1500", mode: "send" });
+    await until(rig.client.server, (state) => state.activity[bot.id]?.working === true);
+    await until(rig.client.server, (state) => state.activity[bot.id]?.working === false, 20_000);
+    await rig.client.deleteBot(bot.id);
+  });
+});
+
 describe("chat actions", () => {
   const scriptModel = { provider: "script", modelId: "script-1" };
 

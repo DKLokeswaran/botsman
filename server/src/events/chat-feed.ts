@@ -65,6 +65,12 @@ export class ChatFeed {
     this.#publish(botId, { type: "settings", settings });
   }
 
+  // Whether the chat's bot is replying or running tools right now.
+  working(botId: string): boolean {
+    const chat = this.#chats.get(botId);
+    return chat !== undefined && toLiveState(chat.docs, new Map()).running;
+  }
+
   // Every message the feed holds for a chat, oldest first.
   messages(botId: string): ChatMessage[] {
     return (this.#chats.get(botId)?.entries ?? []).flatMap((entry) => toChatMessage(entry) ?? []);

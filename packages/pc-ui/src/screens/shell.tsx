@@ -114,6 +114,12 @@ function BotRow({ bot, open, needsYou }: { bot: Bot; open: boolean; needsYou: bo
       </span>
       <span className="flex shrink-0 flex-col items-end gap-1">
         <span className="text-xs text-muted-foreground">{text.time}</span>
+        {text.working ? (
+          <span className="flex items-center gap-1 text-xs font-semibold">
+            <span aria-hidden className="size-1.5 animate-pulse rounded-full bg-primary" />
+            Working
+          </span>
+        ) : null}
         {needsYou ? <span className="text-xs font-semibold">Needs you</span> : null}
         {text.unread === "" ? null : (
           <span aria-label={`${text.unread} unread`} className="min-w-5 rounded-full bg-primary px-1.5 text-center font-mono text-xs text-primary-foreground">

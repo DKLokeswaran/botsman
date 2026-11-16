@@ -7,17 +7,19 @@ const PREVIEW_LENGTH = 140;
 export class BotActivityTracker {
   readonly #db: Database;
   readonly #messages: (botId: string) => readonly ChatMessage[];
+  readonly #working: (botId: string) => boolean;
   readonly #publish: (activity: BotActivity) => void;
   readonly #last = new Map<string, string>();
 
-  constructor(db: Database, messages: (botId: string) => readonly ChatMessage[], publish: (activity: BotActivity) => void) {
+  constructor(db: Database, messages: (botId: string) => readonly ChatMessage[], working: (botId: string) => boolean, publish: (activity: BotActivity) => void) {
     this.#db = db;
     this.#messages = messages;
+    this.#working = working;
     this.#publish = publish;
   }
 
   get(botId: string): BotActivity {
-    return botActivity(botId, this.#messages(botId), this.#readAt(botId));
+    return { ...botActivity(botId, this.#messages(botId), this.#readAt(botId)), working: this.#working(botId) };
   }
 
   // Publishes the bot's activity when it differs from what was last sent.

@@ -54,14 +54,9 @@ export function ModelSheet({ visible, bot, chat, onClose }: { visible: boolean; 
             })}
           </View>
           <ErrorText>{save.error}</ErrorText>
-          <View style={styles.footer}>
-            <Pressable accessibilityRole="button" onPress={() => (onClose(), router.push("/providers"))} hitSlop={8}>
-              <Text style={[styles.optionText, { color: colors.primary }]}>Connect a provider</Text>
-            </Pressable>
-            <Pressable accessibilityRole="button" onPress={onClose} hitSlop={8}>
-              <Text style={[styles.optionText, { color: colors.foreground }]}>Done</Text>
-            </Pressable>
-          </View>
+          <Pressable accessibilityRole="button" onPress={() => (onClose(), router.push("/providers"))} hitSlop={8} style={styles.footer}>
+            <Text style={[styles.optionText, { color: colors.primary }]}>Connect a provider</Text>
+          </Pressable>
         </View>
       </SafeAreaView>
     </Modal>
@@ -79,5 +74,5 @@ const styles = StyleSheet.create({
   chips: { flexDirection: "row", flexWrap: "wrap", gap: space[2] },
   chip: { borderWidth: 1, borderRadius: radius.md, paddingHorizontal: space[3], paddingVertical: space[2] },
   chipText: { fontFamily: fontFamilies.body, fontSize: 13 },
-  footer: { flexDirection: "row", justifyContent: "space-between", paddingTop: space[2] },
+  footer: { paddingTop: space[2] },
 });

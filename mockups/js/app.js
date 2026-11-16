@@ -683,7 +683,7 @@
     const sendBtn = working
       ? '<button type="button" class="text-btn" id="queue-btn" data-act="send"' + (canSend() ? "" : " disabled") + ">Queue</button>" +
         '<button type="button" class="ghost" id="steer-btn" data-act="steer"' + (canSend() ? "" : " disabled") + ">Steer</button>" +
-        '<button type="button" class="ghost" data-act="stop">' + svg(IC.square, 12) + " Stop</button>"
+        '<button type="button" class="ghost stop" data-act="stop">' + svg(IC.square, 12) + " Stop</button>"
       : '<button type="button" class="send" id="send-btn" data-act="send"' + (canSend() ? "" : " disabled") + ' aria-label="Send">' + svg(IC.up, 18) + "</button>";
     const modelBtn = eff ? '<button type="button" class="model-chip" data-act="toggle-model">' + esc(eff.model) + " · " + esc(eff.effort) + "</button>" : "";
     // The app has one box while the bot works: Queue sends after the turn, and Steer adds the text to the turn.

@@ -90,6 +90,8 @@ export const BotActivity = obj({
   lastAt: nullable(int()),
   preview: str(),
   unread: int({ minimum: 0 }),
+  // Whether the bot is replying or using tools right now. Missing from servers older than this field.
+  working: opt(bool()),
 });
 export type BotActivity = Static<typeof BotActivity>;
 

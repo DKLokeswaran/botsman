@@ -1,7 +1,9 @@
 import { type ChatController, exactCommand, modelChipLabel, runCommand, type SendMode, type SlashCommand, type SlashScreen, slashMatches } from "@botsman/client-core";
 import { useAction, useModels } from "@botsman/client-core/react";
 import type { Bot, ChatSettings } from "@botsman/protocol";
-import { type KeyboardEvent, useLayoutEffect, useRef, useState } from "react";
+import { ICONS } from "@botsman/tokens";
+import { type KeyboardEvent, useEffect, useLayoutEffect, useRef, useState } from "react";
+import { MarkIcon } from "./avatar.tsx";
 import { memoryHref, notesHref } from "../use-route.ts";
 import { ModelPicker } from "./model-picker.tsx";
 import { Button } from "./ui/button.tsx";
@@ -36,8 +38,9 @@ export function Composer({ chat, bot, settings, sendModes, busy }: { chat: ChatC
   };
 
   const empty = text.trim() === "";
+  const box = useCloseOnOutside(picking, () => setPicking(false));
   return (
-    <div className="relative flex flex-col gap-2 rounded-xl border border-border bg-card p-3">
+    <div ref={box} className="relative flex flex-col gap-2 rounded-xl border border-border bg-card p-3">
       {picking ? <ModelPicker chat={{ controller: chat, settings }} bot={bot} onClose={() => setPicking(false)} className="absolute right-0 bottom-full z-10 mb-2 w-80" /> : null}
       {matches === undefined ? null : <SlashMenu matches={matches} onPick={(picked) => void command.run(picked)} />}
       {command.error === undefined ? null : <p className="text-sm text-destructive">{command.error}</p>}
@@ -52,6 +55,8 @@ export function Composer({ chat, bot, settings, sendModes, busy }: { chat: ChatC
         className="max-h-[40vh] resize-none overflow-y-auto bg-transparent px-1 py-1 outline-none placeholder:text-muted-foreground"
       />
       <div className="flex items-center gap-2">
+        <ComingSoon label="Attach a file" paths={ICONS.attach} />
+        <ComingSoon label="Add an image" paths={ICONS.image} />
         <button type="button" aria-label="Commands" onClick={() => setText(text === "" ? "/" : text)} className="flex size-8 items-center justify-center rounded-md font-mono text-sm text-muted-foreground hover:bg-accent hover:text-foreground">
           /
         </button>
@@ -71,7 +76,7 @@ export function Composer({ chat, bot, settings, sendModes, busy }: { chat: ChatC
                 Steer
               </Button>
             ) : null}
-            <Button disabled={stop.busy} onClick={() => void stop.run()}>
+            <Button variant="danger" disabled={stop.busy} onClick={() => void stop.run()}>
               <span aria-hidden className="size-2.5 rounded-[1px] bg-current" /> Stop
             </Button>
           </>
@@ -85,6 +90,27 @@ export function Composer({ chat, bot, settings, sendModes, busy }: { chat: ChatC
       </div>
     </div>
   );
+}
+
+// A toolbar button for a feature that hasn't arrived yet: shown, but disabled.
+function ComingSoon({ label, paths }: { label: string; paths: readonly string[] }) {
+  return (
+    <button type="button" disabled aria-label={label} title={`${label} · coming in a later update`} className="flex size-8 items-center justify-center rounded-md text-muted-foreground opacity-40">
+      <MarkIcon paths={paths} size={18} />
+    </button>
+  );
+}
+
+// Closes a panel when the owner clicks anywhere outside the box that holds it.
+function useCloseOnOutside(open: boolean, close: () => void) {
+  const box = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (!open) return;
+    const onDown = (event: MouseEvent) => box.current?.contains(event.target as Node) || close();
+    document.addEventListener("mousedown", onDown);
+    return () => document.removeEventListener("mousedown", onDown);
+  }, [open, close]);
+  return box;
 }
 
 function SlashMenu({ matches, onPick }: { matches: SlashCommand[]; onPick: (command: SlashCommand) => void }) {

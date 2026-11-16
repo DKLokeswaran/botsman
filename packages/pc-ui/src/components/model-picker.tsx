@@ -43,14 +43,9 @@ export function ModelPicker({ chat, bot, onClose, className = POPOVER }: { chat?
         ))}
       </div>
       <ErrorText>{save.error}</ErrorText>
-      <div className="flex justify-between">
-        <a href="#/providers" className="text-primary underline" onClick={onClose}>
-          Connect a provider
-        </a>
-        <button type="button" className="text-muted-foreground hover:text-foreground" onClick={onClose}>
-          Done
-        </button>
-      </div>
+      <a href="#/providers" className="text-primary underline" onClick={onClose}>
+        Connect a provider
+      </a>
     </div>
   );
 }

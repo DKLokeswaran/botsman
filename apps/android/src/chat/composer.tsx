@@ -5,7 +5,9 @@ import { router } from "expo-router";
 import { useState } from "react";
 import { Pressable, StyleSheet, Text, TextInput, useWindowDimensions, View } from "react-native";
 import { fontFamilies, radius, space, useTheme } from "../theme";
+import { ICONS } from "@botsman/tokens";
 import Svg, { Path } from "react-native-svg";
+import { MarkIcon } from "../ui/avatar";
 import { Button } from "../ui/button";
 import { ModelSheet } from "../ui/model-sheet";
 
@@ -50,6 +52,8 @@ export function Composer({ chat, bot, settings, sendModes, busy }: { chat: ChatC
         style={[styles.input, { color: colors.foreground, maxHeight }]}
       />
       <View style={styles.actions}>
+        <ComingSoon label="Attach a file" paths={ICONS.attach} />
+        <ComingSoon label="Add an image" paths={ICONS.image} />
         <Pressable accessibilityRole="button" accessibilityLabel="Commands" onPress={() => setText(text === "" ? "/" : text)} hitSlop={6} style={styles.slash}>
           <Text style={[styles.command, { color: colors.mutedForeground }]}>/</Text>
         </Pressable>
@@ -59,13 +63,7 @@ export function Composer({ chat, bot, settings, sendModes, busy }: { chat: ChatC
             {modelChipLabel(settings, models)}
           </Text>
         </Pressable>
-        {busy ? (
-          <>
-            {sendModes.includes("queue") ? <Button label="Queue" variant="text" disabled={empty} onPress={() => send("queue")} /> : null}
-            {sendModes.includes("steer") ? <Button label="Steer" disabled={empty} onPress={() => send("steer")} /> : null}
-            <Button label="■ Stop" disabled={stop.busy} onPress={() => void stop.run()} />
-          </>
-        ) : (
+        {busy ? null : (
           <Pressable accessibilityRole="button" accessibilityLabel="Send" disabled={empty} onPress={() => send("send")} style={[styles.send, { backgroundColor: colors.primary, opacity: empty ? 0.4 : 1 }]}>
             <Svg viewBox="0 0 24 24" width={18} height={18} fill="none" stroke={colors.primaryForeground} strokeWidth={2.2} strokeLinecap="round" strokeLinejoin="round">
               <Path d="M12 19V5M5 12l7-7 7 7" />
@@ -73,7 +71,25 @@ export function Composer({ chat, bot, settings, sendModes, busy }: { chat: ChatC
           </Pressable>
         )}
       </View>
+      {busy ? (
+        // While the bot works, its buttons get their own row, so they never crowd the model chip on a phone.
+        <View style={styles.busyRow}>
+          {sendModes.includes("queue") ? <Button label="Queue" variant="text" disabled={empty} onPress={() => send("queue")} /> : null}
+          {sendModes.includes("steer") ? <Button label="Steer" disabled={empty} onPress={() => send("steer")} /> : null}
+          <Button label="■ Stop" variant="danger" disabled={stop.busy} onPress={() => void stop.run()} />
+        </View>
+      ) : null}
       <ModelSheet visible={picking} bot={bot} chat={{ controller: chat, settings }} onClose={() => setPicking(false)} />
+    </View>
+  );
+}
+
+// A toolbar button for a feature that hasn't arrived yet: shown, but disabled.
+function ComingSoon({ label, paths }: { label: string; paths: readonly string[] }) {
+  const { colors } = useTheme();
+  return (
+    <View accessibilityRole="button" accessibilityLabel={`${label}, coming in a later update`} accessibilityState={{ disabled: true }} style={[styles.slash, styles.disabled]}>
+      <MarkIcon paths={paths} size={18} color={colors.mutedForeground} />
     </View>
   );
 }
@@ -109,7 +125,9 @@ const styles = StyleSheet.create({
   actions: { flexDirection: "row", alignItems: "center", gap: space[2] },
   grow: { flex: 1 },
   slash: { width: 32, height: 32, alignItems: "center", justifyContent: "center" },
-  chip: { borderRadius: radius.md, paddingHorizontal: space[3], paddingVertical: space[2], flexShrink: 1 },
+  disabled: { opacity: 0.4 },
+  busyRow: { flexDirection: "row", justifyContent: "flex-end", gap: space[2] },
+  chip: { borderRadius: radius.md, paddingHorizontal: space[3], paddingVertical: space[2], flexShrink: 1, minWidth: 0 },
   chipText: { fontFamily: fontFamilies.bodySemiBold, fontSize: 12 },
   send: { width: 40, height: 40, borderRadius: radius.lg, alignItems: "center", justifyContent: "center" },
 });

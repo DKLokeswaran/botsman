@@ -15,3 +15,9 @@ export const MARKS: Record<string, readonly string[]> = {
 };
 
 export const MARK_IDS = Object.keys(MARKS);
+
+// Toolbar icons from the mockups, on the same 24 by 24 grid and stroke as the marks.
+export const ICONS: Record<"attach" | "image", readonly string[]> = {
+  attach: ["M15.5 7.5 9 14a3 3 0 0 0 4.2 4.2l6.3-6.3a4.5 4.5 0 0 0-6.4-6.4L6.4 12.2"],
+  image: ["M6 5h12a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V7a2 2 0 0 1 2-2z", "M7.7 10a1.3 1.3 0 1 0 2.6 0a1.3 1.3 0 1 0 -2.6 0", "M4 16l5-4 3 2.5 3-2.5 5 4"],
+};
