@@ -8,7 +8,9 @@ import { chatHref, type Route, useRoute } from "../use-route.ts";
 import { BotInfoScreen } from "./bot-info.tsx";
 import { BotSettingsScreen } from "./bot-settings.tsx";
 import { ChatScreen } from "./chat.tsx";
+import { MemoryScreen } from "./memory.tsx";
 import { NewBotScreen } from "./new-bot.tsx";
+import { NoteScreen, NotesScreen } from "./notes.tsx";
 
 // The main window: the bot list beside the open chat. Home is the main bot's chat.
 export function Shell({ app, client }: { app: AppController; client: BotsmanClient }) {
@@ -29,6 +31,9 @@ function MainPane({ route, loading, botId }: { route: Route; loading: boolean; b
   if (loading || botId === undefined) return <p className="p-6 text-muted-foreground">Loading…</p>;
   if (route.name === "bot") return <BotInfoScreen key={botId} botId={botId} />;
   if (route.name === "bot-settings") return <BotSettingsScreen key={botId} botId={botId} />;
+  if (route.name === "memory") return <MemoryScreen key={botId} botId={botId} />;
+  if (route.name === "notes") return <NotesScreen key={botId} botId={botId} />;
+  if (route.name === "note") return <NoteScreen key={`${botId}/${route.note}`} botId={botId} name={route.note} />;
   return <ChatScreen key={botId} botId={botId} />;
 }
 

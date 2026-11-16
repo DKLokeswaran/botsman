@@ -22,6 +22,8 @@ export default function BotInfoScreen() {
       <FacePicker bot={bot} />
       <NameForm key={`${bot.name}\n${bot.description}`} bot={bot} />
       <ModelDefault bot={bot} />
+      <LinkRow title="Memory" detail="The four files this bot loads" onPress={() => router.push({ pathname: "/memory/[botId]", params: { botId: bot.id } })} />
+      <LinkRow title="Notes" detail="Longer records this bot keeps" onPress={() => router.push({ pathname: "/notes/[botId]", params: { botId: bot.id } })} />
       <LinkRow title="Bot settings" detail="Permissions, approval wait, network" onPress={() => router.push({ pathname: "/bot-settings/[botId]", params: { botId: bot.id } })} />
       <DeleteBot bot={bot} />
     </Page>

@@ -8,6 +8,14 @@ import {
   type BotUpdate,
   type FreeSpace,
   type Health,
+  type MemoryFile,
+  type MemoryFileName,
+  type MemoryFiles,
+  type Note,
+  type NoteInfo,
+  type NoteList,
+  type NoteSearchHit,
+  type NoteSearchResult,
   type ModelInfo,
   type ModelList,
   type Ok,
@@ -94,6 +102,38 @@ export class BotsmanClient {
 
   answerApproval(approvalId: string, decision: ApprovalAnswer["decision"]): Promise<Approval> {
     return this.session.request("POST", `/api/approvals/${approvalId}/answer`, { decision });
+  }
+
+  memory(botId: string): Promise<MemoryFiles> {
+    return this.session.request("GET", `/api/bots/${botId}/memory`);
+  }
+
+  // The owner's own edit to a memory file. Bots get the change with their next message.
+  saveMemory(botId: string, file: MemoryFileName, content: string): Promise<MemoryFile> {
+    return this.session.request("PUT", `/api/bots/${botId}/memory/${file}`, { content });
+  }
+
+  async notes(botId: string): Promise<NoteInfo[]> {
+    return (await this.session.request<NoteList>("GET", `/api/bots/${botId}/notes`)).notes;
+  }
+
+  async searchNotes(botId: string, query: string): Promise<NoteSearchHit[]> {
+    return (await this.session.request<NoteSearchResult>("GET", `/api/bots/${botId}/notes-search?q=${encodeURIComponent(query)}`)).hits;
+  }
+
+  note(botId: string, name: string): Promise<Note> {
+    return this.session.request("GET", `/api/bots/${botId}/notes/${encodeURIComponent(name)}`);
+  }
+
+  // Saves a note, and removes the old file when the owner renamed it.
+  async saveNote(botId: string, name: string, content: string, previousName?: string): Promise<Note> {
+    const note = await this.session.request<Note>("PUT", `/api/bots/${botId}/notes/${encodeURIComponent(name)}`, { content });
+    if (previousName !== undefined && previousName !== name) await this.deleteNote(botId, previousName);
+    return note;
+  }
+
+  deleteNote(botId: string, name: string): Promise<Ok> {
+    return this.session.request("DELETE", `/api/bots/${botId}/notes/${encodeURIComponent(name)}`);
   }
 
   // Models from every connected provider.

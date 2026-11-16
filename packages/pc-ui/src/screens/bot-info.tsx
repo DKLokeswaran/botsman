@@ -8,7 +8,7 @@ import { ErrorText, LinkRow, Page } from "../components/page.tsx";
 import { Button } from "../components/ui/button.tsx";
 import { Field } from "../components/ui/field.tsx";
 import { shrinkPhoto } from "../photo.ts";
-import { botSettingsHref, chatHref } from "../use-route.ts";
+import { botSettingsHref, chatHref, memoryHref, notesHref } from "../use-route.ts";
 
 // A bot's name, description, and face, with links to its other pages, and delete.
 export function BotInfoScreen({ botId }: { botId: string }) {
@@ -22,6 +22,8 @@ export function BotInfoScreen({ botId }: { botId: string }) {
         <span className="font-semibold">Model default</span>
         <span className="text-muted-foreground">{bot.defaultModel === null ? "None" : `${bot.defaultModel.modelId} · ${effortLabel(bot.thinkingLevel)}`}</span>
       </div>
+      <LinkRow href={memoryHref(bot.id)} title="Memory" detail="The four files this bot loads" />
+      <LinkRow href={notesHref(bot.id)} title="Notes" detail="Longer records this bot keeps" />
       <LinkRow href={botSettingsHref(bot.id)} title="Bot settings" detail="Permissions, approval wait, network" />
       <DeleteBot bot={bot} />
     </Page>

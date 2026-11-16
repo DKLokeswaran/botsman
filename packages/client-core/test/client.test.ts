@@ -1,5 +1,5 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { type ChatState, offeredSendModes, suggestedModel } from "../src/index.ts";
+import { type ChatState, newNoteName, noteNameProblem, offeredSendModes, suggestedModel } from "../src/index.ts";
 import { scriptSwitches } from "@botsman/server/src/testing/script-model.ts";
 import { PASSWORD, type Rig, startRig, until } from "./real-server.ts";
 
@@ -69,6 +69,25 @@ describe("bot list activity", () => {
     await until(rig.client.server, (state) => state.activity[bot.id]?.unread === 0);
     unwatch();
     await rig.client.deleteBot(bot.id);
+  });
+});
+
+describe("memory and notes", () => {
+  it("saves the owner's memory edit", async () => {
+    await rig.client.saveMemory(mainId, "USER_PROFILE.md", "Prefers short answers.");
+    const memory = await rig.client.memory(mainId);
+    expect(memory.files.find((file) => file.name === "USER_PROFILE.md")?.content).toBe("Prefers short answers.");
+  });
+
+  it("creates, finds, renames, and deletes a note", async () => {
+    await rig.client.saveNote(mainId, "garden.md", "Tomatoes need staking in June.");
+    expect((await rig.client.searchNotes(mainId, "tomatoes")).map((hit) => hit.name)).toEqual(["garden.md"]);
+    await rig.client.saveNote(mainId, "vegetables.md", "Tomatoes need staking in June.", "garden.md");
+    expect((await rig.client.notes(mainId)).map((note) => note.name)).toEqual(["vegetables.md"]);
+    await rig.client.deleteNote(mainId, "vegetables.md");
+    expect(await rig.client.notes(mainId)).toEqual([]);
+    expect(newNoteName(["untitled.md"])).toBe("untitled-2.md");
+    expect(noteNameProblem("../x.md")).toBeTruthy();
   });
 });
 

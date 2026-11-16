@@ -12,3 +12,4 @@ export * from "./store.ts";
 export * from "./stream-connection.ts";
 export * from "./updates.ts";
 export * from "./bot-settings.ts";
+export * from "./memory-notes.ts";

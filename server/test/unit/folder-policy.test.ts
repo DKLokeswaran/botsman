@@ -59,8 +59,8 @@ describe("bot folder rules", () => {
 
   it("reads ~ as the owner's home folder", () => {
     const { root, rules: folderRules } = rules();
-    expect(checkFolder("~", folderRules).reason).toMatch(/home folder/);
-    expect(checkFolder("~/.ssh", folderRules).reason).toMatch(/sensitive/);
+    expect(checkFolder("~", folderRules)).toMatchObject({ allowed: false, reason: expect.stringMatching(/home folder/) });
+    expect(checkFolder("~/.ssh", folderRules)).toMatchObject({ allowed: false, reason: expect.stringMatching(/sensitive/) });
     expect(checkFolder("~/projects/notes", folderRules)).toMatchObject({ allowed: true, path: path.join(root.home, "projects", "notes") });
   });
 });
