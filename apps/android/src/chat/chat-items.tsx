@@ -1,4 +1,4 @@
-import { type ChatController, type ChatItem, formatUsage, type ToolLine } from "@botsman/client-core";
+import { type ChatController, type ChatItem, formatMessageTime, formatUsage, type ToolLine } from "@botsman/client-core";
 import { useState } from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 import { fontFamilies, radius, space, useTheme } from "../theme";
@@ -11,7 +11,7 @@ type ItemOf<Kind extends ChatItem["kind"]> = Extract<ChatItem, { kind: Kind }>;
 // Draws one item of a chat.
 export function ChatItemView({ item, chat, botName }: { item: ChatItem; chat: ChatController; botName: string }) {
   const { colors } = useTheme();
-  if (item.kind === "user") return <OwnerMessage text={item.text} />;
+  if (item.kind === "user") return <OwnerMessage text={item.text} note={timeLabel(item.at)} />;
   if (item.kind === "reply") return <Reply item={item} botName={botName} />;
   if (item.kind === "queued") return <OwnerMessage text={item.text} note={item.mode === "steer" ? "Steering the reply" : "Queued"} muted />;
   if (item.kind === "pending") return <PendingMessage item={item} chat={chat} />;
@@ -19,7 +19,12 @@ export function ChatItemView({ item, chat, botName }: { item: ChatItem; chat: Ch
   return <Text style={[styles.notice, { color: colors.mutedForeground }]}>{item.text}</Text>;
 }
 
-function OwnerMessage({ text, note, muted = false }: { text: string; note?: string; muted?: boolean }) {
+// A message's time, for the small line beside it. Entries without a time show none.
+function timeLabel(at: number | null): string | undefined {
+  return at === null ? undefined : formatMessageTime(at, Date.now());
+}
+
+function OwnerMessage({ text, note, muted = false }: { text: string; note?: string | undefined; muted?: boolean }) {
   const { colors } = useTheme();
   return (
     <View style={styles.owner}>
@@ -53,7 +58,10 @@ function Reply({ item, botName }: { item: ItemOf<"reply">; botName: string }) {
   const idle = item.streaming && item.text === "" && item.thinking === "" && item.tools.length === 0;
   return (
     <View style={styles.reply}>
-      <Text style={[styles.name, { color: colors.foreground }]}>{botName.toUpperCase()}</Text>
+      <View style={styles.nameLine}>
+        <Text style={[styles.name, { color: colors.foreground }]}>{botName.toUpperCase()}</Text>
+        <Text style={[styles.small, { color: colors.mutedForeground }]}>{timeLabel(item.at)}</Text>
+      </View>
       {item.thinking === "" ? null : <Foldout label={item.streaming && item.text === "" ? "Thinking" : "Thought"} body={item.thinking} startOpen={item.streaming && item.text === ""} />}
       {item.tools.map((tool) => (
         <ToolLineView key={tool.callId} tool={tool} />
@@ -105,6 +113,7 @@ const styles = StyleSheet.create({
   reply: { gap: space[2] },
   tool: { gap: space[2] },
   row: { flexDirection: "row", gap: space[2] },
+  nameLine: { flexDirection: "row", alignItems: "baseline", gap: space[2] },
   name: { fontFamily: fontFamilies.display, fontSize: 13 },
   body: { fontFamily: fontFamilies.body, fontSize: 15, lineHeight: 23 },
   small: { fontFamily: fontFamilies.body, fontSize: 12 },

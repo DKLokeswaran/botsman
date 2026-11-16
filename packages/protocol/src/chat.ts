@@ -19,11 +19,13 @@ export const ToolCall = obj({
 export type ToolCall = { id: string; name: string; arguments: Record<string, unknown> };
 
 // One item in a bot's chat, as the apps show it.
+// `at` is when the message was written, in milliseconds, or null for entries that record no time.
 export const ChatMessage = union([
-  obj({ type: lit("user"), id: str(), text: str() }),
+  obj({ type: lit("user"), id: str(), at: nullable(int()), text: str() }),
   obj({
     type: lit("assistant"),
     id: str(),
+    at: nullable(int()),
     text: str(),
     thinking: str(),
     toolCalls: arr(ToolCall),
@@ -36,10 +38,11 @@ export const ChatMessage = union([
   obj({ type: lit("notice"), id: str(), kind: oneOf(["compaction", "pre_compaction_save", "reset"]), text: str() }),
 ]);
 export type ChatMessage =
-  | { type: "user"; id: string; text: string }
+  | { type: "user"; id: string; at: number | null; text: string }
   | {
       type: "assistant";
       id: string;
+      at: number | null;
       text: string;
       thinking: string;
       toolCalls: ToolCall[];

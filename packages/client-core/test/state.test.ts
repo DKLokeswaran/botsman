@@ -1,8 +1,8 @@
 import type { Approval, Bot, ChatMessage } from "@botsman/protocol";
 import { expect, test } from "vitest";
-import { addPending, chatItems, formatCost, formatCountdown, formatTokens, toolSummary, applyChatEvent, applyHistoryPage, applyServerEvent, defaultSendMode, emptyChat, emptyServerState, offeredSendModes, sortBots } from "../src/index.ts";
+import { addPending, chatItems, formatCost, formatCountdown, formatMessageTime, formatTokens, toolSummary, applyChatEvent, applyHistoryPage, applyServerEvent, defaultSendMode, emptyChat, emptyServerState, offeredSendModes, sortBots } from "../src/index.ts";
 
-const user = (id: string, text: string): ChatMessage => ({ type: "user", id, text });
+const user = (id: string, text: string): ChatMessage => ({ type: "user", id, at: null, text });
 const bot = (id: string, name: string, isMain = false) => ({ id, name, isMain }) as Bot;
 const approval = (id: string, status: Approval["status"], createdAt = 0) => ({ id, botId: "b1", status, createdAt }) as Approval;
 
@@ -61,7 +61,7 @@ test("deleting a bot removes it and its approvals", () => {
 
 test("a tool's result is drawn inside the reply that called it", () => {
   const call = { id: "c1", name: "bash", arguments: { command: "echo   hi" } };
-  const reply: ChatMessage = { type: "assistant", id: "2", text: "", thinking: "", toolCalls: [call], model: null, usage: null, stopReason: "toolUse", error: null };
+  const reply: ChatMessage = { type: "assistant", id: "2", at: null, text: "", thinking: "", toolCalls: [call], model: null, usage: null, stopReason: "toolUse", error: null };
   const result: ChatMessage = { type: "tool_result", id: "3", toolCallId: "c1", toolName: "bash", output: "hi", isError: false };
   const items = chatItems({ ...emptyChat, messages: [user("1", "run it"), reply, result] });
   expect(items.map((item) => item.kind)).toEqual(["user", "reply"]);
@@ -88,7 +88,7 @@ test("a tool summary is one short line", () => {
 
 test("a settled call that waits on the owner carries its approval, and is drawn once", () => {
   const call = { id: "c1", name: "read", arguments: { path: "/etc/hostname" } };
-  const reply: ChatMessage = { type: "assistant", id: "2", text: "", thinking: "", toolCalls: [call], model: null, usage: null, stopReason: "toolUse", error: null };
+  const reply: ChatMessage = { type: "assistant", id: "2", at: null, text: "", thinking: "", toolCalls: [call], model: null, usage: null, stopReason: "toolUse", error: null };
   const live = { ...emptyChat.live, running: true, tools: [{ callId: "c1", name: "read", status: "pending" as const, output: "", awaitingApproval: "a1" }] };
   const items = chatItems({ ...emptyChat, messages: [reply], live });
   expect(items).toHaveLength(1);
@@ -101,4 +101,11 @@ test("formats countdowns, costs, and token counts", () => {
   expect(formatCountdown(0, 5000)).toBe("0:00");
   expect([formatCost(0), formatCost(0.0042), formatCost(1.5)]).toEqual(["$0.00", "$0.0042", "$1.50"]);
   expect([formatTokens(950), formatTokens(12_340), formatTokens(2_500_000)]).toEqual(["950", "12.3k", "2.50M"]);
+});
+
+test("shows a message's time today, Yesterday for the day before, and the date before that", () => {
+  const now = new Date(2026, 10, 16, 15, 0).getTime();
+  expect(formatMessageTime(new Date(2026, 10, 16, 7, 4).getTime(), now)).toMatch(/7:04/);
+  expect(formatMessageTime(new Date(2026, 10, 15, 23, 59).getTime(), now)).toBe("Yesterday");
+  expect(formatMessageTime(new Date(2026, 9, 12, 9, 0).getTime(), now)).toMatch(/12/);
 });

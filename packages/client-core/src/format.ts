@@ -35,3 +35,19 @@ export function effortLabel(level: Bot["thinkingLevel"]): string {
   if (level === "xhigh") return "Extra high";
   return level.charAt(0).toUpperCase() + level.slice(1);
 }
+
+const DAY_MS = 24 * 3_600_000;
+
+// When a message was written, as a chat shows it: the time for today, "Yesterday", or the date before that.
+export function formatMessageTime(at: number, now: number): string {
+  const days = Math.floor(startOfDay(now) / DAY_MS) - Math.floor(startOfDay(at) / DAY_MS);
+  if (days <= 0) return new Date(at).toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" });
+  if (days === 1) return "Yesterday";
+  return new Date(at).toLocaleDateString(undefined, { day: "numeric", month: "short" });
+}
+
+// Midnight of a moment's day, in local time, shifted so whole days divide evenly.
+function startOfDay(time: number): number {
+  const date = new Date(time);
+  return Date.UTC(date.getFullYear(), date.getMonth(), date.getDate());
+}

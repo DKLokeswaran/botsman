@@ -23,9 +23,9 @@ export function toChatMessage(entry: ViewEntry): ChatMessage | undefined {
   const id = String(entry.id);
   switch (entry.kind) {
     case OWNER_MESSAGE_KIND:
-      return { type: "user", id: id, text: String((entry.data as { text?: string } | undefined)?.text ?? "") };
+      return { type: "user", id: id, at: timeOf(message), text: String((entry.data as { text?: string } | undefined)?.text ?? "") };
     case "pi.user":
-      return { type: "user", id: id, text: textOf(message) };
+      return { type: "user", id: id, at: timeOf(message), text: textOf(message) };
     case "pi.assistant":
       return message?.role === "assistant" ? assistantMessage(id, message) : undefined;
     case "pi.tool-result":
@@ -45,6 +45,7 @@ function assistantMessage(id: string, message: AssistantMessage): ChatMessage {
   return {
     type: "assistant",
     id,
+    at: timeOf(message),
     text: message.content.flatMap((part) => (part.type === "text" ? [part.text] : [])).join(""),
     thinking: message.content.flatMap((part) => (part.type === "thinking" ? [part.thinking] : [])).join(""),
     toolCalls: message.content.flatMap((part) => (part.type === "toolCall" ? [{ id: part.id, name: part.name, arguments: part.arguments }] : [])),
@@ -57,6 +58,12 @@ function assistantMessage(id: string, message: AssistantMessage): ChatMessage {
 
 function toolResultMessage(id: string, message: ToolResultMessage): ChatMessage {
   return { type: "tool_result", id, toolCallId: message.toolCallId, toolName: message.toolName, output: textOf(message), isError: message.isError };
+}
+
+// When Pi recorded the message, or null for an entry without one.
+function timeOf(message: Message | undefined): number | null {
+  const timestamp = (message as { timestamp?: unknown } | undefined)?.timestamp;
+  return typeof timestamp === "number" ? timestamp : null;
 }
 
 function textOf(message: Message | undefined): string {

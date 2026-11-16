@@ -1,4 +1,4 @@
-import { type ChatController, type ChatItem, formatUsage, type ToolLine } from "@botsman/client-core";
+import { type ChatController, type ChatItem, formatMessageTime, formatUsage, type ToolLine } from "@botsman/client-core";
 import { ApprovalCard } from "./approval-card.tsx";
 import { Markdown } from "./markdown.tsx";
 import { Button } from "./ui/button.tsx";
@@ -7,7 +7,7 @@ type ItemOf<Kind extends ChatItem["kind"]> = Extract<ChatItem, { kind: Kind }>;
 
 // Draws one item of a chat.
 export function ChatItemView({ item, chat, botName }: { item: ChatItem; chat: ChatController; botName: string }) {
-  if (item.kind === "user") return <OwnerMessage text={item.text} />;
+  if (item.kind === "user") return <OwnerMessage text={item.text} note={timeLabel(item.at)} />;
   if (item.kind === "reply") return <Reply item={item} botName={botName} />;
   if (item.kind === "queued") return <OwnerMessage text={item.text} note={item.mode === "steer" ? "Steering the reply" : "Queued"} muted />;
   if (item.kind === "pending") return <PendingMessage item={item} chat={chat} />;
@@ -15,7 +15,12 @@ export function ChatItemView({ item, chat, botName }: { item: ChatItem; chat: Ch
   return <p className="text-center text-xs text-muted-foreground">{item.text}</p>;
 }
 
-function OwnerMessage({ text, note, muted = false }: { text: string; note?: string; muted?: boolean }) {
+// A message's time, for the small line beside it. Entries without a time show none.
+function timeLabel(at: number | null): string | undefined {
+  return at === null ? undefined : formatMessageTime(at, Date.now());
+}
+
+function OwnerMessage({ text, note, muted = false }: { text: string; note?: string | undefined; muted?: boolean }) {
   return (
     <div className="flex flex-col items-end gap-1">
       <div className={`max-w-[85%] rounded-xl border border-border bg-card px-4 py-2.5 whitespace-pre-wrap ${muted ? "opacity-60" : ""}`}>{text}</div>
@@ -45,7 +50,10 @@ function PendingMessage({ item, chat }: { item: ItemOf<"pending">; chat: ChatCon
 function Reply({ item, botName }: { item: ItemOf<"reply">; botName: string }) {
   return (
     <article className="flex flex-col gap-2">
-      <div className="font-display text-sm font-bold uppercase">{botName}</div>
+      <div className="flex items-baseline gap-2">
+        <span className="font-display text-sm font-bold uppercase">{botName}</span>
+        <span className="text-xs text-muted-foreground">{timeLabel(item.at)}</span>
+      </div>
       {item.thinking === "" ? null : <Thinking text={item.thinking} open={item.streaming && item.text === ""} />}
       {item.tools.map((tool) => (
         <ToolLineView key={tool.callId} tool={tool} />
