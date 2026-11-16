@@ -1,4 +1,5 @@
 import {
+  type Alert,
   type AlertSettings,
   type AlertSettingsUpdate,
   type Approval,
@@ -34,6 +35,7 @@ import {
 } from "@botsman/protocol";
 import { ApiClient, type Fetch } from "./api-client.ts";
 import { ChatController } from "./chat-controller.ts";
+import { AlertsConnection } from "./alerts-connection.ts";
 import { applyServerEvent, applyServerSnapshot, emptyServerState, type ServerState, withLogin } from "./server-state.ts";
 import { Session, type TokenStore } from "./session.ts";
 import { Store } from "./store.ts";
@@ -55,6 +57,7 @@ export class BotsmanClient {
   readonly connection: StreamConnection;
   readonly server = new Store<ServerState>(emptyServerState);
   readonly #api: ApiClient;
+  readonly #createSocket: (url: string) => SocketLike;
   readonly #chats = new Map<string, ChatController>();
   readonly #newRequestId: () => string;
   #stopServerStream: (() => void) | undefined;
@@ -63,6 +66,7 @@ export class BotsmanClient {
     this.#api = new ApiClient({ baseUrl: options.baseUrl, fetch: options.fetch });
     this.session = new Session(options);
     this.#newRequestId = options.newRequestId ?? randomId;
+    this.#createSocket = options.createSocket;
     this.connection = new StreamConnection({
       url: `${this.#api.baseUrl.replace(/^http/, "ws")}/api/ws`,
       createSocket: options.createSocket,
@@ -196,6 +200,18 @@ export class BotsmanClient {
   // Spending over the last `days` days, by day and by bot, with days on this device's clock.
   usage(days: number): Promise<UsageReport> {
     return this.session.request("GET", `/api/usage?days=${days}&tzOffset=${new Date().getTimezoneOffset()}`);
+  }
+
+  // Follows the alerts stream while the app is open, for apps that notify from the page itself.
+  followAlerts(onAlert: (alert: Alert) => void): () => void {
+    const alerts = new AlertsConnection({
+      url: `${this.#api.baseUrl.replace(/^http/, "ws")}/api/alerts`,
+      createSocket: this.#createSocket,
+      token: () => this.session.socketToken(),
+      onAlert,
+    });
+    alerts.start();
+    return () => alerts.stop();
   }
 
   // Turns alert kinds on or off for every device. The server stream brings the result to every open app.

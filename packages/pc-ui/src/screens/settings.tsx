@@ -4,9 +4,13 @@ import type { DeviceSession } from "@botsman/protocol";
 import { ErrorText, LinkRow, Page, ToggleRow } from "../components/page.tsx";
 import { Button } from "../components/ui/button.tsx";
 import { UpdateNotice } from "../components/update-notice.tsx";
+import type { NotificationPermission } from "../platform.ts";
+
+// Whether this page may show notifications, and a way to ask. `ask` is missing where the page never notifies itself.
+export type NotificationChoice = { permission: NotificationPermission; ask: (() => Promise<void>) | undefined };
 
 // Alerts, signed-in devices, providers, the app's version, and the server this app uses.
-export function SettingsScreen({ app, client }: { app: AppController; client: BotsmanClient }) {
+export function SettingsScreen({ app, client, notifications }: { app: AppController; client: BotsmanClient; notifications: NotificationChoice }) {
   const { alertSettings } = useServerState();
   const save = useAction((kind: string, on: boolean) => client.updateAlertSettings({ [kind]: on }));
   return (
@@ -18,6 +22,7 @@ export function SettingsScreen({ app, client }: { app: AppController; client: Bo
         ? null
         : ALERT_CHOICES.map((choice) => <ToggleRow key={choice.kind} title={choice.label} detail={choice.detail} on={alertSettings[choice.kind]} onChange={(on) => void save.run(choice.kind, on)} />)}
       <ErrorText>{save.error}</ErrorText>
+      <BrowserNotifications choice={notifications} />
       <LinkRow href="#/providers" title="Model providers" detail="Keys and sign-ins for the models your bots use" />
       <Devices client={client} />
       <h2 className="font-display text-sm font-bold uppercase">This app</h2>
@@ -27,6 +32,26 @@ export function SettingsScreen({ app, client }: { app: AppController; client: Bo
         {app.canChangeServer ? <Button onClick={() => void app.changeServer()}>Change server</Button> : null}
       </div>
     </Page>
+  );
+}
+
+const PERMISSION_TEXT: Record<NotificationPermission, string> = {
+  granted: "On. Alerts show while this page is open in the background.",
+  denied: "Blocked in this browser's site settings.",
+  default: "Off. Alerts show only inside the page.",
+  unsupported: "This browser can't show notifications.",
+};
+
+function BrowserNotifications({ choice }: { choice: NotificationChoice }) {
+  if (choice.ask === undefined) return null;
+  return (
+    <div className="flex items-center justify-between gap-3 rounded-lg border border-border px-3 py-2.5">
+      <span>
+        <span className="block text-sm font-semibold">Browser notifications</span>
+        <span className="block text-xs text-muted-foreground">{PERMISSION_TEXT[choice.permission]}</span>
+      </span>
+      {choice.permission === "default" ? <Button onClick={() => void choice.ask?.()}>Turn on</Button> : null}
+    </div>
   );
 }
 

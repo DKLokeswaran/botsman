@@ -34,7 +34,8 @@ export async function startRig(): Promise<Rig> {
     tokenStore,
     createSocket: (url) => {
       const socket = new WebSocket(url, { headers: PROXY_HEADERS } as unknown as string[]) as unknown as SocketLike;
-      sockets.push(socket);
+      // Only the live updates socket is kept, so tests can drop it; the alerts socket comes and goes on its own.
+      if (url.endsWith("/api/ws")) sockets.push(socket);
       return socket;
     },
   });

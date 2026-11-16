@@ -17,3 +17,4 @@ export * from "./providers.ts";
 export * from "./slash.ts";
 export * from "./usage-view.ts";
 export * from "./settings-view.ts";
+export * from "./alerts-connection.ts";

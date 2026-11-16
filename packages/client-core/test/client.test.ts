@@ -1,5 +1,6 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { type ChatState, modelProblem, newNoteName, noteNameProblem, offeredSendModes, suggestedModel } from "../src/index.ts";
+import { alertText, type ChatState, modelProblem, newNoteName, noteNameProblem, offeredSendModes, suggestedModel } from "../src/index.ts";
+import type { Alert } from "@botsman/protocol";
 import { scriptSwitches } from "@botsman/server/src/testing/script-model.ts";
 import { PASSWORD, type Rig, startRig, until } from "./real-server.ts";
 
@@ -299,6 +300,25 @@ describe("chat", () => {
     await until(rig.client.server, (state) => state.approvals.length === 0);
     await until(chat.state, (state) => state.messages.some((message) => message.type === "tool_result" && message.toolName === "read") && !state.live.running);
     unwatch();
+  });
+});
+
+describe("alerts", () => {
+  it("hears an approval on the alerts stream, worded with the bot's name", async () => {
+    const bot = await rig.client.createBot({ name: "Herald", defaultModel: { provider: "script", modelId: "script-1" } });
+    const heard: Alert[] = [];
+    const stop = rig.client.followAlerts((alert) => heard.push(alert));
+    await new Promise((resolve) => setTimeout(resolve, 300));
+    await rig.client.session.request("POST", `/api/bots/${bot.id}/chat/messages`, { text: 'tool read {"path":"/etc/hostname"}', mode: "send" });
+    const waiting = await until(rig.client.server, (state) => state.approvals.some((approval) => approval.botId === bot.id));
+    const deadline = Date.now() + 5_000;
+    while (!heard.some((alert) => alert.botId === bot.id) && Date.now() < deadline) await new Promise((resolve) => setTimeout(resolve, 20));
+    stop();
+    const alert = heard.find((item) => item.botId === bot.id)!;
+    expect(alert.kind).toBe("approval");
+    expect(alertText(alert, rig.client.server.get().bots).body).toBe("Herald needs your approval");
+    await rig.client.answerApproval(waiting.approvals.find((approval) => approval.botId === bot.id)!.id, "deny");
+    await rig.client.deleteBot(bot.id);
   });
 });
 

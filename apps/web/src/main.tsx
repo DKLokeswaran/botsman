@@ -1,4 +1,4 @@
-import { App, type Platform } from "@botsman/pc-ui";
+import { App, browserNotifications, type Platform } from "@botsman/pc-ui";
 import "@botsman/pc-ui/styles.css";
 import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
@@ -10,6 +10,7 @@ const platform: Platform = {
   createSocket: (url) => new WebSocket(url),
   deviceName: "Web dashboard",
   fixedServer: window.location.origin,
+  notifications: browserNotifications,
 };
 
 createRoot(document.getElementById("root")!).render(
