@@ -1,3 +1,4 @@
+import { ALERTS_STREAM } from "../../src/services.ts";
 import { mkdirSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { chatStream } from "@botsman/protocol";
@@ -423,6 +424,20 @@ describe("alerts stream", () => {
     await new Promise((resolve) => setTimeout(resolve, 300));
     expect(replayed[0]).toMatchObject({ type: "alert", seq: alert.seq });
     again.close();
+    await server.client.stop(bot.id);
+  });
+
+  it("leaves a kind the owner turned off out of the stream", async () => {
+    const { alerts } = server.botsman.services;
+    await server.client.request("PATCH", "/api/settings/alerts", { approval: false });
+    const before = alerts.currentSeq(ALERTS_STREAM);
+    const bot = await server.client.createBot({ name: "Quiet", defaultModel: SCRIPT_MODEL_REF });
+    await server.client.send(bot.id, 'tool read {"path":"/etc/hostname"}');
+    const deadline = Date.now() + 10_000;
+    while ((await server.client.approvals()).approvals.every((approval) => approval.botId !== bot.id) && Date.now() < deadline) await new Promise((resolve) => setTimeout(resolve, 20));
+    expect((await server.client.approvals()).approvals.some((approval) => approval.botId === bot.id)).toBe(true);
+    expect(alerts.currentSeq(ALERTS_STREAM)).toBe(before);
+    await server.client.request("PATCH", "/api/settings/alerts", { approval: true });
     await server.client.stop(bot.id);
   });
 });

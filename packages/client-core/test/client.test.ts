@@ -72,6 +72,17 @@ describe("bot list activity", () => {
   });
 });
 
+describe("alert settings", () => {
+  it("starts with every kind on, and shares a change with every open app", async () => {
+    const ready = await until(rig.client.server, (state) => state.alertSettings !== undefined);
+    expect(Object.values(ready.alertSettings!).every(Boolean)).toBe(true);
+    const settings = await rig.client.updateAlertSettings({ failure: false });
+    expect(settings).toMatchObject({ failure: false, approval: true });
+    await until(rig.client.server, (state) => state.alertSettings?.failure === false);
+    await rig.client.updateAlertSettings({ failure: true });
+  });
+});
+
 describe("chat actions", () => {
   const scriptModel = { provider: "script", modelId: "script-1" };
 

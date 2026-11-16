@@ -21,6 +21,7 @@ import { ProviderCatalog } from "./providers/provider-catalog.ts";
 import { ProviderLogins } from "./providers/provider-logins.ts";
 import { SandboxManager } from "./sandbox/sandbox-manager.ts";
 import { openDatabase, readSetting, writeSetting, type Database } from "./store/database.ts";
+import { AlertSettingsStore } from "./store/alert-settings.ts";
 import { SecretBox } from "./store/secret-box.ts";
 
 export const ALERTS_STREAM = "alerts";
@@ -44,8 +45,11 @@ export async function createServices(config: Config, options: ServiceOptions = {
   const hub = new StreamHub<StreamEvent>();
   const alerts = new StreamHub<Alert>();
   const publish = (event: StreamEvent) => hub.publish(SERVER_STREAM, event);
-  const alert = (kind: Alert["kind"], botId: string, refId: string) =>
-    alerts.publish(ALERTS_STREAM, { id: randomUUID(), kind, botId, refId, createdAt: Date.now() });
+  const alertSettings = new AlertSettingsStore(db);
+  // Kinds the owner turned off never reach the alerts stream.
+  const alert = (kind: Alert["kind"], botId: string, refId: string) => {
+    if (alertSettings.wants(kind)) alerts.publish(ALERTS_STREAM, { id: randomUUID(), kind, botId, refId, createdAt: Date.now() });
+  };
 
   const registry = new BotRegistry(db);
   const memoryFiles = new MemoryFiles(paths.userDir, paths.botDir);
@@ -134,7 +138,7 @@ export async function createServices(config: Config, options: ServiceOptions = {
     db.close();
   }
 
-  return { config, paths, db, hub, alerts, auth, registry, bots, memoryFiles, notes, approvalStore, policy, sandbox, catalog, logins, engine, feed, activity, resumeBots, close };
+  return { config, paths, db, hub, alerts, auth, registry, bots, memoryFiles, notes, approvalStore, policy, sandbox, catalog, logins, engine, feed, activity, alertSettings, publish, resumeBots, close };
 }
 
 // A stable id for this server, which some sign-ins send as the device id.

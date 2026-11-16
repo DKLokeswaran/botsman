@@ -1,4 +1,6 @@
 import {
+  type AlertSettings,
+  type AlertSettingsUpdate,
   type Approval,
   type ApprovalAnswer,
   type Bot,
@@ -88,6 +90,11 @@ export class BotsmanClient {
 
   answerApproval(approvalId: string, decision: ApprovalAnswer["decision"]): Promise<Approval> {
     return this.session.request("POST", `/api/approvals/${approvalId}/answer`, { decision });
+  }
+
+  // Turns alert kinds on or off for every device. The server stream brings the result to every open app.
+  updateAlertSettings(change: AlertSettingsUpdate): Promise<AlertSettings> {
+    return this.session.request("PATCH", "/api/settings/alerts", change);
   }
 
   // The connection runs while the owner is signed in, and stops when they sign out.

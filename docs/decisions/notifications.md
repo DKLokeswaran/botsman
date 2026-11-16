@@ -50,6 +50,8 @@ The open page's WebSocket carries alerts, and the browser shows them as notifica
 
 The owner turns each alert type on or off in the apps. The server stores these settings, so one choice applies to every device. The server leaves a type that is off out of the alerts stream. This follows the rule that state lives on the server.
 
+Every type starts on. The settings live in `server.db`, are read and changed at `/api/settings/alerts`, and reach every open app through the `server` stream. An alert that was off when it happened is not sent later when the type is turned back on.
+
 ## Alert content
 
 The alerts stream carries the bot and the event. The app fetches message content from the server. When UnifiedPush arrives, a push will carry only an ID, so no chat text passes through a third-party server.

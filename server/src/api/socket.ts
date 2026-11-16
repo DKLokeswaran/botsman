@@ -102,6 +102,7 @@ class SocketSession {
       bots,
       approvals: services.approvalStore.list({ status: "pending", botIds }),
       activity: botIds.map((botId) => services.activity.get(botId)),
+      alertSettings: services.alertSettings.get(),
     };
   }
 
