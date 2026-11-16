@@ -12,6 +12,8 @@ import { MemoryScreen } from "./memory.tsx";
 import { NewBotScreen } from "./new-bot.tsx";
 import { NoteScreen, NotesScreen } from "./notes.tsx";
 import { ProvidersScreen } from "./providers.tsx";
+import { SettingsScreen } from "./settings.tsx";
+import { UsageScreen } from "./usage.tsx";
 
 // The main window: the bot list beside the open chat. Home is the main bot's chat.
 export function Shell({ app, client }: { app: AppController; client: BotsmanClient }) {
@@ -21,15 +23,17 @@ export function Shell({ app, client }: { app: AppController; client: BotsmanClie
   return (
     <div className="flex h-screen">
       <Sidebar app={app} client={client} openBotId={openBotId} />
-      <MainPane route={route} loading={status === "loading"} botId={openBotId} />
+      <MainPane app={app} client={client} route={route} loading={status === "loading"} botId={openBotId} />
     </div>
   );
 }
 
 // The page beside the bot list. Home is the main bot's chat.
-function MainPane({ route, loading, botId }: { route: Route; loading: boolean; botId: string | undefined }) {
+function MainPane({ app, client, route, loading, botId }: { app: AppController; client: BotsmanClient; route: Route; loading: boolean; botId: string | undefined }) {
   if (route.name === "new-bot") return <NewBotScreen />;
   if (route.name === "providers") return <ProvidersScreen />;
+  if (route.name === "usage") return <UsageScreen />;
+  if (route.name === "settings") return <SettingsScreen app={app} client={client} />;
   if (loading || botId === undefined) return <p className="p-6 text-muted-foreground">Loading…</p>;
   if (route.name === "bot") return <BotInfoScreen key={botId} botId={botId} />;
   if (route.name === "bot-settings") return <BotSettingsScreen key={botId} botId={botId} />;
@@ -122,18 +126,17 @@ function SidebarFooter({ app, client }: { app: AppController; client: BotsmanCli
   return (
     <footer className="flex flex-col gap-2 border-t border-border p-3">
       <UpdateNotice updates={app.updates} />
-      <a href="#/providers" className="rounded-lg px-2 py-1.5 text-sm font-semibold hover:bg-accent">
-        Model providers
-      </a>
+      <nav className="flex gap-1">
+        <a href="#/usage" className="flex-1 rounded-lg px-2 py-1.5 text-center text-sm font-semibold hover:bg-accent">
+          Usage
+        </a>
+        <a href="#/settings" className="flex-1 rounded-lg px-2 py-1.5 text-center text-sm font-semibold hover:bg-accent">
+          Settings
+        </a>
+      </nav>
       <p className="truncate text-xs text-muted-foreground" role="status">
         {CONNECTION_LABELS[status]} {status === "online" || status === "reconnecting" ? host : ""}
       </p>
-      <div className="flex gap-2">
-        <Button className="flex-1" onClick={() => void client.session.signOut()}>
-          Sign out
-        </Button>
-        {app.canChangeServer ? <Button onClick={() => void app.changeServer()}>Change server</Button> : null}
-      </div>
     </footer>
   );
 }

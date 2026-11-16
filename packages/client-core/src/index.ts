@@ -14,3 +14,6 @@ export * from "./updates.ts";
 export * from "./bot-settings.ts";
 export * from "./memory-notes.ts";
 export * from "./providers.ts";
+export * from "./slash.ts";
+export * from "./usage-view.ts";
+export * from "./settings-view.ts";

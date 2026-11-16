@@ -3,7 +3,7 @@ import { useSyncExternalStore } from "react";
 // The screen the address bar names, read from the part after `#`. Hash routes work the same in a browser tab
 // and in the Windows app's window.
 export type Route =
-  | { name: "home" | "new-bot" | "providers" }
+  | { name: "home" | "new-bot" | "providers" | "usage" | "settings" }
   | { name: "chat" | "bot" | "bot-settings" | "memory" | "notes"; botId: string }
   | { name: "note"; botId: string; note: string };
 
@@ -27,7 +27,7 @@ function parseRoute(hash: string): Route {
   const botRoute = BOT_ROUTES.find((route) => route === name);
   if (botRoute !== undefined && id) return { name: botRoute, botId: id };
   if (name === "note" && id && extra) return { name: "note", botId: id, note: extra };
-  if (name === "new-bot" || name === "providers") return { name };
+  if (name === "new-bot" || name === "providers" || name === "usage" || name === "settings") return { name };
   return { name: "home" };
 }
 

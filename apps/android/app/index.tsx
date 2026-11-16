@@ -1,5 +1,5 @@
 import { botRowText, formatCountdown } from "@botsman/client-core";
-import { useBotActivity, useBots, useBotsmanClient, useConnectionStatus, useNeedsYou, useNow, useServerState } from "@botsman/client-core/react";
+import { useBotActivity, useBots, useConnectionStatus, useNeedsYou, useNow, useServerState } from "@botsman/client-core/react";
 import type { Approval, Bot } from "@botsman/protocol";
 import { router } from "expo-router";
 import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
@@ -7,7 +7,6 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { useAppController } from "../src/app-context";
 import { fontFamilies, radius, space, useTheme } from "../src/theme";
 import { Avatar } from "../src/ui/avatar";
-import { Button } from "../src/ui/button";
 import { UpdateNotice } from "../src/ui/update-notice";
 
 const CONNECTION_LABELS = { offline: "Offline", connecting: "Connecting…", online: "Connected", reconnecting: "Reconnecting…" };
@@ -16,7 +15,6 @@ const CONNECTION_LABELS = { offline: "Offline", connecting: "Connecting…", onl
 export default function BotListScreen() {
   const { colors } = useTheme();
   const app = useAppController();
-  const client = useBotsmanClient();
   const { status } = useServerState();
   const bots = useBots();
   const needsYou = useNeedsYou();
@@ -24,7 +22,15 @@ export default function BotListScreen() {
   const waitingBots = new Set(needsYou.map((approval) => approval.botId));
   return (
     <SafeAreaView style={styles.screen}>
-      <Text style={[styles.wordmark, { color: colors.foreground }]}>BOTSMAN</Text>
+      <View style={styles.top}>
+        <Text style={[styles.wordmark, { color: colors.foreground }]}>BOTSMAN</Text>
+        <Pressable accessibilityRole="button" onPress={() => router.push("/usage")} hitSlop={8}>
+          <Text style={[styles.link, { color: colors.foreground }]}>Usage</Text>
+        </Pressable>
+        <Pressable accessibilityRole="button" onPress={() => router.push("/settings")} hitSlop={8}>
+          <Text style={[styles.link, { color: colors.foreground }]}>Settings</Text>
+        </Pressable>
+      </View>
       <ScrollView contentContainerStyle={styles.list}>
         {needsYou.length === 0 ? null : <SectionTitle>Needs you</SectionTitle>}
         {needsYou.map((approval) => (
@@ -42,15 +48,10 @@ export default function BotListScreen() {
       <View style={styles.update}>
         <UpdateNotice updates={app.updates} />
       </View>
-      <Pressable accessibilityRole="button" onPress={() => router.push("/providers")} style={styles.newBot}>
-        <Text style={[styles.needs, { color: colors.foreground }]}>Model providers</Text>
-      </Pressable>
       <View style={[styles.footer, { borderTopColor: colors.border }]}>
         <Text accessibilityRole="text" style={[styles.status, { color: colors.mutedForeground }]}>
           {CONNECTION_LABELS[connection]}
         </Text>
-        <Button label="Sign out" onPress={() => void client.session.signOut()} />
-        <Button label="Change server" onPress={() => void app.changeServer()} />
       </View>
     </SafeAreaView>
   );
@@ -117,7 +118,9 @@ function BotRow({ bot, needsYou }: { bot: Bot; needsYou: boolean }) {
 
 const styles = StyleSheet.create({
   screen: { flex: 1 },
-  wordmark: { fontFamily: fontFamilies.display, fontSize: 18, letterSpacing: 6, paddingHorizontal: space[4], paddingVertical: space[4] },
+  top: { flexDirection: "row", alignItems: "center", gap: space[4], paddingRight: space[4] },
+  link: { fontFamily: fontFamilies.bodySemiBold, fontSize: 14 },
+  wordmark: { flex: 1, fontFamily: fontFamilies.display, fontSize: 18, letterSpacing: 6, paddingHorizontal: space[4], paddingVertical: space[4] },
   list: { paddingHorizontal: space[2], paddingBottom: space[4] },
   section: { fontFamily: fontFamilies.bodySemiBold, fontSize: 14, paddingHorizontal: space[2], paddingTop: space[4], paddingBottom: space[2] },
   row: { flexDirection: "row", alignItems: "center", gap: space[3], paddingHorizontal: space[2], paddingVertical: space[3], borderRadius: radius.md },

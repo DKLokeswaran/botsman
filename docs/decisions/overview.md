@@ -147,6 +147,8 @@ Bot settings offers approval waits of 15 minutes, 1 hour, 8 hours, 1 day, and 7 
 
 Model providers list every provider with its status, and connect it with an API key or the server-run sign-in. A sign-in's steps arrive on the `server` stream. The app keeps the first reply to starting one and takes everything after from the stream, since the stream can be ahead of an HTTP reply. A sign-in link opens in the system browser. A chat whose model is missing, or whose provider isn't connected, shows why above the message box with a link to the providers. The model and reasoning picker opens from the chat header and changes either the open chat or the bot's default. A model without reasoning offers only Off.
 
+Slash commands cover compact, clear, memory, notes, usage, and help, and `/skills` follows with M4. A message that is one word starting with `/` shows the matching commands, and sending an exact command runs it instead of sending it to the bot. Usage shows the last 14 days by day and by bot, with deleted bots added together. Settings holds the alert switches for the kinds that can happen so far, approvals and failures, the signed-in devices with a way to sign another one out, model providers, the app's update, and the server. The PC footer and the phone's bot list link to Usage and Settings.
+
 The server serves the dashboard from its own origin, so the dashboard needs no CORS rules. The server builds the dashboard's files during install and has no build step of its own.
 
 ### Dashboard sign-in

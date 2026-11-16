@@ -6,6 +6,8 @@ import {
   type Bot,
   type BotCreate,
   type BotUpdate,
+  type DeviceSession,
+  type DeviceSessionList,
   type FreeSpace,
   type Health,
   type MemoryFile,
@@ -180,6 +182,15 @@ export class BotsmanClient {
   freeSpace(path: string): Promise<FreeSpace> {
     const query = path.trim() === "" ? "" : `?path=${encodeURIComponent(path.trim())}`;
     return this.session.request("GET", `/api/server/free-space${query}`);
+  }
+
+  async sessions(): Promise<DeviceSession[]> {
+    return (await this.session.request<DeviceSessionList>("GET", "/api/auth/sessions")).sessions;
+  }
+
+  // Signs another device out. It loses its access within a minute.
+  revokeSession(sessionId: string): Promise<Ok> {
+    return this.session.request("DELETE", `/api/auth/sessions/${sessionId}`);
   }
 
   // Spending over the last `days` days, by day and by bot, with days on this device's clock.

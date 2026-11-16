@@ -72,6 +72,18 @@ describe("bot list activity", () => {
   });
 });
 
+describe("signed-in devices", () => {
+  it("lists this device, and signs another one out", async () => {
+    const other = await rig.client.session.request<{ accessToken: string }>("POST", "/api/auth/login", { password: PASSWORD, deviceName: "Spare phone" });
+    expect(other.accessToken).toBeTruthy();
+    const sessions = await rig.client.sessions();
+    expect(sessions.some((session) => session.current)).toBe(true);
+    const spare = sessions.find((session) => session.deviceName === "Spare phone")!;
+    await rig.client.revokeSession(spare.id);
+    expect((await rig.client.sessions()).find((session) => session.id === spare.id)?.revokedAt).not.toBeNull();
+  });
+});
+
 describe("model providers", () => {
   it("lists providers with the connected one marked, and its models", async () => {
     const providers = await rig.client.providers();
