@@ -75,17 +75,19 @@ export class AlertsConnection {
   }
 }
 
+// How a notification words each alert kind, with {bot} for the bot's name. Background connections get the same text.
+export const ALERT_TEMPLATES: Record<Alert["kind"], string> = {
+  approval: "{bot} needs your approval",
+  question: "{bot} has a question",
+  routine_result: "{bot} has a new routine result",
+  failure: "{bot}'s reply failed",
+  channel_mention: "{bot} mentioned you in a channel",
+  routine_created: "{bot} created a routine",
+  skill_created: "{bot} created a skill",
+};
+
 // How a notification words an alert.
 export function alertText(alert: Alert, bots: readonly Pick<Bot, "id" | "name">[]): { title: string; body: string } {
   const name = bots.find((bot) => bot.id === alert.botId)?.name ?? "A bot";
-  const bodies: Record<Alert["kind"], string> = {
-    approval: `${name} needs your approval`,
-    question: `${name} has a question`,
-    routine_result: `${name} has a new routine result`,
-    failure: `${name}'s reply failed`,
-    channel_mention: `${name} mentioned you in a channel`,
-    routine_created: `${name} created a routine`,
-    skill_created: `${name} created a skill`,
-  };
-  return { title: "Botsman", body: bodies[alert.kind] };
+  return { title: "Botsman", body: ALERT_TEMPLATES[alert.kind].replace("{bot}", name) };
 }

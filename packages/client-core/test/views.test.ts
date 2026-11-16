@@ -1,6 +1,6 @@
 import type { Bot, DeviceSession, UsageReport } from "@botsman/protocol";
 import { describe, expect, it } from "vitest";
-import { exactCommand, liveSessions, slashMatches, usageBots, usageDays } from "../src/index.ts";
+import { backgroundLine, backgroundSteps, exactCommand, liveSessions, slashMatches, usageBots, usageDays } from "../src/index.ts";
 
 const zero = { inputTokens: 0, outputTokens: 0, cacheReadTokens: 0, cacheWriteTokens: 0, totalTokens: 0, cost: 0 };
 const cost = (value: number) => ({ ...zero, cost: value });
@@ -39,5 +39,24 @@ describe("signed-in devices", () => {
   it("lists this device first, then by last use, and leaves out revoked ones", () => {
     const list = liveSessions([session("old", 1), session("revoked", 9, { revokedAt: 5 }), session("this", 0, { current: true }), session("recent", 5)]);
     expect(list.map((item) => item.id)).toEqual(["this", "recent", "old"]);
+  });
+});
+
+describe("background alerts checklist", () => {
+  const status = { running: true, connected: true, notificationsAllowed: false, batteryUnrestricted: true, maker: "samsung" };
+
+  it("asks for what's missing, and links a strict maker's guide", () => {
+    expect(backgroundSteps(status).map((step) => [step.label, step.done, step.action])).toEqual([
+      ["Notifications", false, "notifications"],
+      ["Battery", true, undefined],
+      ["Phone maker", false, "guide"],
+    ]);
+    expect(backgroundSteps({ ...status, maker: "google" }).map((step) => step.label)).not.toContain("Phone maker");
+  });
+
+  it("says how the connection is doing", () => {
+    expect(backgroundLine(status, false)).toMatch(/^Off/);
+    expect(backgroundLine(status, true)).toMatch(/^Connected/);
+    expect(backgroundLine({ ...status, connected: false }, true)).toBe("Connecting…");
   });
 });

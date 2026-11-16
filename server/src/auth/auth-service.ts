@@ -85,6 +85,20 @@ export class AuthService {
     return id;
   }
 
+  // A token that only opens the alerts stream, for a background connection that can't renew access tokens. It works
+  // while its device session stays signed in, so signing the device out ends it too.
+  alertsToken(sessionId: string): string {
+    return `alerts.${sessionId}.${this.#sign(`alerts.${sessionId}`)}`;
+  }
+
+  // Checks an alerts token and returns its session id.
+  verifyAlertsToken(token: string): string {
+    const [kind, id, signature] = token.split(".");
+    const valid = kind === "alerts" && id !== undefined && signature !== undefined && sameText(signature, this.#sign(`alerts.${id}`)) && this.#liveSession(id) !== undefined;
+    if (!valid) throw new ApiError(401, "unauthorized", "Alerts token is not valid");
+    return id;
+  }
+
   // Whether a device session is still signed in, for connections that outlive their access token.
   sessionLive(id: string): boolean {
     return this.#liveSession(id) !== undefined;

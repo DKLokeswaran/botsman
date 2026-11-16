@@ -7,6 +7,7 @@ import { useAppController } from "../src/app-context";
 import { space, useTheme } from "../src/theme";
 import { Button } from "../src/ui/button";
 import { ErrorText, LinkRow, Note, Page, pageStyles, SectionTitle, ToggleRow } from "../src/ui/page";
+import { BackgroundSection } from "../src/ui/background-section";
 import { UpdateNotice } from "../src/ui/update-notice";
 
 // Alerts, signed-in devices, providers, the app's version, and the server this app uses.
@@ -24,6 +25,7 @@ export default function SettingsScreen() {
         ? null
         : ALERT_CHOICES.map((choice) => <ToggleRow key={choice.kind} title={choice.label} detail={choice.detail} on={alertSettings[choice.kind]} onChange={(on) => void save.run(choice.kind, on)} />)}
       <ErrorText>{save.error}</ErrorText>
+      {app.background === undefined ? null : <BackgroundSection background={app.background} />}
       <LinkRow title="Model providers" detail="Keys and sign-ins for the models your bots use" onPress={() => router.push("/providers")} />
       <Devices />
       <SectionTitle>This app</SectionTitle>

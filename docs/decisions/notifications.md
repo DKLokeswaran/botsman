@@ -22,6 +22,10 @@ FCM isn't used. A self-hosted server can't push to a published app without the a
 - Type `specialUse`. Android 15's ban on starting foreground services at boot doesn't list it, and its 6-hour limit applies to `dataSync` and `mediaProcessing`.
 - It restarts after a reboot, through a boot receiver.
 - After any reconnect, it catches up on missed alerts, so a killed service delays alerts rather than losing them.
+- It signs in with an alerts token, which opens only the alerts stream and works while the phone's device session stays signed in. Signing the phone out from another device ends it within a minute. The service never holds the refresh token, so it can't race the app's own renewals.
+- It is on by default and starts when the owner signs in. Settings has a Keep connected switch, the connection's state, and a checklist: notifications allowed, battery unrestricted, and a link to dontkillmyapp.com for makers known to stop background apps.
+- Its notifications use the wording and bot names the app hands it, so the text matches the other apps. It posts nothing while the app is in front, and a tap opens that bot's chat.
+- It keeps the server address, the alerts token, and its place in the stream in the app's private storage, so it can start again after a reboot without the app.
 - The ntfy author measured 0 to 1% battery over 17 hours for a similar connection, on one phone.
 
 ### Phone makers

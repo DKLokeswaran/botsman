@@ -4,6 +4,7 @@ import { BotsmanClient } from "./botsman-client.ts";
 import type { TokenStore } from "./session.ts";
 import { Store } from "./store.ts";
 import type { SocketLike } from "./stream-connection.ts";
+import { BackgroundAlerts, type BackgroundAlertsService } from "./background-alerts.ts";
 import { type AppUpdater, UpdateChecker } from "./updates.ts";
 
 // What each app supplies from its platform. The web dashboard has a fixed server, the one that served it,
@@ -16,6 +17,7 @@ export type AppEnvironment = {
   tokenStore?: TokenStore;
   savedServer?: { load(): Promise<string | undefined>; save(address: string): Promise<void>; clear(): Promise<void> };
   updater?: AppUpdater;
+  backgroundAlerts?: BackgroundAlertsService;
 };
 
 // Where the app is on its way to a working connection. Each step is one screen.
@@ -34,12 +36,15 @@ export class AppController {
   readonly state = new Store<AppState>({ step: "starting" });
   // Present on the apps that update themselves. The web dashboard has none.
   readonly updates: UpdateChecker | undefined;
+  // Present on the apps that keep alerts coming while closed.
+  readonly background: BackgroundAlerts | undefined;
   readonly #environment: AppEnvironment;
   #unfollow: (() => void) | undefined;
 
   constructor(environment: AppEnvironment) {
     this.#environment = environment;
     this.updates = environment.updater === undefined ? undefined : new UpdateChecker(environment.updater);
+    this.background = environment.backgroundAlerts === undefined ? undefined : new BackgroundAlerts(environment.backgroundAlerts);
   }
 
   get canChangeServer(): boolean {
@@ -89,8 +94,12 @@ export class AppController {
   #follow(client: BotsmanClient, signedOutStep: "set_up" | "sign_in"): void {
     const show = () => {
       const status = client.session.state.get().status;
-      if (status === "signed_in") return this.state.set({ step: "ready", client });
+      if (status === "signed_in") {
+        void this.background?.connect(client).catch(() => undefined);
+        return this.state.set({ step: "ready", client });
+      }
       const current = this.state.get();
+      if (current.step === "ready") void this.background?.disconnect().catch(() => undefined);
       const next = current.step === "ready" ? "sign_in" : signedOutStep;
       if (current.step !== next) this.state.set({ step: next, client });
     };

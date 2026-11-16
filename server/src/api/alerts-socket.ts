@@ -46,12 +46,16 @@ export function registerAlertsSocket(app: FastifyInstance, services: Services): 
   });
 }
 
+// An access token, or an alerts token from a background connection.
 function sessionOf(services: Services, token: string): string | undefined {
-  try {
-    return services.auth.verifyAccess(token);
-  } catch {
-    return undefined;
+  for (const verify of [(value: string) => services.auth.verifyAccess(value), (value: string) => services.auth.verifyAlertsToken(value)]) {
+    try {
+      return verify(token);
+    } catch {
+      // Try the next kind of token.
+    }
   }
+  return undefined;
 }
 
 function parse(text: string): AlertsClientMessage | undefined {

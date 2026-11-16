@@ -16,3 +16,8 @@ android {
     abortOnError false
   }
 }
+
+dependencies {
+  // The same OkHttp React Native ships, for the alerts WebSocket.
+  implementation 'com.squareup.okhttp3:okhttp:4.9.2'
+}

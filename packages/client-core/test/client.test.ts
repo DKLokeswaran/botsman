@@ -1,5 +1,5 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { alertText, type ChatState, modelProblem, newNoteName, noteNameProblem, offeredSendModes, suggestedModel } from "../src/index.ts";
+import { alertText, BackgroundAlerts, type BackgroundAlertsService, type ChatState, modelProblem, newNoteName, noteNameProblem, offeredSendModes, suggestedModel } from "../src/index.ts";
 import type { Alert } from "@botsman/protocol";
 import { scriptSwitches } from "@botsman/server/src/testing/script-model.ts";
 import { PASSWORD, type Rig, startRig, until } from "./real-server.ts";
@@ -319,6 +319,34 @@ describe("alerts", () => {
     expect(alertText(alert, rig.client.server.get().bots).body).toBe("Herald needs your approval");
     await rig.client.answerApproval(waiting.approvals.find((approval) => approval.botId === bot.id)!.id, "deny");
     await rig.client.deleteBot(bot.id);
+  });
+});
+
+describe("background alerts", () => {
+  it("starts with an alerts-only token, sends bot names, and stops when turned off or signed out", async () => {
+    const calls: string[] = [];
+    let enabled = true;
+    let token = "";
+    let names: Record<string, string> = {};
+    const service: BackgroundAlertsService = {
+      isEnabled: async () => enabled,
+      start: async (_server, value) => void ((token = value), calls.push("start")),
+      stop: async () => void calls.push("stop"),
+      setEnabled: async (value) => void (enabled = value),
+      setBotNames: async (value) => void (names = value),
+      status: async () => ({ running: false, connected: false, notificationsAllowed: null, batteryUnrestricted: null, maker: null }),
+    };
+    const background = new BackgroundAlerts(service);
+    await background.connect(rig.client);
+    expect(calls).toEqual(["start"]);
+    expect(token.startsWith("alerts.")).toBe(true);
+    expect(names[mainId]).toBe("Main");
+
+    await background.setKeepConnected(false);
+    expect(calls).toEqual(["start", "stop"]);
+    expect(enabled).toBe(false);
+    await background.disconnect();
+    expect(calls.at(-1)).toBe("stop");
   });
 });
 

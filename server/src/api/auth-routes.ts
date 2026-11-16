@@ -1,4 +1,4 @@
-import { IdParams, LoginRequest, RefreshRequest, SetupRequest, type DeviceSessionList, type Ok, type SessionInfo, type SetupStatus, type Tokens } from "@botsman/protocol";
+import { type AlertsToken, IdParams, LoginRequest, RefreshRequest, SetupRequest, type DeviceSessionList, type Ok, type SessionInfo, type SetupStatus, type Tokens } from "@botsman/protocol";
 import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
 import { REFRESH_COOKIE, clearedCookies, readCookie, sameOrigin, sessionCookies, sessionInfo } from "../auth/cookies.ts";
 import { RateLimiter } from "../auth/rate-limit.ts";
@@ -71,6 +71,9 @@ export function registerAuthRoutes(app: FastifyInstance, services: Services): vo
     reply.header("set-cookie", clearedCookies());
     return { ok: true };
   });
+
+  // Gives this device a token for its background alerts connection.
+  app.post("/api/auth/alerts-token", async (request): Promise<AlertsToken> => ({ token: auth.alertsToken(request.sessionId!) }));
 
   app.get("/api/auth/sessions", async (request): Promise<DeviceSessionList> => ({ sessions: auth.listSessions(request.sessionId) }));
 

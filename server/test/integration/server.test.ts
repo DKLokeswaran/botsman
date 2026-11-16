@@ -427,6 +427,26 @@ describe("alerts stream", () => {
     await server.client.stop(bot.id);
   });
 
+  it("opens with an alerts token, which stops working once its device is signed out", async () => {
+    const { auth } = server.botsman.services;
+    const tokens = auth.startSession("Phone");
+    const response = await server.client.raw("POST", "/api/auth/alerts-token", undefined, { authorization: `Bearer ${tokens.accessToken}` });
+    const { token } = (await response.json()) as { token: string };
+    expect(() => auth.verifyAccess(token)).toThrow();
+    const hello = async (value: string) => {
+      const socket = new WebSocket(`${server.baseUrl.replace("http", "ws")}/api/alerts`, { headers: { "x-forwarded-proto": "https" } } as unknown as string[]);
+      const first = new Promise<{ type: string }>((resolve) => (socket.onmessage = (event) => resolve(JSON.parse(String(event.data)))));
+      await new Promise((resolve) => (socket.onopen = resolve));
+      socket.send(JSON.stringify({ type: "hello", token: value, epoch: "unknown", seq: 0 }));
+      const message = await first;
+      socket.close();
+      return message.type;
+    };
+    expect(await hello(token)).toBe("reset");
+    auth.revoke(tokens.sessionId);
+    expect(await hello(token)).toBe("error");
+  });
+
   it("leaves a kind the owner turned off out of the stream", async () => {
     const { alerts } = server.botsman.services;
     await server.client.request("PATCH", "/api/settings/alerts", { approval: false });

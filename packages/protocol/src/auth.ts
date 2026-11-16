@@ -56,3 +56,7 @@ export type DeviceSession = Static<typeof DeviceSession>;
 
 export const DeviceSessionList = obj({ sessions: arr(DeviceSession) });
 export type DeviceSessionList = Static<typeof DeviceSessionList>;
+
+// A token that opens only the alerts stream, for the phone's background connection. It lasts while the device stays signed in.
+export const AlertsToken = obj({ token: str() });
+export type AlertsToken = Static<typeof AlertsToken>;
