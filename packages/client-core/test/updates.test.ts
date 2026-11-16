@@ -1,5 +1,5 @@
 import { expect, test } from "vitest";
-import { type AppUpdater, compareVersions, isOffered, UpdateChecker } from "../src/index.ts";
+import { type AppUpdater, compareVersions, isOffered, UpdateChecker, versionLine } from "../src/index.ts";
 
 const server = { oldest: 1, current: 2 };
 
@@ -44,4 +44,33 @@ test("a check that can't reach the release host changes nothing", async () => {
   const offline = new UpdateChecker({ installedVersion: async () => "0.2.0", latest: async () => Promise.reject(new Error("offline")) });
   await offline.check(server);
   expect(offline.state.get()).toEqual({ status: "none" });
+});
+
+test("checks again on request, finds a build published since, and says when it last checked", async () => {
+  let latest: { version: string; protocol: number } | undefined;
+  const updates = new UpdateChecker({ installedVersion: async () => "0.2.0", latest: async () => (latest === undefined ? undefined : { ...latest, install: async () => {} }) });
+  await updates.check(server);
+  expect(updates.state.get()).toEqual({ status: "none" });
+  expect(versionLine(updates.info.get(), updates.state.get())).toMatch(/^Botsman 0\.2\.0 · Up to date, checked at /);
+  latest = { version: "0.2.1", protocol: 2 };
+  await updates.checkNow();
+  expect(updates.state.get()).toEqual({ status: "available", version: "0.2.1" });
+  expect(versionLine(updates.info.get(), updates.state.get())).toBe("Botsman 0.2.0 · Version 0.2.1 is available");
+});
+
+test("a failed check says why and keeps any offer it had", async () => {
+  let fail = false;
+  const updates = new UpdateChecker({
+    installedVersion: async () => "0.2.0",
+    latest: async () => {
+      if (fail) throw new Error("offline");
+      return { version: "0.3.0", protocol: 2, install: async () => {} };
+    },
+  });
+  await updates.check(server);
+  fail = true;
+  await updates.checkNow();
+  expect(updates.state.get()).toEqual({ status: "available", version: "0.3.0" });
+  expect(updates.info.get().error).toBe("offline");
+  expect(versionLine(updates.info.get(), updates.state.get())).toBe("Botsman 0.2.0 · Couldn't check: offline");
 });

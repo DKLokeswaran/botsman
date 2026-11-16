@@ -8,7 +8,7 @@ import type { ServerState } from "../server-state.ts";
 import type { SessionState } from "../session.ts";
 import type { Store } from "../store.ts";
 import type { ConnectionStatus } from "../stream-connection.ts";
-import type { UpdateChecker, UpdateState } from "../updates.ts";
+import type { UpdateChecker, UpdateInfo, UpdateState } from "../updates.ts";
 import { useBotsmanClient } from "./client-context.tsx";
 
 // Re-renders a screen whenever a store's value changes.
@@ -68,6 +68,13 @@ const NO_UPDATE: UpdateState = { status: "none" };
 const neverChanges = () => () => {};
 
 // The state of the app's own update. An app that doesn't update itself always reports none.
+const NO_INFO: UpdateInfo = { installed: undefined, checking: false, checkedAt: undefined, error: undefined };
+
+// The installed version and how the last update check went.
+export function useUpdateInfo(updates: UpdateChecker | undefined): UpdateInfo {
+  return useSyncExternalStore(updates?.info.subscribe ?? neverChanges, updates?.info.get ?? (() => NO_INFO), () => NO_INFO);
+}
+
 export function useUpdateState(updates: UpdateChecker | undefined): UpdateState {
   return useSyncExternalStore(updates?.state.subscribe ?? neverChanges, updates?.state.get ?? (() => NO_UPDATE), () => NO_UPDATE);
 }

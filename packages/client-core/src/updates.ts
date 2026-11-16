@@ -37,25 +37,45 @@ export function isOffered(manifest: UpdateManifest, installedVersion: string, se
   return server === undefined || protocolFit(manifest.protocol, server) === "fits";
 }
 
-// Looks for a newer build of the app and installs it when the owner asks.
+// What settings shows about this app's version: the installed one, whether a check is running, when the last one
+// finished, and why the last one failed.
+export type UpdateInfo = { installed: string | undefined; checking: boolean; checkedAt: number | undefined; error: string | undefined };
+
+const RECHECK_EVERY_MS = 6 * 3_600_000;
+
+// Looks for a newer build of the app and installs it when the owner asks. It checks when the app connects, again
+// every six hours while it runs, and whenever the owner asks.
 export class UpdateChecker {
   readonly state = new Store<UpdateState>({ status: "none" });
+  readonly info = new Store<UpdateInfo>({ installed: undefined, checking: false, checkedAt: undefined, error: undefined });
   readonly #updater: AppUpdater;
   #offered: AvailableBuild | undefined;
+  #server: ProtocolRange | undefined;
+  #timer: ReturnType<typeof setInterval> | undefined;
 
   constructor(updater: AppUpdater) {
     this.#updater = updater;
+    void updater.installedVersion().then((installed) => this.info.update((info) => ({ ...info, installed })), () => undefined);
   }
 
-  // A check that fails, for example with no network, leaves things as they were.
+  // Checks against the connected server's protocol range, and keeps checking every six hours.
   async check(server: ProtocolRange | undefined): Promise<void> {
-    if (this.state.get().status === "installing") return;
+    this.#server = server;
+    this.#timer ??= setInterval(() => void this.checkNow(), RECHECK_EVERY_MS);
+    await this.checkNow();
+  }
+
+  // A check the owner asks for. One that fails, for example with no network, keeps any offer it had and says why.
+  async checkNow(): Promise<void> {
+    if (this.state.get().status === "installing" || this.info.get().checking) return;
+    this.info.update((info) => ({ ...info, checking: true, error: undefined }));
     try {
       const [build, installed] = await Promise.all([this.#updater.latest(), this.#updater.installedVersion()]);
-      this.#offered = build !== undefined && isOffered(build, installed, server) ? build : undefined;
+      this.#offered = build !== undefined && isOffered(build, installed, this.#server) ? build : undefined;
       this.state.set(this.#offered === undefined ? { status: "none" } : { status: "available", version: this.#offered.version });
-    } catch {
-      // The next check tries again.
+      this.info.set({ installed, checking: false, checkedAt: Date.now(), error: undefined });
+    } catch (error) {
+      this.info.update((info) => ({ ...info, checking: false, error: error instanceof Error ? error.message : "Couldn't check for updates" }));
     }
   }
 
@@ -69,4 +89,14 @@ export class UpdateChecker {
       this.state.set({ status: "failed", version: build.version, error: error instanceof Error ? error.message : "The update couldn't be installed" });
     }
   }
+}
+
+// The version line in settings, such as "Botsman 0.1.6 · Up to date".
+export function versionLine(info: UpdateInfo, state: UpdateState): string {
+  const name = info.installed === undefined ? "Botsman" : `Botsman ${info.installed}`;
+  if (info.checking) return `${name} · Checking for updates…`;
+  if (info.error !== undefined) return `${name} · Couldn't check: ${info.error}`;
+  if (state.status !== "none") return `${name} · Version ${state.version} is available`;
+  if (info.checkedAt === undefined) return name;
+  return `${name} · Up to date, checked at ${new Date(info.checkedAt).toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" })}`;
 }

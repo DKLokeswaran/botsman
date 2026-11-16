@@ -3,7 +3,7 @@ import { useAction, useServerState, useSessions } from "@botsman/client-core/rea
 import type { DeviceSession } from "@botsman/protocol";
 import { ErrorText, LinkRow, Page, ToggleRow } from "../components/page.tsx";
 import { Button } from "../components/ui/button.tsx";
-import { UpdateNotice } from "../components/update-notice.tsx";
+import { AppVersion } from "../components/app-version.tsx";
 import type { Autostart, NotificationPermission } from "../platform.ts";
 import { BackgroundSection } from "../components/background-section.tsx";
 
@@ -28,7 +28,7 @@ export function SettingsScreen({ app, client, notifications, autostart }: { app:
       <LinkRow href="#/providers" title="Model providers" detail="Keys and sign-ins for the models your bots use" />
       <Devices client={client} />
       <h2 className="font-display text-sm font-bold uppercase">This app</h2>
-      <UpdateNotice updates={app.updates} />
+      <AppVersion updates={app.updates} />
       <div className="flex gap-2">
         <Button onClick={() => void client.session.signOut()}>Sign out</Button>
         {app.canChangeServer ? <Button onClick={() => void app.changeServer()}>Change server</Button> : null}

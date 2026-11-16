@@ -8,7 +8,7 @@ import { space, useTheme } from "../src/theme";
 import { Button } from "../src/ui/button";
 import { ErrorText, LinkRow, Note, Page, pageStyles, SectionTitle, ToggleRow } from "../src/ui/page";
 import { BackgroundSection } from "../src/ui/background-section";
-import { UpdateNotice } from "../src/ui/update-notice";
+import { AppVersion } from "../src/ui/app-version";
 
 // Alerts, signed-in devices, providers, the app's version, and the server this app uses.
 export default function SettingsScreen() {
@@ -29,7 +29,7 @@ export default function SettingsScreen() {
       <LinkRow title="Model providers" detail="Keys and sign-ins for the models your bots use" onPress={() => router.push("/providers")} />
       <Devices />
       <SectionTitle>This app</SectionTitle>
-      <UpdateNotice updates={app.updates} />
+      <AppVersion updates={app.updates} />
       <View style={styles.row}>
         <Button label="Sign out" onPress={() => void client.session.signOut()} />
         <Button label="Change server" onPress={() => void app.changeServer()} />

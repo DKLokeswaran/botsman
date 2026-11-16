@@ -10,7 +10,7 @@ Each part has its own version and tag. [Versions and releases](../decisions/stac
 2. Commit, and get the commit onto `main`.
 3. Tag that commit `android-v<version>` or `windows-v<version>`, and push the tag.
 
-The app's workflow then checks that the tag and the config file agree, builds and signs the app, publishes a GitHub release with the build, and replaces the app's manifest in the `updates` release. Installed apps read that manifest and offer the new build.
+The app's workflow then checks that the tag and the config file agree, builds and signs the app, publishes a GitHub release with the build, and replaces the app's manifest in the `updates` release. Installed apps read that manifest and offer the new build. They check when they connect to the server, again every six hours while open, and whenever the owner presses Check for updates in Settings, which also shows the installed version and when it last checked.
 
 `node scripts/release.ts check android android-v0.2.3` runs the same check by hand.
 
