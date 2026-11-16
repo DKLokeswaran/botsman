@@ -88,6 +88,32 @@ describe("chat", () => {
     unwatch();
   });
 
+  it("offers earlier messages only when the chat has some", async () => {
+    const bot = await rig.client.createBot({ name: "Talker", defaultModel: { provider: "script", modelId: "script-1" } });
+    const chat = rig.client.chat(bot.id);
+    let unwatch = chat.watch();
+    expect((await until(chat.state, (state) => state.status === "ready")).hasEarlier).toBe(false);
+
+    for (let turn = 0; turn < 30; turn += 1) {
+      await chat.send(`turn ${turn}`);
+      await until(chat.state, replied(`echo: turn ${turn}`));
+    }
+    unwatch();
+    await until(rig.client.connection.status, (status) => status === "online");
+
+    // A fresh snapshot holds the newest fifty messages of sixty, and the rest load on request.
+    rig.sockets.at(-1)!.close();
+    unwatch = chat.watch();
+    const fresh = await until(chat.state, (state) => state.status === "ready" && state.messages.length === 50 && state.hasEarlier);
+    expect(fresh.messages).toHaveLength(50);
+    await chat.loadEarlier();
+    const full = chat.state.get();
+    expect(full.messages).toHaveLength(60);
+    expect(full.hasEarlier).toBe(false);
+    expect(full.messages[0]).toMatchObject({ type: "user", text: "turn 0" });
+    unwatch();
+  });
+
   it("follows the bot's default model while the chat has none of its own", async () => {
     const bot = await rig.client.createBot({ name: "Follower" });
     const chat = rig.client.chat(bot.id);

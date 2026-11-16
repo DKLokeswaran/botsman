@@ -60,14 +60,21 @@ export class ChatFeed {
     this.#publish(botId, { type: "settings", settings });
   }
 
-  snapshot(botId: string, settings: ChatSettings): ChatSnapshot {
+  // The oldest transcript entry the feed holds for a chat, so a caller can ask the engine what came before it.
+  firstEntryId(botId: string): number | undefined {
+    return this.#chats.get(botId)?.entries[0]?.id;
+  }
+
+  // `earlierInTranscript` says whether the transcript has messages from before the entries the feed holds.
+  snapshot(botId: string, settings: ChatSettings, earlierInTranscript = false): ChatSnapshot {
     const chat = this.#chats.get(botId);
     const entries = chat?.entries ?? [];
-    const messages = entries.flatMap((entry) => toChatMessage(entry) ?? []).slice(-SNAPSHOT_MESSAGES);
+    const all = entries.flatMap((entry) => toChatMessage(entry) ?? []);
+    const messages = all.slice(-SNAPSHOT_MESSAGES);
     return {
       botId,
       messages,
-      hasEarlier: entries.length > 0,
+      hasEarlier: all.length > messages.length || earlierInTranscript,
       live: toLiveState(chat?.docs ?? {}, this.#approvalsByCall(botId)),
       totals: toTotals(chat?.docs ?? {}),
       settings,

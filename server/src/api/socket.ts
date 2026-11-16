@@ -3,6 +3,7 @@ import { compile } from "@earendil-works/pi-schema";
 import type { FastifyInstance, FastifyRequest } from "fastify";
 import type { WebSocket } from "ws";
 import { socketToken } from "../auth/socket-token.ts";
+import { earlierInTranscript } from "./chat-snapshot.ts";
 import type { Sequenced } from "../events/stream-hub.ts";
 import type { Services } from "../services.ts";
 
@@ -89,7 +90,8 @@ class SocketSession {
     if (botId === undefined) return { snapshot: this.#serverSnapshot(), seq: services.hub.currentSeq(stream) };
     const bot = services.bots.get(botId);
     if (services.sandbox.status.ok) await services.engine.view(bot);
-    return { snapshot: services.feed.snapshot(bot.id, services.registry.chatSettings(bot)), seq: services.hub.currentSeq(stream) };
+    const earlier = services.sandbox.status.ok ? await earlierInTranscript(services, bot) : false;
+    return { snapshot: services.feed.snapshot(bot.id, services.registry.chatSettings(bot), earlier), seq: services.hub.currentSeq(stream) };
   }
 
   #serverSnapshot(): ServerSnapshot {

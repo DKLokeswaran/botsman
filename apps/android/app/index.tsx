@@ -1,7 +1,7 @@
 import { formatCountdown } from "@botsman/client-core";
 import { useBots, useBotsmanClient, useConnectionStatus, useNeedsYou, useNow, useServerState } from "@botsman/client-core/react";
 import type { Approval, Bot } from "@botsman/protocol";
-import { Link } from "expo-router";
+import { router } from "expo-router";
 import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useAppController } from "../src/app-context";
@@ -46,6 +46,10 @@ export default function BotListScreen() {
   );
 }
 
+function openChat(botId: string): void {
+  router.push({ pathname: "/chat/[botId]", params: { botId } });
+}
+
 function SectionTitle({ children }: { children: string }) {
   const { colors } = useTheme();
   return <Text style={[styles.section, { color: colors.primary }]}>{children}</Text>;
@@ -56,43 +60,39 @@ function NeedsYouRow({ approval, bot }: { approval: Approval; bot: Bot | undefin
   const now = useNow();
   const kind = approval.memoryEdit === null ? "Approval" : "Memory edit";
   return (
-    <Link href={{ pathname: "/chat/[botId]", params: { botId: approval.botId } }} asChild>
-      <Pressable style={({ pressed }) => [styles.row, pressed && { backgroundColor: colors.accent }]}>
-        <View style={[styles.dot, { backgroundColor: colors.primary }]} />
-        <View style={styles.rowText}>
-          <Text style={[styles.sub, { color: colors.mutedForeground }]}>
-            {bot?.name ?? "Bot"} · {kind}
-          </Text>
-          <Text numberOfLines={1} style={[styles.rowTitle, { color: colors.foreground }]}>
-            {approval.description}
-          </Text>
-        </View>
-        <Text style={[styles.mono, { color: colors.mutedForeground }]}>{formatCountdown(approval.expiresAt, now)}</Text>
-      </Pressable>
-    </Link>
+    <Pressable accessibilityRole="button" onPress={() => openChat(approval.botId)} android_ripple={{ color: colors.accent }} style={styles.row}>
+      <View style={[styles.dot, { backgroundColor: colors.primary }]} />
+      <View style={styles.rowText}>
+        <Text style={[styles.sub, { color: colors.mutedForeground }]}>
+          {bot?.name ?? "Bot"} · {kind}
+        </Text>
+        <Text numberOfLines={1} style={[styles.rowTitle, { color: colors.foreground }]}>
+          {approval.description}
+        </Text>
+      </View>
+      <Text style={[styles.mono, { color: colors.mutedForeground }]}>{formatCountdown(approval.expiresAt, now)}</Text>
+    </Pressable>
   );
 }
 
 function BotRow({ bot, needsYou }: { bot: Bot; needsYou: boolean }) {
   const { colors } = useTheme();
   return (
-    <Link href={{ pathname: "/chat/[botId]", params: { botId: bot.id } }} asChild>
-      <Pressable style={({ pressed }) => [styles.row, pressed && { backgroundColor: colors.accent }]}>
-        <Avatar bot={bot} size={44} />
-        <View style={styles.rowText}>
-          <View style={styles.nameLine}>
-            <Text numberOfLines={1} style={[styles.botName, { color: colors.foreground }]}>
-              {bot.name.toUpperCase()}
-            </Text>
-            {bot.isMain ? <Text style={[styles.sub, { color: colors.mutedForeground }]}>Main</Text> : null}
-          </View>
-          <Text numberOfLines={1} style={[styles.rowTitle, { color: colors.mutedForeground }]}>
-            {bot.description}
+    <Pressable accessibilityRole="button" onPress={() => openChat(bot.id)} android_ripple={{ color: colors.accent }} style={styles.row}>
+      <Avatar bot={bot} size={44} />
+      <View style={styles.rowText}>
+        <View style={styles.nameLine}>
+          <Text numberOfLines={1} style={[styles.botName, { color: colors.foreground }]}>
+            {bot.name.toUpperCase()}
           </Text>
+          {bot.isMain ? <Text style={[styles.sub, { color: colors.mutedForeground }]}>Main</Text> : null}
         </View>
-        {needsYou ? <Text style={[styles.needs, { color: colors.foreground }]}>Needs you</Text> : null}
-      </Pressable>
-    </Link>
+        <Text numberOfLines={1} style={[styles.rowTitle, { color: colors.mutedForeground }]}>
+          {bot.description}
+        </Text>
+      </View>
+      {needsYou ? <Text style={[styles.needs, { color: colors.foreground }]}>Needs you</Text> : null}
+    </Pressable>
   );
 }
 

@@ -52,6 +52,7 @@ export default function ChatScreen() {
           initialScrollAtEnd
           maintainScrollAtEnd
           maintainVisibleContentPosition
+          keyboardShouldPersistTaps="handled"
           style={styles.list}
           contentContainerStyle={styles.listContent}
           ListHeaderComponent={state.hasEarlier ? <Button label="Show earlier messages" variant="text" onPress={() => void chat.loadEarlier()} /> : null}

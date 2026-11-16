@@ -12,6 +12,7 @@ import {
 } from "@botsman/protocol";
 import type { FastifyInstance } from "fastify";
 import { ApiError, badRequest } from "../errors.ts";
+import { chatSnapshot } from "./chat-snapshot.ts";
 import { toChatMessage } from "../events/chat-view.ts";
 import type { Services } from "../services.ts";
 
@@ -22,7 +23,7 @@ export function registerChatRoutes(app: FastifyInstance, services: Services): vo
   app.get<{ Params: IdParams }>("/api/bots/:id/chat", opts, async (request): Promise<ChatSnapshot> => {
     const bot = runnableBot(services, request.params.id);
     await engine.view(bot);
-    return feed.snapshot(bot.id, registry.chatSettings(bot));
+    return chatSnapshot(services, bot);
   });
 
   app.get<{ Params: IdParams; Querystring: PageQuery }>("/api/bots/:id/chat/history", { schema: { params: IdParams, querystring: PageQuery } }, async (request): Promise<ChatHistoryPage> => {
