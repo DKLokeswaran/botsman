@@ -1,15 +1,17 @@
-import { type ChatController, exactCommand, runCommand, type SendMode, type SlashCommand, type SlashScreen, slashMatches } from "@botsman/client-core";
-import { useAction } from "@botsman/client-core/react";
+import { type ChatController, exactCommand, modelChipLabel, runCommand, type SendMode, type SlashCommand, type SlashScreen, slashMatches } from "@botsman/client-core";
+import { useAction, useModels } from "@botsman/client-core/react";
+import type { Bot, ChatSettings } from "@botsman/protocol";
 import { type KeyboardEvent, useLayoutEffect, useRef, useState } from "react";
 import { memoryHref, notesHref } from "../use-route.ts";
+import { ModelPicker } from "./model-picker.tsx";
 import { Button } from "./ui/button.tsx";
 
-const SEND_LABELS: Record<SendMode, string> = { send: "Send", queue: "Queue", steer: "Steer" };
-
-// Where the owner writes. Enter sends in the first offered mode, and Shift+Enter starts a new line.
-// While the bot is busy it offers Queue and Steer, and a Stop button. A message starting with / offers commands.
-export function Composer({ chat, botName, sendModes, busy }: { chat: ChatController; botName: string; sendModes: SendMode[]; busy: boolean }) {
+// Where the owner writes. Enter sends in the first offered mode, and Shift+Enter starts a new line. Below the text: a
+// commands button, the model chip that opens the model picker, and Send, or Queue, Steer, and Stop while the bot works.
+export function Composer({ chat, bot, settings, sendModes, busy }: { chat: ChatController; bot: Bot; settings: ChatSettings; sendModes: SendMode[]; busy: boolean }) {
   const [text, setText] = useState("");
+  const [picking, setPicking] = useState(false);
+  const { models } = useModels();
   const stop = useAction(() => chat.stop());
   const command = useAction(async (picked: SlashCommand) => {
     setText("");
@@ -33,8 +35,10 @@ export function Composer({ chat, botName, sendModes, busy }: { chat: ChatControl
     send(sendModes[0]!);
   };
 
+  const empty = text.trim() === "";
   return (
-    <div className="flex flex-col gap-2 rounded-xl border border-border bg-card p-3">
+    <div className="relative flex flex-col gap-2 rounded-xl border border-border bg-card p-3">
+      {picking ? <ModelPicker chat={{ controller: chat, settings }} bot={bot} onClose={() => setPicking(false)} className="absolute right-0 bottom-full z-10 mb-2 w-80" /> : null}
       {matches === undefined ? null : <SlashMenu matches={matches} onPick={(picked) => void command.run(picked)} />}
       {command.error === undefined ? null : <p className="text-sm text-destructive">{command.error}</p>}
       <textarea
@@ -43,21 +47,41 @@ export function Composer({ chat, botName, sendModes, busy }: { chat: ChatControl
         onKeyDown={onKeyDown}
         ref={grow}
         rows={1}
-        placeholder={`Message ${botName}`}
-        aria-label={`Message ${botName}`}
+        placeholder={busy ? "Queue a message" : `Message ${bot.name}`}
+        aria-label={`Message ${bot.name}`}
         className="max-h-[40vh] resize-none overflow-y-auto bg-transparent px-1 py-1 outline-none placeholder:text-muted-foreground"
       />
-      <div className="flex items-center justify-end gap-2">
+      <div className="flex items-center gap-2">
+        <button type="button" aria-label="Commands" onClick={() => setText(text === "" ? "/" : text)} className="flex size-8 items-center justify-center rounded-md font-mono text-sm text-muted-foreground hover:bg-accent hover:text-foreground">
+          /
+        </button>
+        <span className="flex-1" />
+        <button type="button" aria-expanded={picking} onClick={() => setPicking(!picking)} className="truncate rounded-md bg-muted px-2.5 py-1.5 text-xs font-semibold hover:bg-accent">
+          {modelChipLabel(settings, models)}
+        </button>
         {busy ? (
-          <Button variant="danger" disabled={stop.busy} onClick={() => void stop.run()}>
-            Stop
-          </Button>
-        ) : null}
-        {sendModes.map((mode, index) => (
-          <Button key={mode} variant={index === 0 ? "primary" : "ghost"} disabled={text.trim() === ""} onClick={() => send(mode)}>
-            {SEND_LABELS[mode]}
-          </Button>
-        ))}
+          <>
+            {sendModes.includes("queue") ? (
+              <Button variant="text" disabled={empty} onClick={() => send("queue")}>
+                Queue
+              </Button>
+            ) : null}
+            {sendModes.includes("steer") ? (
+              <Button disabled={empty} onClick={() => send("steer")}>
+                Steer
+              </Button>
+            ) : null}
+            <Button disabled={stop.busy} onClick={() => void stop.run()}>
+              <span aria-hidden className="size-2.5 rounded-[1px] bg-current" /> Stop
+            </Button>
+          </>
+        ) : (
+          <button type="button" aria-label="Send" disabled={empty} onClick={() => send("send")} className="flex size-9 items-center justify-center rounded-lg bg-primary text-primary-foreground hover:opacity-90 disabled:opacity-40">
+            <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+              <path d="M12 19V5M5 12l7-7 7 7" />
+            </svg>
+          </button>
+        )}
       </div>
     </div>
   );

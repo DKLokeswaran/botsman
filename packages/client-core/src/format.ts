@@ -36,6 +36,13 @@ export function chatSubtitle(settings: ChatSettings, totalCost: number, models: 
   return [model, effortLabel(shownEffort(info, settings.thinkingLevel)), ...context, `${formatCost(totalCost)} this chat`].join(" · ");
 }
 
+// The model chip on the message box: the chat's model by its catalog name, and the effort it really runs at.
+export function modelChipLabel(settings: ChatSettings, models: readonly ModelInfo[]): string {
+  if (settings.model === null) return "Choose a model";
+  const info = models.find((candidate) => sameModel(candidate, settings.model));
+  return `${info?.name ?? settings.model.modelId} · ${effortLabel(shownEffort(info, settings.thinkingLevel))}`;
+}
+
 // A context window as a short round number, such as 200k or 1M.
 function compactCount(tokens: number): string {
   if (tokens >= 1_000_000) return `${Number((tokens / 1_000_000).toFixed(1))}M`;

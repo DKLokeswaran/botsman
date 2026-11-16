@@ -10,6 +10,7 @@ import { radius, space, useTheme } from "../../src/theme";
 import { Avatar, MarkIcon } from "../../src/ui/avatar";
 import { Button } from "../../src/ui/button";
 import { Field } from "../../src/ui/field";
+import { ModelSheet } from "../../src/ui/model-sheet";
 import { ErrorText, LinkRow, Note, Page, pageStyles } from "../../src/ui/page";
 
 // A bot's name, description, and face, with links to its other screens, and delete.
@@ -82,8 +83,14 @@ function NameForm({ bot }: { bot: Bot }) {
 
 // The bot's default model and reasoning effort, which opens the picker for them.
 function ModelDefault({ bot }: { bot: Bot }) {
+  const [open, setOpen] = useState(false);
   const current = bot.defaultModel === null ? "None" : `${bot.defaultModel.modelId} · ${effortLabel(bot.thinkingLevel)}`;
-  return <LinkRow title="Model default" detail={`${current} · used by chats that haven't picked their own`} onPress={() => router.push({ pathname: "/model/[botId]", params: { botId: bot.id, scope: "bot" } })} />;
+  return (
+    <>
+      <LinkRow title="Model default" detail={`${current} · used by chats that haven't picked their own`} onPress={() => setOpen(true)} />
+      <ModelSheet visible={open} bot={bot} onClose={() => setOpen(false)} />
+    </>
+  );
 }
 
 function DeleteBot({ bot }: { bot: Bot }) {

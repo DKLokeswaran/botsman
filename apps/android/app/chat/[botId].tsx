@@ -40,11 +40,9 @@ export default function ChatScreen() {
                 {bot.name.toUpperCase()}
               </Text>
             </Pressable>
-            <Pressable accessibilityRole="button" accessibilityLabel="Model and reasoning" onPress={() => router.push({ pathname: "/model/[botId]", params: { botId: bot.id } })} hitSlop={{ top: 2, bottom: 8 }}>
-              <Text numberOfLines={1} style={[styles.sub, { color: colors.mutedForeground }]}>
-                {chatSubtitle(state.settings, state.totals.usage.cost, models, contextTokens(state.messages))} ▾
-              </Text>
-            </Pressable>
+            <Text numberOfLines={1} style={[styles.sub, { color: colors.mutedForeground }]}>
+              {chatSubtitle(state.settings, state.totals.usage.cost, models, contextTokens(state.messages))}
+            </Text>
           </View>
         </View>
         {reconnecting ? <Text style={[styles.banner, { color: colors.primary, backgroundColor: colors.card, borderBottomColor: colors.border }]}>Reconnecting…</Text> : null}
@@ -74,7 +72,7 @@ export default function ChatScreen() {
           </Pressable>
         )}
         <View style={styles.composer}>
-          <Composer chat={chat} botName={bot.name} sendModes={sendModes} busy={busy} />
+          <Composer chat={chat} bot={bot} settings={state.settings} sendModes={sendModes} busy={busy} />
         </View>
       </KeyboardAvoidingView>
     </SafeAreaView>
