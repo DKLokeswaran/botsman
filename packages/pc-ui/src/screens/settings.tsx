@@ -4,13 +4,14 @@ import type { DeviceSession } from "@botsman/protocol";
 import { ErrorText, LinkRow, Page, ToggleRow } from "../components/page.tsx";
 import { Button } from "../components/ui/button.tsx";
 import { UpdateNotice } from "../components/update-notice.tsx";
-import type { NotificationPermission } from "../platform.ts";
+import type { Autostart, NotificationPermission } from "../platform.ts";
+import { BackgroundSection } from "../components/background-section.tsx";
 
 // Whether this page may show notifications, and a way to ask. `ask` is missing where the page never notifies itself.
 export type NotificationChoice = { permission: NotificationPermission; ask: (() => Promise<void>) | undefined };
 
 // Alerts, signed-in devices, providers, the app's version, and the server this app uses.
-export function SettingsScreen({ app, client, notifications }: { app: AppController; client: BotsmanClient; notifications: NotificationChoice }) {
+export function SettingsScreen({ app, client, notifications, autostart }: { app: AppController; client: BotsmanClient; notifications: NotificationChoice; autostart: Autostart | undefined }) {
   const { alertSettings } = useServerState();
   const save = useAction((kind: string, on: boolean) => client.updateAlertSettings({ [kind]: on }));
   return (
@@ -23,6 +24,7 @@ export function SettingsScreen({ app, client, notifications }: { app: AppControl
         : ALERT_CHOICES.map((choice) => <ToggleRow key={choice.kind} title={choice.label} detail={choice.detail} on={alertSettings[choice.kind]} onChange={(on) => void save.run(choice.kind, on)} />)}
       <ErrorText>{save.error}</ErrorText>
       <BrowserNotifications choice={notifications} />
+      {app.background === undefined ? null : <BackgroundSection background={app.background} autostart={autostart} />}
       <LinkRow href="#/providers" title="Model providers" detail="Keys and sign-ins for the models your bots use" />
       <Devices client={client} />
       <h2 className="font-display text-sm font-bold uppercase">This app</h2>

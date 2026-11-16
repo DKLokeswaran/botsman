@@ -16,7 +16,7 @@ export function App({ platform }: { platform: Platform }) {
   if (state.step === "sign_in") return <SignInScreen app={app} client={state.client} />;
   return (
     <BotsmanProvider client={state.client}>
-      <Shell app={app} client={state.client} notifications={platform.notifications} />
+      <Shell app={app} client={state.client} notifications={platform.notifications} autostart={platform.autostart} />
     </BotsmanProvider>
   );
 }

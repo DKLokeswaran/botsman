@@ -4,7 +4,7 @@ import type { Approval, Bot } from "@botsman/protocol";
 import { Avatar } from "../components/avatar.tsx";
 import { Button } from "../components/ui/button.tsx";
 import { UpdateNotice } from "../components/update-notice.tsx";
-import type { PageNotifications } from "../platform.ts";
+import type { Autostart, PageNotifications } from "../platform.ts";
 import { useAlertNotifications } from "../use-alert-notifications.ts";
 import { chatHref, type Route, useRoute } from "../use-route.ts";
 import { useState } from "react";
@@ -19,7 +19,7 @@ import { type NotificationChoice, SettingsScreen } from "./settings.tsx";
 import { UsageScreen } from "./usage.tsx";
 
 // The main window: the bot list beside the open chat. Home is the main bot's chat.
-export function Shell({ app, client, notifications }: { app: AppController; client: BotsmanClient; notifications: PageNotifications | undefined }) {
+export function Shell({ app, client, notifications, autostart }: { app: AppController; client: BotsmanClient; notifications: PageNotifications | undefined; autostart: Autostart | undefined }) {
   const route = useRoute();
   const [permission, setPermission] = useState(() => notifications?.permission() ?? "unsupported");
   useAlertNotifications(client, notifications, permission === "granted");
@@ -29,17 +29,17 @@ export function Shell({ app, client, notifications }: { app: AppController; clie
   return (
     <div className="flex h-screen">
       <Sidebar app={app} client={client} openBotId={openBotId} />
-      <MainPane app={app} client={client} route={route} loading={status === "loading"} botId={openBotId} notifications={{ permission, ask: askForNotifications }} />
+      <MainPane app={app} client={client} route={route} loading={status === "loading"} botId={openBotId} notifications={{ permission, ask: askForNotifications }} autostart={autostart} />
     </div>
   );
 }
 
 // The page beside the bot list. Home is the main bot's chat.
-function MainPane({ app, client, route, loading, botId, notifications }: { app: AppController; client: BotsmanClient; route: Route; loading: boolean; botId: string | undefined; notifications: NotificationChoice }) {
+function MainPane({ app, client, route, loading, botId, notifications, autostart }: { app: AppController; client: BotsmanClient; route: Route; loading: boolean; botId: string | undefined; notifications: NotificationChoice; autostart: Autostart | undefined }) {
   if (route.name === "new-bot") return <NewBotScreen />;
   if (route.name === "providers") return <ProvidersScreen />;
   if (route.name === "usage") return <UsageScreen />;
-  if (route.name === "settings") return <SettingsScreen app={app} client={client} notifications={notifications} />;
+  if (route.name === "settings") return <SettingsScreen app={app} client={client} notifications={notifications} autostart={autostart} />;
   if (loading || botId === undefined) return <p className="p-6 text-muted-foreground">Loading…</p>;
   if (route.name === "bot") return <BotInfoScreen key={botId} botId={botId} />;
   if (route.name === "bot-settings") return <BotSettingsScreen key={botId} botId={botId} />;

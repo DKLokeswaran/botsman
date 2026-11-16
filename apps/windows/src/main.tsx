@@ -3,6 +3,7 @@ import "@botsman/pc-ui/styles.css";
 import { fetch as rustFetch } from "@tauri-apps/plugin-http";
 import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
+import { autostart, backgroundAlerts } from "./background-alerts.ts";
 import { savedServer } from "./saved-server.ts";
 import { tokenStore } from "./token-store.ts";
 import { updater } from "./updater.ts";
@@ -16,6 +17,8 @@ const platform: Platform = {
   tokenStore,
   savedServer,
   updater,
+  backgroundAlerts,
+  autostart,
 };
 
 createRoot(document.getElementById("root")!).render(

@@ -10,5 +10,8 @@ export type PageNotifications = {
   show(title: string, body: string, onClick: () => void): void;
 };
 
+// Starting the app with the computer. Only the Windows app has it.
+export type Autostart = { isEnabled(): Promise<boolean>; set(enabled: boolean): Promise<void> };
+
 // What a shell gives the screens. `apps/windows` fills it with Tauri calls and `apps/web` with browser features.
-export type Platform = AppEnvironment & { kind: "windows" | "web"; notifications?: PageNotifications };
+export type Platform = AppEnvironment & { kind: "windows" | "web"; notifications?: PageNotifications; autostart?: Autostart };

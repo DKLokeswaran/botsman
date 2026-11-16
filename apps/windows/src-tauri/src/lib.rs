@@ -1,19 +1,51 @@
+mod alerts;
+mod autostart;
 mod tokens;
 
 use tauri::menu::{Menu, MenuItem};
 use tauri::tray::TrayIconBuilder;
-use tauri::{AppHandle, Manager};
+use tauri::{AppHandle, Manager, WindowEvent};
+use tauri_plugin_autostart::MacosLauncher;
 
-const MAIN_WINDOW: &str = "main";
+pub const MAIN_WINDOW: &str = "main";
 
-// Starts the app: HTTP from Rust, the updater, token storage, and the tray icon.
+// Starts the app: HTTP from Rust, the updater, token storage, the tray icon, notifications, auto-start, and the
+// alerts connection.
 pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_http::init())
         .plugin(tauri_plugin_updater::Builder::new().build())
-        .invoke_handler(tauri::generate_handler![tokens::load_tokens, tokens::save_tokens, tokens::clear_tokens])
+        .plugin(tauri_plugin_notification::init())
+        .plugin(tauri_plugin_autostart::init(MacosLauncher::LaunchAgent, Some(vec![autostart::HIDDEN_ARG])))
+        .manage(alerts::Alerts::default())
+        .invoke_handler(tauri::generate_handler![
+            tokens::load_tokens,
+            tokens::save_tokens,
+            tokens::clear_tokens,
+            alerts::alerts_is_enabled,
+            alerts::alerts_set_enabled,
+            alerts::alerts_start,
+            alerts::alerts_stop,
+            alerts::alerts_set_bot_names,
+            alerts::alerts_status,
+            autostart::autostart_is_enabled,
+            autostart::autostart_set
+        ])
+        .on_window_event(|window, event| {
+            // Closing the window keeps Botsman in the tray, so alerts keep arriving. Quit is in the tray menu.
+            if let WindowEvent::CloseRequested { api, .. } = event {
+                api.prevent_close();
+                let _ = window.hide();
+            }
+        })
         .setup(|app| {
             build_tray(app.handle())?;
+            if std::env::args().any(|arg| arg == autostart::HIDDEN_ARG) {
+                if let Some(window) = app.get_webview_window(MAIN_WINDOW) {
+                    let _ = window.hide();
+                }
+            }
+            alerts::resume(app.handle());
             Ok(())
         })
         .run(tauri::generate_context!())
@@ -30,7 +62,12 @@ fn build_tray(app: &AppHandle) -> tauri::Result<()> {
     if let Some(icon) = app.default_window_icon() {
         tray = tray.icon(icon.clone());
     }
-    tray.on_menu_event(|app, event| match event.id.as_ref() {
+    tray.on_tray_icon_event(|tray, event| {
+        if let tauri::tray::TrayIconEvent::DoubleClick { .. } = event {
+            show_main_window(tray.app_handle());
+        }
+    })
+    .on_menu_event(|app, event| match event.id.as_ref() {
         "open" => show_main_window(app),
         "quit" => app.exit(0),
         _ => {}
