@@ -368,7 +368,6 @@ tr:last-child td { border-bottom: 0; }
   overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
   flex: 0 1 auto;
 }
-.slash-btn { min-width: 34px; flex: none; }
 .send, .stop {
   width: 34px; height: 34px; border-radius: var(--r-av);
   background: var(--fill); color: var(--fill-fg);

@@ -694,7 +694,6 @@
       '<div class="composer-box"><textarea id="composer" rows="1" placeholder="' + esc(placeholder) + '" autocomplete="off">' + esc(state.composer) + "</textarea>" +
       '<div class="composer-tools"><button type="button" class="icon-btn" data-act="pick-file" aria-label="Attach file">' + svg(IC.clip) + "</button>" +
       '<button type="button" class="icon-btn" data-act="paste-sample" aria-label="Paste image">' + svg(IC.image) + "</button>" +
-      '<button type="button" class="icon-btn slash-btn" data-act="slash-ins" aria-label="Commands">/</button>' +
       '<span class="spacer"></span>' +
       modelBtn + sendBtn + "</div></div>" +
       '<input id="file-in" type="file" multiple hidden accept="image/*,.pdf,.txt,.md,.json,.csv"></div></div>';
@@ -1742,19 +1741,6 @@
     },
     summarize: function (el) { summarize(el.dataset.id); },
     slash: function (el) { runCommand(el.dataset.id); },
-    "slash-ins": function () {
-      const el = document.getElementById("composer");
-      if (!el) return;
-      if ((state.composer || "").charAt(0) !== "/") {
-        state.composer = "/" + (state.composer || "");
-        el.value = state.composer;
-        try { el.setSelectionRange(1, 1); } catch (e) { /* ignore */ }
-      }
-      state.slashIndex = 0;
-      paintSlash();
-      syncSend();
-      try { el.focus({ preventScroll: true }); } catch (e2) { el.focus(); }
-    },
     menu: function () { state.menu = !state.menu; render({ preserve: true }); },
     think: function (el) {
       const m = findMessage(el.dataset.id);

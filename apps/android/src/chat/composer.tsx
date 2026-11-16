@@ -54,9 +54,6 @@ export function Composer({ chat, bot, settings, sendModes, busy }: { chat: ChatC
       <View style={styles.actions}>
         <ComingSoon label="Attach a file" paths={ICONS.attach} />
         <ComingSoon label="Add an image" paths={ICONS.image} />
-        <Pressable accessibilityRole="button" accessibilityLabel="Commands" onPress={() => setText(text === "" ? "/" : text)} hitSlop={6} style={styles.slash}>
-          <Text style={[styles.command, { color: colors.mutedForeground }]}>/</Text>
-        </Pressable>
         <View style={styles.grow} />
         <Pressable accessibilityRole="button" accessibilityLabel="Model and reasoning" onPress={() => setPicking(true)} style={[styles.chip, { backgroundColor: colors.muted }]}>
           <Text numberOfLines={1} style={[styles.chipText, { color: colors.foreground }]}>
@@ -88,7 +85,7 @@ export function Composer({ chat, bot, settings, sendModes, busy }: { chat: ChatC
 function ComingSoon({ label, paths }: { label: string; paths: readonly string[] }) {
   const { colors } = useTheme();
   return (
-    <View accessibilityRole="button" accessibilityLabel={`${label}, coming in a later update`} accessibilityState={{ disabled: true }} style={[styles.slash, styles.disabled]}>
+    <View accessibilityRole="button" accessibilityLabel={`${label}, coming in a later update`} accessibilityState={{ disabled: true }} style={[styles.toolButton, styles.disabled]}>
       <MarkIcon paths={paths} size={18} color={colors.mutedForeground} />
     </View>
   );
@@ -124,7 +121,7 @@ const styles = StyleSheet.create({
   input: { fontFamily: fontFamilies.body, fontSize: 16, paddingHorizontal: space[2], paddingVertical: space[1] },
   actions: { flexDirection: "row", alignItems: "center", gap: space[2] },
   grow: { flex: 1 },
-  slash: { width: 32, height: 32, alignItems: "center", justifyContent: "center" },
+  toolButton: { width: 32, height: 32, alignItems: "center", justifyContent: "center" },
   disabled: { opacity: 0.4 },
   busyRow: { flexDirection: "row", justifyContent: "flex-end", gap: space[2] },
   chip: { borderRadius: radius.md, paddingHorizontal: space[3], paddingVertical: space[2], flexShrink: 1, minWidth: 0 },

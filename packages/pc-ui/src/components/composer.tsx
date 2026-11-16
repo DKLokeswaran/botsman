@@ -57,9 +57,6 @@ export function Composer({ chat, bot, settings, sendModes, busy }: { chat: ChatC
       <div className="flex items-center gap-2">
         <ComingSoon label="Attach a file" paths={ICONS.attach} />
         <ComingSoon label="Add an image" paths={ICONS.image} />
-        <button type="button" aria-label="Commands" onClick={() => setText(text === "" ? "/" : text)} className="flex size-8 items-center justify-center rounded-md font-mono text-sm text-muted-foreground hover:bg-accent hover:text-foreground">
-          /
-        </button>
         <span className="flex-1" />
         <button type="button" aria-expanded={picking} onClick={() => setPicking(!picking)} className="truncate rounded-md bg-muted px-2.5 py-1.5 text-xs font-semibold hover:bg-accent">
           {modelChipLabel(settings, models)}
