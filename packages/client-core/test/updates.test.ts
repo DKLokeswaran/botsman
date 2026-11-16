@@ -1,5 +1,5 @@
 import { expect, test } from "vitest";
-import { type AppUpdater, compareVersions, isOffered, UpdateChecker, versionLine } from "../src/index.ts";
+import { type AppUpdater, asksToUpdate, compareVersions, isOffered, UpdateChecker, versionLine } from "../src/index.ts";
 
 const server = { oldest: 1, current: 2 };
 
@@ -73,4 +73,16 @@ test("a failed check says why and keeps any offer it had", async () => {
   expect(updates.state.get()).toEqual({ status: "available", version: "0.3.0" });
   expect(updates.info.get().error).toBe("offline");
   expect(versionLine(updates.info.get(), updates.state.get())).toBe("Botsman 0.2.0 · Couldn't check: offline");
+});
+
+test("the dialog asks once per version: Not now hides it until a newer build", async () => {
+  let latest = { version: "0.3.0", protocol: 2 };
+  const updates = new UpdateChecker({ installedVersion: async () => "0.2.0", latest: async () => ({ ...latest, install: async () => {} }) });
+  await updates.check(server);
+  expect(asksToUpdate(updates.state.get(), updates.declined.get())).toBe(true);
+  updates.notNow();
+  expect(asksToUpdate(updates.state.get(), updates.declined.get())).toBe(false);
+  latest = { version: "0.3.1", protocol: 2 };
+  await updates.checkNow();
+  expect(asksToUpdate(updates.state.get(), updates.declined.get())).toBe(true);
 });

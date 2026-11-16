@@ -48,6 +48,8 @@ const RECHECK_EVERY_MS = 6 * 3_600_000;
 export class UpdateChecker {
   readonly state = new Store<UpdateState>({ status: "none" });
   readonly info = new Store<UpdateInfo>({ installed: undefined, checking: false, checkedAt: undefined, error: undefined });
+  // The version the owner answered "Not now" to, so the dialog doesn't ask again until a newer one appears.
+  readonly declined = new Store<string | undefined>(undefined);
   readonly #updater: AppUpdater;
   #offered: AvailableBuild | undefined;
   #server: ProtocolRange | undefined;
@@ -79,6 +81,11 @@ export class UpdateChecker {
     }
   }
 
+  notNow(): void {
+    const state = this.state.get();
+    if (state.status === "available") this.declined.set(state.version);
+  }
+
   async install(): Promise<void> {
     const build = this.#offered;
     if (build === undefined) return;
@@ -99,4 +106,10 @@ export function versionLine(info: UpdateInfo, state: UpdateState): string {
   if (state.status !== "none") return `${name} · Version ${state.version} is available`;
   if (info.checkedAt === undefined) return name;
   return `${name} · Up to date, checked at ${new Date(info.checkedAt).toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" })}`;
+}
+
+// Whether the "Update available" dialog should ask: a build is ready, or installing or failed, and the owner hasn't
+// said "Not now" to this version.
+export function asksToUpdate(state: UpdateState, declined: string | undefined): boolean {
+  return state.status !== "none" && !(state.status === "available" && state.version === declined);
 }

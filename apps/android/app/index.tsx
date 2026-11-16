@@ -7,7 +7,6 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { useAppController } from "../src/app-context";
 import { fontFamilies, radius, space, useTheme } from "../src/theme";
 import { Avatar } from "../src/ui/avatar";
-import { UpdateNotice } from "../src/ui/update-notice";
 
 const CONNECTION_LABELS = { offline: "Offline", connecting: "Connecting…", online: "Connected", reconnecting: "Reconnecting…" };
 
@@ -45,9 +44,6 @@ export default function BotListScreen() {
           <Text style={[styles.needs, { color: colors.primary }]}>New bot</Text>
         </Pressable>
       </ScrollView>
-      <View style={styles.update}>
-        <UpdateNotice updates={app.updates} />
-      </View>
       <View style={[styles.footer, { borderTopColor: colors.border }]}>
         <Text accessibilityRole="text" style={[styles.status, { color: colors.mutedForeground }]}>
           {CONNECTION_LABELS[connection]}

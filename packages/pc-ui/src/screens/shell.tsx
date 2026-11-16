@@ -3,7 +3,7 @@ import { useBotActivity, useBots, useConnectionStatus, useNeedsYou, useNow, useS
 import type { Approval, Bot } from "@botsman/protocol";
 import { Avatar } from "../components/avatar.tsx";
 import { Button } from "../components/ui/button.tsx";
-import { UpdateNotice } from "../components/update-notice.tsx";
+import { UpdateDialog } from "../components/update-dialog.tsx";
 import type { Autostart, PageNotifications } from "../platform.ts";
 import { useAlertNotifications } from "../use-alert-notifications.ts";
 import { chatHref, type Route, useRoute } from "../use-route.ts";
@@ -28,6 +28,7 @@ export function Shell({ app, client, notifications, autostart, theme }: { app: A
   const openBotId = "botId" in route ? route.botId : route.name === "home" ? bots[0]?.id : undefined;
   return (
     <div className="flex h-screen">
+      <UpdateDialog updates={app.updates} />
       <Sidebar app={app} client={client} openBotId={openBotId} />
       <MainPane app={app} client={client} route={route} loading={status === "loading"} botId={openBotId} notifications={{ permission, ask: askForNotifications }} autostart={autostart} theme={theme} />
     </div>
@@ -131,7 +132,6 @@ function SidebarFooter({ app, client }: { app: AppController; client: BotsmanCli
   const host = new URL(client.baseUrl).host;
   return (
     <footer className="flex flex-col gap-2 border-t border-border p-3">
-      <UpdateNotice updates={app.updates} />
       <nav className="flex gap-1">
         <a href="#/usage" className="flex-1 rounded-lg px-2 py-1.5 text-center text-sm font-semibold hover:bg-accent">
           Usage

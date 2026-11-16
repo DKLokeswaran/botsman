@@ -77,6 +77,11 @@ export function useUpdateInfo(updates: UpdateChecker | undefined): UpdateInfo {
   return useSyncExternalStore(updates?.info.subscribe ?? neverChanges, updates?.info.get ?? (() => NO_INFO), () => NO_INFO);
 }
 
+// The version the owner said "Not now" to.
+export function useDeclinedUpdate(updates: UpdateChecker | undefined): string | undefined {
+  return useSyncExternalStore(updates?.declined.subscribe ?? neverChanges, updates?.declined.get ?? (() => undefined), () => undefined);
+}
+
 export function useUpdateState(updates: UpdateChecker | undefined): UpdateState {
   return useSyncExternalStore(updates?.state.subscribe ?? neverChanges, updates?.state.get ?? (() => NO_UPDATE), () => NO_UPDATE);
 }

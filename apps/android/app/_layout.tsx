@@ -9,6 +9,7 @@ import { environment } from "../src/environment";
 import { ChooseServerScreen } from "../src/screens/choose-server";
 import { SetUpScreen } from "../src/screens/set-up";
 import { SignInScreen } from "../src/screens/sign-in";
+import { UpdateDialog } from "../src/ui/update-dialog";
 import { UpdateNeededScreen } from "../src/screens/update-needed";
 import { fontFamilies, useTheme } from "../src/theme";
 import { ThemeModeProvider } from "../src/theme-mode-provider";
@@ -48,6 +49,7 @@ function CurrentStep() {
     <BotsmanProvider client={state.client}>
       <AppContext.Provider value={app}>
         <Stack screenOptions={{ headerShown: false, contentStyle: { backgroundColor: colors.background } }} />
+        <UpdateDialog updates={app.updates} />
       </AppContext.Provider>
     </BotsmanProvider>
   );
