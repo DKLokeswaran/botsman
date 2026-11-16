@@ -175,7 +175,7 @@ The dashboard's page carries a content security policy that allows only its own 
 ## Parity
 
 - Screens get everything through shared hooks and hold no logic.
-- One recorded set of events (a streaming reply, an approval, a reconnect) runs through both chat screens, for side-by-side comparison.
+- One recorded set of events runs through the chat state and `chatItems`, which is all either chat screen draws. It is a real stream from the server with the scripted model: a reply, a tool call that waits for approval, a failed reply and its retry, and a clear. It lives in `packages/client-core/test/fixtures/chat-recording.json`, and `RECORD_CHAT=1` records it again after a change to the stream. Reconnects are covered by the live client tests.
 - `DESIGN.md` and a shared token file define the look.
 - The PC screens are tested on the web dashboard in a browser, and the Android screens on a real phone. The owner checks the Windows-only parts by hand: the tray, auto-start, Credential Manager, and the installer.
 
