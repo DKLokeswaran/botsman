@@ -1,4 +1,4 @@
-import { effortChoices, effortLabel, modelLabel, type PickerScope, pickerValue, sameModel } from "@botsman/client-core";
+import { effortChoices, effortLabel, shownEffort, modelLabel, type PickerScope, pickerValue, sameModel } from "@botsman/client-core";
 import { useAction, useBot, useBotsmanClient, useChat, useModels } from "@botsman/client-core/react";
 import type { ModelRef, ThinkingLevel } from "@botsman/protocol";
 import { router, useLocalSearchParams } from "expo-router";
@@ -33,7 +33,7 @@ export default function ModelScreen() {
       <SectionTitle>Reasoning effort</SectionTitle>
       <View style={styles.chips}>
         {effortChoices(current).map((level) => (
-          <Choice key={level} label={effortLabel(level)} chosen={level === value.thinkingLevel} onPick={() => void save.run({ thinkingLevel: level })} />
+          <Choice key={level} label={effortLabel(level)} chosen={level === shownEffort(current, value.thinkingLevel)} onPick={() => void save.run({ thinkingLevel: level })} />
         ))}
       </View>
       <ErrorText>{save.error}</ErrorText>

@@ -1,4 +1,4 @@
-import { type ChatController, effortChoices, effortLabel, modelLabel, type PickerScope, pickerValue, sameModel } from "@botsman/client-core";
+import { type ChatController, effortChoices, shownEffort, effortLabel, modelLabel, type PickerScope, pickerValue, sameModel } from "@botsman/client-core";
 import { useAction, useBotsmanClient, useModels } from "@botsman/client-core/react";
 import type { Bot, ChatSettings, ModelRef, ThinkingLevel } from "@botsman/protocol";
 import { useState } from "react";
@@ -34,7 +34,7 @@ export function ModelPicker({ chat, settings, bot, onClose }: { chat: ChatContro
       <h4 className="font-semibold">Reasoning effort</h4>
       <div className="flex flex-wrap gap-1">
         {effortChoices(current).map((level) => (
-          <button key={level} type="button" aria-pressed={level === value.thinkingLevel} onClick={() => void save.run({ thinkingLevel: level })} className={`rounded-md border px-2 py-1 text-xs ${level === value.thinkingLevel ? "border-primary text-primary" : "border-border hover:bg-accent"}`}>
+          <button key={level} type="button" aria-pressed={level === shownEffort(current, value.thinkingLevel)} onClick={() => void save.run({ thinkingLevel: level })} className={`rounded-md border px-2 py-1 text-xs ${level === shownEffort(current, value.thinkingLevel) ? "border-primary text-primary" : "border-border hover:bg-accent"}`}>
             {effortLabel(level)}
           </button>
         ))}

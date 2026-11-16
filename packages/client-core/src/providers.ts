@@ -56,3 +56,8 @@ export function pickerValue(scope: PickerScope, chat: ChatSettings, bot: Pick<Bo
   if (scope === "bot") return { model: bot.defaultModel, thinkingLevel: bot.thinkingLevel, note: `This changes ${bot.name} everywhere a chat hasn't picked its own.` };
   return { model: chat.model, thinkingLevel: chat.thinkingLevel, note: "This changes only the open chat." };
 }
+
+// The effort the picker marks: the chosen one, or Off when the model can't use it.
+export function shownEffort(model: ModelInfo | undefined, level: ThinkingLevel): ThinkingLevel {
+  return effortChoices(model).includes(level) ? level : "off";
+}

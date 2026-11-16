@@ -23,6 +23,7 @@ export default function ChatScreen() {
 
   if (bot === undefined) return <Text style={[styles.missing, { color: colors.mutedForeground }]}>This bot no longer exists.</Text>;
   const busy = state.live.running || state.live.compacting;
+  const openInfo = () => router.push({ pathname: "/bot/[botId]", params: { botId: bot.id } });
   return (
     <SafeAreaView style={styles.screen}>
       <KeyboardAvoidingView behavior="padding" style={styles.screen}>
@@ -30,19 +31,21 @@ export default function ChatScreen() {
           <Pressable accessibilityRole="button" accessibilityLabel="Back to bots" onPress={() => router.back()} hitSlop={12}>
             <Text style={[styles.back, { color: colors.foreground }]}>‹</Text>
           </Pressable>
-          <Pressable accessibilityRole="button" accessibilityLabel={`${bot.name} info`} onPress={() => router.push({ pathname: "/bot/[botId]", params: { botId: bot.id } })} style={styles.headerLink}>
+          <Pressable accessibilityRole="button" accessibilityLabel={`${bot.name} info`} onPress={openInfo} hitSlop={4}>
             <Avatar bot={bot} size={36} />
-            <View style={styles.headerText}>
+          </Pressable>
+          <View style={styles.headerText}>
+            <Pressable accessibilityRole="button" accessibilityLabel={`${bot.name} info`} onPress={openInfo} hitSlop={{ top: 8, bottom: 2 }}>
               <Text numberOfLines={1} style={[styles.name, { color: colors.foreground }]}>
                 {bot.name.toUpperCase()}
               </Text>
-              <Pressable accessibilityRole="button" accessibilityLabel="Model and reasoning" onPress={() => router.push({ pathname: "/model/[botId]", params: { botId: bot.id } })} hitSlop={8}>
-                <Text numberOfLines={1} style={[styles.sub, { color: colors.mutedForeground }]}>
-                  {chatSubtitle(state.settings, state.totals.usage.cost)} ▾
-                </Text>
-              </Pressable>
-            </View>
-          </Pressable>
+            </Pressable>
+            <Pressable accessibilityRole="button" accessibilityLabel="Model and reasoning" onPress={() => router.push({ pathname: "/model/[botId]", params: { botId: bot.id } })} hitSlop={{ top: 2, bottom: 8 }}>
+              <Text numberOfLines={1} style={[styles.sub, { color: colors.mutedForeground }]}>
+                {chatSubtitle(state.settings, state.totals.usage.cost)} ▾
+              </Text>
+            </Pressable>
+          </View>
         </View>
         {reconnecting ? <Text style={[styles.banner, { color: colors.primary, backgroundColor: colors.card, borderBottomColor: colors.border }]}>Reconnecting…</Text> : null}
         <LegendList
@@ -82,7 +85,6 @@ const styles = StyleSheet.create({
   screen: { flex: 1 },
   header: { flexDirection: "row", alignItems: "center", gap: space[3], paddingHorizontal: space[3], paddingVertical: space[2], borderBottomWidth: 1 },
   problem: { marginHorizontal: space[3], marginBottom: space[2], borderWidth: 1, borderRadius: 4, padding: space[3], gap: space[1] },
-  headerLink: { flex: 1, flexDirection: "row", alignItems: "center", gap: space[3], minWidth: 0 },
   headerText: { flex: 1, minWidth: 0 },
   back: { fontSize: 30, lineHeight: 32, paddingHorizontal: space[1] },
   name: { fontFamily: fontFamilies.display, fontSize: 15 },
