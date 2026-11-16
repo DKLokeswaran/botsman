@@ -2,7 +2,7 @@
   "expo": {
     "name": "Botsman",
     "slug": "botsman",
-    "version": "0.1.9",
+    "version": "0.1.10",
     "scheme": "botsman",
     "orientation": "portrait",
     "userInterfaceStyle": "automatic",
@@ -12,7 +12,7 @@
     ],
     "android": {
       "package": "dev.botsman.app",
-      "versionCode": 109,
+      "versionCode": 110,
       "edgeToEdgeEnabled": true,
       "adaptiveIcon": {
         "foregroundImage": "./assets/icon.png",
