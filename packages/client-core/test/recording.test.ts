@@ -23,7 +23,7 @@ function replay(messages: readonly StreamMessage[]): ChatState[] {
 // One line per item, with what a screen would show.
 function lines(items: ChatItem[]): string[] {
   return items.map((item) => {
-    if (item.kind === "reply") return `reply: ${item.text.trim()}${item.tools.map((tool) => ` [${tool.name} ${tool.status}${tool.awaitingApproval ? " waiting" : ""}]`).join("")}${item.error === null ? "" : ` (error: ${item.error})`}`;
+    if (item.kind === "reply") return `reply: ${item.text.trim()}${item.tools.map((tool) => ` [${tool.name} ${tool.status}${tool.approvalId === undefined ? "" : " awaiting approval"}]`).join("")}${item.error === null ? "" : ` (error: ${item.error})`}`;
     return `${item.kind}: ${"text" in item ? item.text : ""}`;
   });
 }
@@ -47,7 +47,7 @@ describe("the recorded chat", () => {
   });
 
   it("shows the tool call waiting for approval while it waits", () => {
-    const waiting = states.map((state) => lines(chatItems(state))).find((items) => items.some((line) => line.includes("waiting")));
+    const waiting = states.map((state) => lines(chatItems(state))).find((items) => items.some((line) => line.includes("awaiting approval")));
     expect(waiting).toBeDefined();
   });
 
