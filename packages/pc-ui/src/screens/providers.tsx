@@ -8,17 +8,26 @@ import { Field } from "../components/ui/field.tsx";
 
 // Every model provider with its status, and the ways to connect, replace, or remove one. Saved keys are never shown.
 export function ProvidersScreen() {
-  const { providers, error } = useProviders();
-  const [open, setOpen] = useState<string>();
   return (
     <Page title="Model providers" back="#/">
       <p className="text-sm text-muted-foreground">Keys and sign-ins are stored on the server, sealed, and can't be viewed again.</p>
+      <ProviderList />
+    </Page>
+  );
+}
+
+// Every provider, each opening to its Connect form. Also used in first-run setup.
+export function ProviderList() {
+  const { providers, error } = useProviders();
+  const [open, setOpen] = useState<string>();
+  return (
+    <>
       <ErrorText>{error}</ErrorText>
       {providers === undefined ? <p className="text-sm text-muted-foreground">Loading…</p> : null}
       {providers?.map((provider) => (
         <ProviderRow key={provider.id} provider={provider} open={open === provider.id} onOpen={() => setOpen(open === provider.id ? undefined : provider.id)} />
       ))}
-    </Page>
+    </>
   );
 }
 

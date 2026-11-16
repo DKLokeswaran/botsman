@@ -1,6 +1,7 @@
 import { BotsmanProvider, useApp } from "@botsman/client-core/react";
 import type { Platform } from "./platform.ts";
 import { useThemeMode } from "./use-theme-mode.ts";
+import { AddProviderScreen } from "./screens/add-provider.tsx";
 import { ChooseServerScreen } from "./screens/choose-server.tsx";
 import { SetUpScreen } from "./screens/set-up.tsx";
 import { Shell } from "./screens/shell.tsx";
@@ -16,6 +17,12 @@ export function App({ platform }: { platform: Platform }) {
   if (state.step === "update_app" || state.step === "update_server") return <UpdateNeededScreen app={app} side={state.step} address={state.client.baseUrl} />;
   if (state.step === "set_up") return <SetUpScreen client={state.client} />;
   if (state.step === "sign_in") return <SignInScreen app={app} client={state.client} />;
+  if (state.step === "add_provider")
+    return (
+      <BotsmanProvider client={state.client}>
+        <AddProviderScreen app={app} />
+      </BotsmanProvider>
+    );
   return (
     <BotsmanProvider client={state.client}>
       <Shell app={app} client={state.client} notifications={platform.notifications} autostart={platform.autostart} theme={theme} />

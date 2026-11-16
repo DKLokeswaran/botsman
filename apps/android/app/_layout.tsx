@@ -6,6 +6,7 @@ import { KeyboardProvider } from "react-native-keyboard-controller";
 import { SafeAreaProvider } from "react-native-safe-area-context";
 import { AppContext } from "../src/app-context";
 import { environment } from "../src/environment";
+import { AddProviderScreen } from "../src/screens/add-provider";
 import { ChooseServerScreen } from "../src/screens/choose-server";
 import { SetUpScreen } from "../src/screens/set-up";
 import { SignInScreen } from "../src/screens/sign-in";
@@ -45,6 +46,12 @@ function CurrentStep() {
   if (state.step === "update_app" || state.step === "update_server") return <UpdateNeededScreen app={app} side={state.step} address={state.client.baseUrl} />;
   if (state.step === "set_up") return <SetUpScreen client={state.client} />;
   if (state.step === "sign_in") return <SignInScreen app={app} client={state.client} />;
+  if (state.step === "add_provider")
+    return (
+      <BotsmanProvider client={state.client}>
+        <AddProviderScreen app={app} />
+      </BotsmanProvider>
+    );
   return (
     <BotsmanProvider client={state.client}>
       <AppContext.Provider value={app}>

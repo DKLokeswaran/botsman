@@ -37,7 +37,7 @@ it("asks for a server on first launch, and explains an address that doesn't answ
   expect(app.state.get()).toMatchObject({ step: "choose_server", address: "http://127.0.0.1:1", error: "Can't reach the server" });
 });
 
-it("runs first-run setup on a new server, then shows the main screens", async () => {
+it("runs first-run setup on a new server, asks for a model provider, gives the main bot a model, then shows the main screens", async () => {
   const app = new AppController(environment());
   await app.connect(server.baseUrl);
   const state = app.state.get();
@@ -45,7 +45,13 @@ it("runs first-run setup on a new server, then shows the main screens", async ()
   expect(saved.address).toBe(server.baseUrl);
 
   await state.client.session.setUp(PASSWORD, { name: "Main" });
+  expect(app.state.get().step).toBe("add_provider");
+  await state.client.saveApiKey("script", "test-key");
+  await until(state.client.server, (server) => server.status === "ready");
+  await app.finishSetup();
   expect(app.state.get().step).toBe("ready");
+  const main = (await state.client.session.request<{ bots: { isMain: boolean; defaultModel: unknown }[] }>("GET", "/api/bots")).bots.find((bot) => bot.isMain);
+  expect(main?.defaultModel).toEqual({ provider: "script", modelId: "script-1" });
   state.client.connection.stop();
 });
 

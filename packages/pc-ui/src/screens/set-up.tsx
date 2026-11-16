@@ -16,14 +16,14 @@ export function SetUpScreen({ client }: { client: BotsmanClient }) {
   return (
     <EntryCard
       title="Set up your server"
-      lede="This first sign-in sets the owner password and creates your main bot. The main bot can change your other bots, and it cannot be deleted."
+      lede="Step 1 of 2. This first sign-in sets the owner password and creates your main bot. The main bot can change your other bots, and it cannot be deleted."
       error={setUp.error}
       onSubmit={() => void setUp.run()}
     >
       <Field label="Owner password" type="password" value={password} onChange={(event) => setPassword(event.target.value)} autoComplete="new-password" hint={`At least ${SHORTEST_PASSWORD} characters.`} autoFocus />
       <Field label="Main bot's name" value={mainBot} onChange={(event) => setMainBot(event.target.value)} placeholder="Junior" />
       <Button type="submit" variant="primary" disabled={setUp.busy || !complete}>
-        Finish
+        Continue
       </Button>
     </EntryCard>
   );

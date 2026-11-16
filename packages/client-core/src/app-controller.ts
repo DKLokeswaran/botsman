@@ -4,6 +4,7 @@ import { BotsmanClient } from "./botsman-client.ts";
 import type { TokenStore } from "./session.ts";
 import { Store } from "./store.ts";
 import type { SocketLike } from "./stream-connection.ts";
+import { suggestedModel } from "./bot-settings.ts";
 import { BackgroundAlerts, type BackgroundAlertsService } from "./background-alerts.ts";
 import type { LocalCache } from "./local-cache.ts";
 import { type AppUpdater, UpdateChecker } from "./updates.ts";
@@ -30,6 +31,8 @@ export type AppState =
   | { step: "update_server"; client: BotsmanClient }
   | { step: "set_up"; client: BotsmanClient }
   | { step: "sign_in"; client: BotsmanClient }
+  // First run only, right after setup: connect a model provider before the main screens.
+  | { step: "add_provider"; client: BotsmanClient }
   | { step: "ready"; client: BotsmanClient };
 
 // Takes the app from launch to a signed-in connection: the server address, the protocol check, first-run setup
@@ -98,7 +101,9 @@ export class AppController {
       const status = client.session.state.get().status;
       if (status === "signed_in") {
         void this.background?.connect(client).catch(() => undefined);
-        return this.state.set({ step: "ready", client });
+        // Signing in straight from first-run setup leads to adding a model provider.
+        const firstRun = this.state.get().step === "set_up";
+        return this.state.set({ step: firstRun ? "add_provider" : "ready", client });
       }
       const current = this.state.get();
       if (current.step === "ready") void this.background?.disconnect().catch(() => undefined);
@@ -107,6 +112,20 @@ export class AppController {
     };
     this.#unfollow = client.session.state.subscribe(show);
     show();
+  }
+
+  // Ends first-run setup. When a provider is now connected and the main bot has no model yet, the main bot gets the
+  // first connected model as its default.
+  async finishSetup(): Promise<void> {
+    const current = this.state.get();
+    if (current.step !== "add_provider") return;
+    const { client } = current;
+    const main = client.server.get().bots.find((bot) => bot.isMain);
+    const models = await client.models().catch(() => []);
+    if (main !== undefined && main.defaultModel === null && models.length > 0) {
+      await client.updateBot(main.id, { defaultModel: suggestedModel(models, null) }).catch(() => undefined);
+    }
+    this.state.set({ step: "ready", client });
   }
 
   #clientFor(address: string): BotsmanClient {
