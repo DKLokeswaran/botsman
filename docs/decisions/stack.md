@@ -16,9 +16,12 @@
 | Message schema | `pi-schema` | Already installed through Pi, no dependencies, no `eval`, and outputs plain JSON Schema. Fastify validates with it directly. Zod 4 appears only in the `claude-agent` module, because the Agent SDK's tool helper requires it. |
 | Storage | One Pi SQLite file per bot, and `server.db` through `node:sqlite` with plain SQL | Per-bot backup. A few tables need no ORM. |
 | Search | SQLite FTS5 | Built in, and tested with `node:sqlite` |
-| Windows app | Tauri 2, React 19, Vite, Tailwind 4, shadcn | Tray, small installer, and WebView2 |
+| Windows app | Tauri 2.12.5, React 19.3.0, Vite 8.3.8, Tailwind 4.3.5, shadcn | Tray, small installer, and WebView2 |
+| Windows token storage | The `keyring` crate 4.2.0 | Writes to Windows Credential Manager from Rust |
+| Markdown on Windows and web | `react-markdown` 10.1.0 with `remark-gfm` 4.0.1 | Renders to React elements with no raw HTML, and covers tables |
+| Fonts | Orbitron, Inter, and Fragment Mono shipped inside each app, from `@fontsource` on Windows and web and `@expo-google-fonts` on Android | The apps draw the same offline, and ask no outside host for fonts |
 | Web dashboard | The same React screens in a browser, served by the server | No screens to build twice |
-| Android app | Expo 58, React Native 0.88. Native libraries at the versions `expo install` picks. | Native chat feel, and shares TypeScript with everything else |
+| Android app | Expo 58.0.25, React Native 0.88.1. Native libraries at the versions `expo install` picks. | Native chat feel, and shares TypeScript with everything else |
 | Keyboard | `react-native-keyboard-controller` | Tracks the keyboard natively |
 | Chat list | Legend List's chat component, with FlashList as fallback | See [risks](../risks.md) for its open keyboard bug |
 | Markdown | `react-native-enriched-markdown` | Native text, streaming, code highlighting, and tables |
@@ -122,7 +125,10 @@ Server checks imported the Pi packages and the Agent SDK under Node 24, then ran
 
 - **Markdown library.** `react-native-enriched-markdown` needs its install script allowed, through `allowBuilds`. The script downloads the code highlighting and math files, and its source says a build without them still succeeds with those features missing. The package is about 256 MB once they are in. Other dependencies' install scripts stay blocked.
 - **Legend List.** Import it from `@legendapp/list/react-native`, because the package root doesn't resolve.
-- **Android builds.** A clean release build took about 21 minutes on 4 CPUs for one CPU architecture, and made a 44 MB APK. Allow more than 7 GB of memory.
+- **Android builds.** A clean release build took about 21 minutes on 4 CPUs for one CPU architecture, and made a 44 MB APK. Allow more than 7 GB of memory. On GitHub Actions the same build takes about 13 minutes. The workflow builds for `arm64-v8a` only, and signs by passing the keystore to Gradle as `android.injected.signing` properties, so the generated Android project needs no signing config of its own.
+- **Ignore rules.** `apps/android/.gitignore` ignores `/android/`, the generated project, with the leading slash. Without the slash the rule also hides `modules/*/android`, where the Kotlin modules live.
+- **Babel preset.** `babel-preset-expo` is a direct dependency of the Android app. Gradle runs the bundler from inside the generated project, where pnpm does not expose Expo's own copy.
+- **Light theme accents.** The light scheme's green, cyan, mint, and blue come from the mockups. Its magenta, `#a01f66`, is our own, because neither the mockups nor `DESIGN.md` give one.
 - **Windows builds.** Install pnpm through npm, because [Windows Defender can block its standalone executable](https://pnpm.io/installation). Build on Windows. Tauri documents building from Linux as [a last resort](https://v2.tauri.app/distribute/windows-installer/), and Debian 12's NSIS 3.08 is too old to make the installer.
 - **Tauri.** Stay on Node 24, because [the CLI crashes on Node 26](https://github.com/tauri-apps/tauri/issues/16366). [Tauri CLI 2.12 can break Linux bundling](https://github.com/tauri-apps/tauri/issues/16250) when `tray-icon` is enabled only for Windows.
 - **Not yet run.** No APK has been built with pnpm 12, the sample APKs built with pnpm 10 and Bun have not been opened on a device, and nothing has been installed, built, or launched on Windows itself. M2 starts with the APK build and a run on a phone. The Windows installer builds in GitHub Actions, and the owner launches it on Windows without holding up other work.

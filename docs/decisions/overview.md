@@ -108,7 +108,18 @@ Rust and Kotlin message types for the alerts stream are generated from the same 
 
 ## Apps
 
-The `client-core` package holds login, reconnect, catch-up, state, approvals, sending, and retries, in plain TypeScript with no DOM dependency. React hooks wrap it, so a screen on either app gets the same data and actions. The `pc-ui` package holds the Windows and web screens, and Android builds its own on the same hooks.
+The `client-core` package holds login, reconnect, catch-up, state, approvals, sending, and retries, in plain TypeScript with no DOM dependency. React hooks wrap it, so a screen on either app gets the same data and actions.
+
+Its main parts:
+
+| Part | Job |
+| --- | --- |
+| `AppController` | Takes an app from launch to a signed-in connection: the server address, the protocol check, first-run setup or sign-in, and back to sign-in when the session ends. Each step is one screen. |
+| `Session` | Signs in, renews tokens before they run out, and repeats a request once after a renewal. Parallel requests share one renewal, because a refresh token works once. |
+| `StreamConnection` | The live socket. It reconnects with a growing delay, pings to notice a silent drop, and asks each stream for what it missed. |
+| `ChatController` | One bot's chat. A sent message shows at once as pending, and a failed one stays with Retry and Discard. A retry reuses the request id, so the server can't run it twice. |
+| `chatItems` | Turns a chat's state into the list both apps draw: replies with their tool calls and results inside them, then what is live, queued, and pending. |
+| `offeredSendModes` | The send rule: Send while idle, Queue or Steer while busy. | The `pc-ui` package holds the Windows and web screens, and Android builds its own on the same hooks.
 
 Android's screens are separate, because the best Android chat needs native views. Between Android and the other two apps, roughly 40% of client code is shared, by estimate: nearly all logic and none of the screens.
 
@@ -129,6 +140,25 @@ The alerts connection runs when the UI does not, so it can't live in `client-cor
 `client-core` takes `fetch` and token storage as inputs, and each shell supplies its own. `pc-ui` reaches the tray, notifications, and updates through one small platform interface. `apps/windows` implements it with Tauri calls. `apps/web` implements it with browser features, and marks the rest as absent so the screen hides them.
 
 The server serves the dashboard from its own origin, so the dashboard needs no CORS rules. The server builds the dashboard's files during install and has no build step of its own.
+
+### Dashboard sign-in
+
+The dashboard asks for its session in cookies by sending `cookie: true` at setup and sign-in. The server then sets two cookies and answers with only the session's id and expiry times, so no page script ever holds a token.
+
+| Cookie | Sent to | Holds |
+| --- | --- | --- |
+| `botsman_access` | `/api` | The access token |
+| `botsman_refresh` | `/api/auth` | The refresh token |
+
+Both are `HttpOnly`, `Secure`, and `SameSite=Strict`. A browser attaches cookies to requests that another site starts, so the server also checks the `Origin` header against its own address:
+
+- before starting or renewing a cookie session
+- on every cookie-authenticated request that is not a `GET` or `HEAD`
+- before a WebSocket may sign in with the cookie, which the dashboard asks for by sending an empty token in `hello`
+
+The apps keep sending a bearer token, and none of these checks apply to them.
+
+The dashboard's page carries a content security policy that allows only its own files and connections to its own server. Files under `assets/` have a content hash in their names and are cached for a year. The page itself is never cached.
 
 ## Parity
 
