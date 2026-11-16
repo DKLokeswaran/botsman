@@ -22,6 +22,7 @@ The server core (milestone M1) is in `server/`, with its message schema in `pack
 | [docs/research/client-versioning-and-updates.md](docs/research/client-versioning-and-updates.md) | How other projects version and update their clients |
 | [docs/risks.md](docs/risks.md) | Known risks and how we handle them |
 | [docs/operations/server.md](docs/operations/server.md) | Installing and running the server, backups, and restore |
+| [docs/operations/releases.md](docs/operations/releases.md) | Releasing the apps and the server |
 | [server/](server) | The Botsman server |
 | [packages/protocol/](packages/protocol) | Every HTTP body and WebSocket message |
 | [deploy/](deploy) | Install script, systemd unit, and AppArmor profile |

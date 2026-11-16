@@ -4,6 +4,7 @@ import { BotsmanClient } from "./botsman-client.ts";
 import type { TokenStore } from "./session.ts";
 import { Store } from "./store.ts";
 import type { SocketLike } from "./stream-connection.ts";
+import { type AppUpdater, UpdateChecker } from "./updates.ts";
 
 // What each app supplies from its platform. The web dashboard has a fixed server, the one that served it,
 // and no token store, because its session lives in cookies.
@@ -14,6 +15,7 @@ export type AppEnvironment = {
   fixedServer?: string;
   tokenStore?: TokenStore;
   savedServer?: { load(): Promise<string | undefined>; save(address: string): Promise<void>; clear(): Promise<void> };
+  updater?: AppUpdater;
 };
 
 // Where the app is on its way to a working connection. Each step is one screen.
@@ -30,11 +32,14 @@ export type AppState =
 // or sign-in, and back to sign-in whenever the session ends.
 export class AppController {
   readonly state = new Store<AppState>({ step: "starting" });
+  // Present on the apps that update themselves. The web dashboard has none.
+  readonly updates: UpdateChecker | undefined;
   readonly #environment: AppEnvironment;
   #unfollow: (() => void) | undefined;
 
   constructor(environment: AppEnvironment) {
     this.#environment = environment;
+    this.updates = environment.updater === undefined ? undefined : new UpdateChecker(environment.updater);
   }
 
   get canChangeServer(): boolean {
@@ -56,6 +61,7 @@ export class AppController {
     try {
       const health = await client.health();
       await this.#environment.savedServer?.save(client.baseUrl);
+      void this.updates?.check(health.protocol);
       const fit = protocolFit(PROTOCOL_VERSION, health.protocol);
       if (fit !== "fits") return this.state.set({ step: fit, client });
       await this.#enter(client);

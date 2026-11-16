@@ -5,6 +5,7 @@ import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
 import { savedServer } from "./saved-server.ts";
 import { tokenStore } from "./token-store.ts";
+import { updater } from "./updater.ts";
 
 // Requests leave from Rust, so the server needs no CORS rules for the app's own origin.
 const platform: Platform = {
@@ -14,6 +15,7 @@ const platform: Platform = {
   deviceName: "Windows app",
   tokenStore,
   savedServer,
+  updater,
 };
 
 createRoot(document.getElementById("root")!).render(

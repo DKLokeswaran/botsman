@@ -1,0 +1,47 @@
+import { expect, test } from "vitest";
+import { type AppUpdater, compareVersions, isOffered, UpdateChecker } from "../src/index.ts";
+
+const server = { oldest: 1, current: 2 };
+
+function updater(latest: { version: string; protocol: number } | undefined, install: () => Promise<void> = async () => {}): AppUpdater {
+  return { installedVersion: async () => "0.2.0", latest: async () => (latest === undefined ? undefined : { ...latest, install }) };
+}
+
+test("compares versions by their numbers, not as text", () => {
+  expect(compareVersions("0.10.0", "0.9.9")).toBeGreaterThan(0);
+  expect(compareVersions("1.0.0", "1.0.0")).toBe(0);
+  expect(compareVersions("0.2.0", "0.2.1")).toBeLessThan(0);
+});
+
+test("offers a newer build only when the server speaks its protocol", () => {
+  expect(isOffered({ version: "0.3.0", protocol: 2 }, "0.2.0", server)).toBe(true);
+  expect(isOffered({ version: "0.3.0", protocol: 3 }, "0.2.0", server)).toBe(false);
+  expect(isOffered({ version: "0.2.0", protocol: 2 }, "0.2.0", server)).toBe(false);
+  expect(isOffered({ version: "0.3.0", protocol: 9 }, "0.2.0", undefined)).toBe(true);
+});
+
+test("reports an available update, then installs it", async () => {
+  let installed = false;
+  const updates = new UpdateChecker(updater({ version: "0.3.0", protocol: 1 }, async () => void (installed = true)));
+  await updates.check(server);
+  expect(updates.state.get()).toEqual({ status: "available", version: "0.3.0" });
+  await updates.install();
+  expect(installed).toBe(true);
+});
+
+test("keeps the reason when an install fails, and reports none when nothing is newer", async () => {
+  const failing = new UpdateChecker(updater({ version: "0.3.0", protocol: 1 }, async () => Promise.reject(new Error("The download doesn't match the release"))));
+  await failing.check(server);
+  await failing.install();
+  expect(failing.state.get()).toEqual({ status: "failed", version: "0.3.0", error: "The download doesn't match the release" });
+
+  const current = new UpdateChecker(updater(undefined));
+  await current.check(server);
+  expect(current.state.get()).toEqual({ status: "none" });
+});
+
+test("a check that can't reach the release host changes nothing", async () => {
+  const offline = new UpdateChecker({ installedVersion: async () => "0.2.0", latest: async () => Promise.reject(new Error("offline")) });
+  await offline.check(server);
+  expect(offline.state.get()).toEqual({ status: "none" });
+});

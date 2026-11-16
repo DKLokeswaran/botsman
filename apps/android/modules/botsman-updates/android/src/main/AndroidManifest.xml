@@ -1,0 +1,8 @@
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+  <!-- Lets the app hand a downloaded build to Android's installer. The owner still confirms each install. -->
+  <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />
+
+  <application>
+    <receiver android:name=".InstallStatusReceiver" android:exported="false" />
+  </application>
+</manifest>

@@ -27,12 +27,21 @@ jobs:
     name: Build the installer
     runs-on: windows-latest
     timeout-minutes: 60
+    permissions:
+      # A tag publishes a release and the update manifest.
+      contents: write
     env:
       TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
       TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
     steps:
       - uses: actions/checkout@v7
       - uses: ./.github/actions/setup
+      - name: Check the tag names the app's version
+        if: startsWith(github.ref, 'refs/tags/windows-v')
+        shell: bash
+        run: |
+          node scripts/release.ts check windows "$GITHUB_REF_NAME"
+          test -n "$TAURI_SIGNING_PRIVATE_KEY" || { echo "A release needs the update signing key"; exit 1; }
       - uses: actions/cache@v6
         with:
           path: |
@@ -58,3 +67,16 @@ jobs:
             apps/windows/src-tauri/Cargo.lock
           retention-days: 7
           if-no-files-found: error
+      # Installed apps read windows.json from the `updates` release to find this build.
+      - name: Publish the release and its update manifest
+        if: startsWith(github.ref, 'refs/tags/windows-v')
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          version="${GITHUB_REF_NAME#windows-v}"
+          installer="apps/windows/src-tauri/target/release/bundle/nsis/Botsman_${version}_x64-setup.exe"
+          gh release create "$GITHUB_REF_NAME" "$installer" "$installer.sig" --title "Windows $version" --generate-notes --latest=false
+          node scripts/release.ts manifest windows "$GITHUB_REF_NAME" "$installer" "$installer.sig" > "$RUNNER_TEMP/windows.json"
+          gh release view updates > /dev/null 2>&1 || gh release create updates --title "Update manifests" --notes "The files installed apps read to find newer builds. Nothing here is meant to be downloaded by hand." --latest=false
+          gh release upload updates "$RUNNER_TEMP/windows.json" --clobber

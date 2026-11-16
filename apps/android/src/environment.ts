@@ -2,6 +2,7 @@ import type { AppEnvironment, TokenStore } from "@botsman/client-core";
 import type { Tokens } from "@botsman/protocol";
 import * as SecureStore from "expo-secure-store";
 import { BotsmanAlerts } from "../modules/botsman-alerts";
+import { updater } from "./updater";
 
 const TOKENS_KEY = "botsman.tokens";
 const SERVER_KEY = "botsman.server";
@@ -29,4 +30,5 @@ export const environment: AppEnvironment = {
   deviceName: BotsmanAlerts.deviceSummary(),
   tokenStore,
   savedServer,
+  updater,
 };

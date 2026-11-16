@@ -8,6 +8,7 @@ import { useAppController } from "../src/app-context";
 import { fontFamilies, radius, space, useTheme } from "../src/theme";
 import { Avatar } from "../src/ui/avatar";
 import { Button } from "../src/ui/button";
+import { UpdateNotice } from "../src/ui/update-notice";
 
 const CONNECTION_LABELS = { offline: "Offline", connecting: "Connecting…", online: "Connected", reconnecting: "Reconnecting…" };
 
@@ -35,6 +36,9 @@ export default function BotListScreen() {
           <BotRow key={bot.id} bot={bot} needsYou={waitingBots.has(bot.id)} />
         ))}
       </ScrollView>
+      <View style={styles.update}>
+        <UpdateNotice updates={app.updates} />
+      </View>
       <View style={[styles.footer, { borderTopColor: colors.border }]}>
         <Text accessibilityRole="text" style={[styles.status, { color: colors.mutedForeground }]}>
           {CONNECTION_LABELS[connection]}
@@ -110,6 +114,7 @@ const styles = StyleSheet.create({
   mono: { fontFamily: fontFamilies.mono, fontSize: 12 },
   needs: { fontFamily: fontFamilies.bodySemiBold, fontSize: 12 },
   dot: { width: 6, height: 6, borderRadius: 3, marginHorizontal: space[1] },
+  update: { paddingHorizontal: space[3], paddingBottom: space[2] },
   footer: { flexDirection: "row", alignItems: "center", gap: space[2], borderTopWidth: 1, padding: space[3] },
   status: { flex: 1, fontFamily: fontFamilies.body, fontSize: 12 },
 });

@@ -1,6 +1,7 @@
 import type { AppController } from "@botsman/client-core";
 import { EntryCard } from "../components/entry-card.tsx";
 import { Button } from "../components/ui/button.tsx";
+import { UpdateNotice } from "../components/update-notice.tsx";
 
 const COPY = {
   update_app: { title: "Update the app", lede: "This app is too old for your server. Install the newest version of the app, then open it again." },
@@ -11,6 +12,7 @@ const COPY = {
 export function UpdateNeededScreen({ app, side, address }: { app: AppController; side: keyof typeof COPY; address: string }) {
   return (
     <EntryCard title={COPY[side].title} lede={COPY[side].lede}>
+      {side === "update_app" ? <UpdateNotice updates={app.updates} /> : null}
       <div className="flex gap-2">
         <Button variant="primary" className="flex-1" onClick={() => void app.connect(address)}>
           Try again

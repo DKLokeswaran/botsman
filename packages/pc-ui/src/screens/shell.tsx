@@ -3,6 +3,7 @@ import { useBots, useConnectionStatus, useNeedsYou, useNow, useServerState } fro
 import type { Approval, Bot } from "@botsman/protocol";
 import { Avatar } from "../components/avatar.tsx";
 import { Button } from "../components/ui/button.tsx";
+import { UpdateNotice } from "../components/update-notice.tsx";
 import { chatHref, useRoute } from "../use-route.ts";
 import { ChatScreen } from "./chat.tsx";
 
@@ -89,6 +90,7 @@ function SidebarFooter({ app, client }: { app: AppController; client: BotsmanCli
   const host = new URL(client.baseUrl).host;
   return (
     <footer className="flex flex-col gap-2 border-t border-border p-3">
+      <UpdateNotice updates={app.updates} />
       <p className="truncate text-xs text-muted-foreground" role="status">
         {CONNECTION_LABELS[status]} {status === "online" || status === "reconnecting" ? host : ""}
       </p>
