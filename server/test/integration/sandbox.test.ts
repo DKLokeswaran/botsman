@@ -57,6 +57,12 @@ describe.skipIf(!sandbox.status.ok)("bot sandbox", () => {
     expect(output).toContain("Read-only file system");
   });
 
+  it("refuses writes outside its folder and /tmp, instead of keeping them in memory", async () => {
+    const { output } = await run(`touch /tmp/scratch && echo "tmp ok"; mkdir /escape 2>&1; touch /outside 2>&1; true`);
+    expect(output).toContain("tmp ok");
+    expect(output.match(/Read-only file system/g)).toHaveLength(2);
+  });
+
   it("can't write system folders or gain privileges", async () => {
     const { output } = await run("touch /etc/botsman 2>&1; touch /usr/botsman 2>&1; grep CapEff /proc/self/status");
     expect(output).toMatch(/Read-only file system/);

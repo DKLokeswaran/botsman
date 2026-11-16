@@ -23,7 +23,7 @@ When a bot-written file is full, the write fails with the current usage, and the
 
 Every bot edit to a memory file asks the owner, in every permission mode. Three things make this work:
 
-- **Files sit outside the bot's folder.** Bots change them only through the memory tool. A shell command can't reach them.
+- **Files sit outside the bot's folder.** Bots change them only through the memory tool, and notes only through the notes tool. A shell command can't reach them.
 - **An edit is an ordinary approval.** The memory tool's `edit_memory` call goes through the same approval as any tool call: the reply waits, the approval expires after the bot's approval wait, stopping the bot cancels it, and it survives a restart. The approval shows the file, the new content, and the content when the bot asked, so the apps can show the change. It shows the conversation it came from, so a bad fact can be traced.
 - **Each edit is allowed on its own.** "Allow for this chat" doesn't apply to memory edits, so the apps offer only Allow and Deny.
 
@@ -85,7 +85,7 @@ The save turn shows in chat as a notice, and its request id is tied to the reply
 
 Notes are plain Markdown files that hold what doesn't fit a small file, such as the projects a developer bot tracks. A note's name is a plain file name ending in `.md`, with no folders. They live in `bots/<id>/notes/`, outside the bot's folder, so `ls` and `grep -r` in that folder never spend tokens on them. They reach the model only when the bot opens one.
 
-One `memory` tool does all of this. It searches, reads, and writes notes, and edits the memory files with the owner's approval. Hermes has a `memory` tool too, and OpenClaw has `memory_search` and `memory_get`.
+Two tools keep the two kinds apart. The `memory` tool reads the memory files, one or all four, and asks to edit `BOT_MEMORY.md`, or `USER_MEMORY.md` for the main bot; each edit waits for the owner. The `notes` tool lists, searches, reads, writes, and deletes notes, which take effect at once. Each action and field says in the tool's description what it is for and which fields it needs. Hermes has a `memory` tool too, and OpenClaw has `memory_search` and `memory_get`.
 
 This has two costs. A bot can't run shell scripts over its notes, and folder snapshots don't cover them.
 

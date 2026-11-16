@@ -4,7 +4,8 @@ export const PermissionModes = ["manual", "smart", "off"] as const;
 export const PermissionMode = oneOf(PermissionModes);
 export type PermissionMode = Static<typeof PermissionMode>;
 
-export const ThinkingLevels = ["off", "minimal", "low", "medium", "high", "xhigh"] as const;
+// Pi's reasoning levels, lowest first. Each model supports some of them; see ModelInfo.thinkingLevels.
+export const ThinkingLevels = ["off", "minimal", "low", "medium", "high", "xhigh", "max"] as const;
 export const ThinkingLevel = oneOf(ThinkingLevels);
 export type ThinkingLevel = Static<typeof ThinkingLevel>;
 

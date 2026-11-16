@@ -100,7 +100,7 @@ describe("M1 scenario", () => {
   });
 
   it("writes and searches notes", async () => {
-    await server.client.send(botId, 'tool memory {"action":"write_note","name":"projects.md","content":"Botsman server milestone one is underway"}');
+    await server.client.send(botId, 'tool notes {"action":"write_note","name":"projects.md","content":"Botsman server milestone one is underway"}');
     await stream.waitForMessage(chat, (message) => message.type === "tool_result" && message.output.includes("Saved projects.md"));
     const { hits } = await server.client.searchNotes(botId, "milestone");
     expect(hits[0]).toMatchObject({ name: "projects.md" });

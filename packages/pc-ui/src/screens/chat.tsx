@@ -31,7 +31,7 @@ export function ChatScreen({ botId }: { botId: string }) {
             {bot.name}
           </a>
           <button type="button" aria-expanded={picking} onClick={() => setPicking(!picking)} className="truncate text-xs text-muted-foreground hover:text-foreground">
-            {chatSubtitle(state.settings, state.totals.usage.cost)} ▾
+            {chatSubtitle(state.settings, state.totals.usage.cost, models)} ▾
           </button>
         </div>
         {picking ? <ModelPicker chat={chat} settings={state.settings} bot={bot} onClose={() => setPicking(false)} /> : null}

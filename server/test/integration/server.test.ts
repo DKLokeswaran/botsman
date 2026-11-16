@@ -340,6 +340,20 @@ describe("memory", () => {
     stream.close();
   });
 
+  it("reads one memory file when asked for one, and keeps notes in their own tool", async () => {
+    const bot = await server.client.createBot({ name: "Reader", defaultModel: SCRIPT_MODEL_REF });
+    await server.client.request("PUT", `/api/bots/${bot.id}/memory/BOT_PROFILE.md`, { content: "Watch the backups." });
+    const { stream, chat } = await openChat(bot.id);
+    await server.client.send(bot.id, 'tool memory {"action":"read_memory","file":"BOT_PROFILE.md"}');
+    const read = await stream.waitForMessage(chat, (message) => message.type === "tool_result" && message.toolName === "memory");
+    expect(read).toMatchObject({ output: "## BOT_PROFILE.md\nWatch the backups." });
+    await stream.waitForMessage(chat, (message) => message.type === "assistant" && message.text.startsWith("tool memory returned"));
+    await server.client.send(bot.id, 'tool notes {"action":"write_note","name":"backups.md","content":"Nightly at 03:00"}');
+    await stream.waitForMessage(chat, (message) => message.type === "tool_result" && message.toolName === "notes" && message.output === "Saved backups.md.");
+    expect((await server.client.request<{ notes: { name: string }[] }>("GET", `/api/bots/${bot.id}/notes`)).notes.map((note) => note.name)).toEqual(["backups.md"]);
+    stream.close();
+  });
+
   it("sends memory changes with the bot's next message, not shown in chat", async () => {
     const bot = await server.client.createBot({ name: "Rememberer", defaultModel: SCRIPT_MODEL_REF });
     const { stream, chat } = await openChat(bot.id);

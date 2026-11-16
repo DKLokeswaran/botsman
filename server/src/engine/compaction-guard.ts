@@ -107,7 +107,7 @@ function savePrompt(bot: Bot, reason: SaveReason): string {
   const userMemory = bot.isMain ? ", and USER_MEMORY.md for lasting facts about the owner" : "";
   return [
     SAVE_OPENINGS[reason],
-    `Save anything worth keeping now with the memory tool: notes for longer records, BOT_MEMORY.md for facts that belong in every prompt${userMemory}. Memory file edits wait for the owner's approval.`,
+    `Save anything worth keeping now: longer records with the notes tool, and facts that belong in every prompt in BOT_MEMORY.md${userMemory} with the memory tool. Memory file edits wait for the owner's approval.`,
     "Reply with one short line when you are done.",
   ].join(" ");
 }

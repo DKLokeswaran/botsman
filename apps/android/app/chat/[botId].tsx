@@ -42,7 +42,7 @@ export default function ChatScreen() {
             </Pressable>
             <Pressable accessibilityRole="button" accessibilityLabel="Model and reasoning" onPress={() => router.push({ pathname: "/model/[botId]", params: { botId: bot.id } })} hitSlop={{ top: 2, bottom: 8 }}>
               <Text numberOfLines={1} style={[styles.sub, { color: colors.mutedForeground }]}>
-                {chatSubtitle(state.settings, state.totals.usage.cost)} ▾
+                {chatSubtitle(state.settings, state.totals.usage.cost, models)} ▾
               </Text>
             </Pressable>
           </View>

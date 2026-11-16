@@ -1,5 +1,5 @@
 import type { ModelInfo, Provider as ProviderView } from "@botsman/protocol";
-import { createModels, type CredentialStore, type MutableModels, type Provider } from "@earendil-works/pi-ai";
+import { createModels, type CredentialStore, getSupportedThinkingLevels, type MutableModels, type Provider } from "@earendil-works/pi-ai";
 import { anthropicProvider } from "@earendil-works/pi-ai/providers/anthropic";
 import { githubCopilotProvider } from "@earendil-works/pi-ai/providers/github-copilot";
 import { openaiProvider } from "@earendil-works/pi-ai/providers/openai";
@@ -61,13 +61,20 @@ export class ProviderCatalog {
     return (await this.#credentials.list()).some((info) => info.providerId === providerId);
   }
 
-  // Chat models of every connected provider.
+  // Chat models of every connected provider, each with the reasoning levels Pi's catalog says it supports.
   async connectedModels(): Promise<ModelInfo[]> {
     const connected = new Set((await this.#credentials.list()).map((info) => info.providerId));
     return this.#entries
       .filter(({ provider }) => connected.has(provider.id))
       .flatMap(({ provider }) => this.models.getModels(provider.id))
-      .map((model) => ({ provider: model.provider, id: model.id, name: model.name, contextWindow: model.contextWindow, reasoning: model.reasoning }));
+      .map((model) => ({
+        provider: model.provider,
+        id: model.id,
+        name: model.name,
+        contextWindow: model.contextWindow,
+        reasoning: model.reasoning,
+        thinkingLevels: getSupportedThinkingLevels(model),
+      }));
   }
 
   hasModel(providerId: string, modelId: string): boolean {

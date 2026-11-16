@@ -36,9 +36,11 @@ export function providerStatus(connected: boolean, connectedWith: "api_key" | "o
   return connectedWith === "oauth" ? "Connected with a sign-in" : "Connected with an API key";
 }
 
-// The reasoning efforts a model offers. A model without reasoning only runs with it off.
+// The reasoning levels a model offers, from Pi's catalog on the server. Servers older than that list send only whether
+// the model reasons.
 export function effortChoices(model: ModelInfo | undefined): readonly ThinkingLevel[] {
-  return model === undefined || model.reasoning ? ThinkingLevels : ["off"];
+  if (model?.thinkingLevels !== undefined) return model.thinkingLevels;
+  return model === undefined || model.reasoning ? ThinkingLevels.filter((level) => level !== "max") : ["off"];
 }
 
 // Why a chat can't run, from the connected models and the chat's model, or undefined when it can.
@@ -57,7 +59,13 @@ export function pickerValue(scope: PickerScope, chat: ChatSettings, bot: Pick<Bo
   return { model: chat.model, thinkingLevel: chat.thinkingLevel, note: "This changes only the open chat." };
 }
 
-// The effort the picker marks: the chosen one, or Off when the model can't use it.
+// The level a chat really runs at. A level the model lacks moves to the next one up it has, else the next one down,
+// as Pi does when it sends the request.
 export function shownEffort(model: ModelInfo | undefined, level: ThinkingLevel): ThinkingLevel {
-  return effortChoices(model).includes(level) ? level : "off";
+  const choices = effortChoices(model);
+  if (choices.includes(level)) return level;
+  const wanted = ThinkingLevels.indexOf(level);
+  const higher = ThinkingLevels.slice(wanted + 1).find((candidate) => choices.includes(candidate));
+  const lower = ThinkingLevels.slice(0, wanted).reverse().find((candidate) => choices.includes(candidate));
+  return higher ?? lower ?? choices[0] ?? "off";
 }

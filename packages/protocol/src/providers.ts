@@ -1,3 +1,4 @@
+import { ThinkingLevel } from "./bots.ts";
 import { arr, bool, int, lit, nullable, obj, oneOf, opt, type Static, str, union } from "@earendil-works/pi-schema";
 
 export const ProviderMethods = ["api_key", "oauth"] as const;
@@ -25,6 +26,8 @@ export const ModelInfo = obj({
   name: str(),
   contextWindow: int(),
   reasoning: bool(),
+  // The reasoning levels this model supports, lowest first. Missing from servers older than this field.
+  thinkingLevels: opt(arr(ThinkingLevel)),
 });
 export type ModelInfo = Static<typeof ModelInfo>;
 

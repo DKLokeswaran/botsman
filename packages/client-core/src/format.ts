@@ -1,4 +1,6 @@
-import type { Bot, BotActivity, ChatSettings, Usage } from "@botsman/protocol";
+import type { Bot, BotActivity, ChatSettings, ModelInfo, Usage } from "@botsman/protocol";
+import { sameModel } from "./bot-settings.ts";
+import { shownEffort } from "./providers.ts";
 
 // Time left until a moment, as `47:10`, or `1:02:05` past an hour. Never below zero.
 export function formatCountdown(until: number, now: number): string {
@@ -25,14 +27,16 @@ export function formatUsage(usage: Usage): string {
   return `${formatTokens(usage.totalTokens)} tokens · ${formatCost(usage.cost)}`;
 }
 
-// The line under a chat's title: the model, the reasoning effort, and the chat's total cost.
-export function chatSubtitle(settings: ChatSettings, totalCost: number): string {
+// The line under a chat's title: the model, the reasoning effort it really runs at, and the chat's total cost.
+export function chatSubtitle(settings: ChatSettings, totalCost: number, models: readonly ModelInfo[] = []): string {
   const model = settings.model === null ? "No model chosen" : settings.model.modelId;
-  return `${model} · ${effortLabel(settings.thinkingLevel)} · ${formatCost(totalCost)} this chat`;
+  const info = models.find((candidate) => sameModel(candidate, settings.model));
+  return `${model} · ${effortLabel(shownEffort(info, settings.thinkingLevel))} · ${formatCost(totalCost)} this chat`;
 }
 
 export function effortLabel(level: Bot["thinkingLevel"]): string {
   if (level === "xhigh") return "Extra high";
+  if (level === "max") return "Max";
   return level.charAt(0).toUpperCase() + level.slice(1);
 }
 

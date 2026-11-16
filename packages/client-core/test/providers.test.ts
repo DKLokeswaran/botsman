@@ -1,6 +1,6 @@
 import type { ProviderLogin } from "@botsman/protocol";
 import { describe, expect, it } from "vitest";
-import { effortChoices, loginView, modelProblem } from "../src/index.ts";
+import { effortChoices, loginView, modelProblem, shownEffort } from "../src/index.ts";
 
 const login = (change: Partial<ProviderLogin>): ProviderLogin => ({ id: "l1", providerId: "p", status: "running", steps: [], pendingPrompt: null, error: null, ...change });
 
@@ -42,5 +42,13 @@ describe("model problems", () => {
 
   it("offers only Off for a model without reasoning", () => {
     expect(effortChoices(models[0])).toEqual(["off"]);
+  });
+
+  it("offers the levels the server lists, and marks the level a chat really runs at", () => {
+    const model = { provider: "a", id: "m2", name: "M2", contextWindow: 1000, reasoning: true, thinkingLevels: ["off", "low", "high"] as ("off" | "low" | "high")[] };
+    expect(effortChoices(model)).toEqual(["off", "low", "high"]);
+    expect(shownEffort(model, "medium")).toBe("high");
+    expect(shownEffort(model, "max")).toBe("high");
+    expect(shownEffort(model, "low")).toBe("low");
   });
 });
