@@ -1,4 +1,4 @@
-import { ALERT_CHOICES, type AppController, type BotsmanClient, formatMessageTime, liveSessions } from "@botsman/client-core";
+import { ALERT_CHOICES, THEME_MODES, type ThemeMode, type AppController, type BotsmanClient, formatMessageTime, liveSessions } from "@botsman/client-core";
 import { useAction, useServerState, useSessions } from "@botsman/client-core/react";
 import type { DeviceSession } from "@botsman/protocol";
 import { ErrorText, LinkRow, Page, ToggleRow } from "../components/page.tsx";
@@ -10,8 +10,11 @@ import { BackgroundSection } from "../components/background-section.tsx";
 // Whether this page may show notifications, and a way to ask. `ask` is missing where the page never notifies itself.
 export type NotificationChoice = { permission: NotificationPermission; ask: (() => Promise<void>) | undefined };
 
-// Alerts, signed-in devices, providers, the app's version, and the server this app uses.
-export function SettingsScreen({ app, client, notifications, autostart }: { app: AppController; client: BotsmanClient; notifications: NotificationChoice; autostart: Autostart | undefined }) {
+// This device's theme choice and the way to change it.
+export type ThemeChoice = [ThemeMode, (mode: ThemeMode) => void];
+
+// Alerts, signed-in devices, providers, the theme, the app's version, and the server this app uses.
+export function SettingsScreen({ app, client, notifications, autostart, theme }: { app: AppController; client: BotsmanClient; notifications: NotificationChoice; autostart: Autostart | undefined; theme: ThemeChoice }) {
   const { alertSettings } = useServerState();
   const save = useAction((kind: string, on: boolean) => client.updateAlertSettings({ [kind]: on }));
   return (
@@ -27,6 +30,14 @@ export function SettingsScreen({ app, client, notifications, autostart }: { app:
       {app.background === undefined ? null : <BackgroundSection background={app.background} autostart={autostart} />}
       <LinkRow href="#/providers" title="Model providers" detail="Keys and sign-ins for the models your bots use" />
       <Devices client={client} />
+      <h2 className="font-display text-sm font-bold uppercase">Mode</h2>
+      <div role="radiogroup" aria-label="Mode" className="flex rounded-lg border border-border p-0.5">
+        {THEME_MODES.map((option) => (
+          <button key={option.mode} type="button" role="radio" aria-checked={option.mode === theme[0]} onClick={() => theme[1](option.mode)} className={`flex-1 rounded-md px-3 py-1.5 text-sm font-semibold ${option.mode === theme[0] ? "bg-primary text-primary-foreground" : "hover:bg-accent"}`}>
+            {option.label}
+          </button>
+        ))}
+      </div>
       <h2 className="font-display text-sm font-bold uppercase">This app</h2>
       <AppVersion updates={app.updates} />
       <div className="flex gap-2">

@@ -21,3 +21,4 @@ export * from "./alerts-connection.ts";
 export * from "./background-alerts.ts";
 export * from "./local-cache.ts";
 export * from "./memory-diff.ts";
+export * from "./theme-mode.ts";

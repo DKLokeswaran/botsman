@@ -1,6 +1,6 @@
 import type { Bot, DeviceSession, UsageReport } from "@botsman/protocol";
 import { describe, expect, it } from "vitest";
-import { memoryDiff, chatFromCache, chatToCache, emptyChat, emptyServerState, serverFromCache, serverToCache, backgroundLine, backgroundSteps, exactCommand, liveSessions, slashMatches, usageBots, usageDays } from "../src/index.ts";
+import { isThemeMode, resolveTheme, memoryDiff, chatFromCache, chatToCache, emptyChat, emptyServerState, serverFromCache, serverToCache, backgroundLine, backgroundSteps, exactCommand, liveSessions, slashMatches, usageBots, usageDays } from "../src/index.ts";
 
 const zero = { inputTokens: 0, outputTokens: 0, cacheReadTokens: 0, cacheWriteTokens: 0, totalTokens: 0, cost: 0 };
 const cost = (value: number) => ({ ...zero, cost: value });
@@ -95,5 +95,14 @@ describe("memory edit diff", () => {
 
   it("shows every line as added for an empty file", () => {
     expect(memoryDiff("", "one\ntwo")).toEqual([{ kind: "added", text: "one" }, { kind: "added", text: "two" }]);
+  });
+});
+
+describe("theme mode", () => {
+  it("follows the device under System, and otherwise keeps the owner's choice", () => {
+    expect(resolveTheme("system", true)).toBe("dark");
+    expect(resolveTheme("system", false)).toBe("light");
+    expect(resolveTheme("light", true)).toBe("light");
+    expect(isThemeMode("sepia")).toBe(false);
   });
 });

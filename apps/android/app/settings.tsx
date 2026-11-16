@@ -1,12 +1,12 @@
-import { ALERT_CHOICES, formatMessageTime, liveSessions } from "@botsman/client-core";
+import { ALERT_CHOICES, THEME_MODES, formatMessageTime, liveSessions } from "@botsman/client-core";
 import { useAction, useBotsmanClient, useServerState, useSessions } from "@botsman/client-core/react";
 import type { DeviceSession } from "@botsman/protocol";
 import { router } from "expo-router";
 import { StyleSheet, Text, View } from "react-native";
 import { useAppController } from "../src/app-context";
-import { space, useTheme } from "../src/theme";
+import { space, useTheme, useThemeMode } from "../src/theme";
 import { Button } from "../src/ui/button";
-import { ErrorText, LinkRow, Note, Page, pageStyles, SectionTitle, ToggleRow } from "../src/ui/page";
+import { ErrorText, LinkRow, Note, Page, pageStyles, SectionTitle, Segmented, ToggleRow } from "../src/ui/page";
 import { BackgroundSection } from "../src/ui/background-section";
 import { AppVersion } from "../src/ui/app-version";
 
@@ -15,6 +15,7 @@ export default function SettingsScreen() {
   const app = useAppController();
   const client = useBotsmanClient();
   const { alertSettings } = useServerState();
+  const themeMode = useThemeMode();
   const save = useAction((kind: string, on: boolean) => client.updateAlertSettings({ [kind]: on }));
   return (
     <Page title="Settings" subtitle={new URL(client.baseUrl).host}>
@@ -28,6 +29,8 @@ export default function SettingsScreen() {
       {app.background === undefined ? null : <BackgroundSection background={app.background} />}
       <LinkRow title="Model providers" detail="Keys and sign-ins for the models your bots use" onPress={() => router.push("/providers")} />
       <Devices />
+      <SectionTitle>Mode</SectionTitle>
+      <Segmented label="Mode" options={THEME_MODES.map((option) => ({ value: option.mode, label: option.label }))} value={themeMode[0]} onChange={themeMode[1]} />
       <SectionTitle>This app</SectionTitle>
       <AppVersion updates={app.updates} />
       <View style={styles.row}>

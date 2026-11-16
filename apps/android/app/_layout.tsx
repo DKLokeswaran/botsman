@@ -11,9 +11,18 @@ import { SetUpScreen } from "../src/screens/set-up";
 import { SignInScreen } from "../src/screens/sign-in";
 import { UpdateNeededScreen } from "../src/screens/update-needed";
 import { fontFamilies, useTheme } from "../src/theme";
+import { ThemeModeProvider } from "../src/theme-mode-provider";
 
 // The root of the Android app. It shows the screen for the step the app is on, and the main screens once signed in.
 export default function RootLayout() {
+  return (
+    <ThemeModeProvider>
+      <Themed />
+    </ThemeModeProvider>
+  );
+}
+
+function Themed() {
   const theme = useTheme();
   return (
     <KeyboardProvider>
