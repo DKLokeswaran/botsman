@@ -18,6 +18,7 @@
     "react": "19.3.0"
   },
   "devDependencies": {
+    "@botsman/server": "workspace:*",
     "@types/node": "24.19.2",
     "@types/react": "19.3.0",
     "react": "19.3.0",
