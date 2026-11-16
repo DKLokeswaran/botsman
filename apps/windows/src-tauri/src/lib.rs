@@ -1,14 +1,17 @@
+mod tokens;
+
 use tauri::menu::{Menu, MenuItem};
 use tauri::tray::TrayIconBuilder;
 use tauri::{AppHandle, Manager};
 
 const MAIN_WINDOW: &str = "main";
 
-// Starts the app: HTTP from Rust, the updater, and the tray icon.
+// Starts the app: HTTP from Rust, the updater, token storage, and the tray icon.
 pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_http::init())
         .plugin(tauri_plugin_updater::Builder::new().build())
+        .invoke_handler(tauri::generate_handler![tokens::load_tokens, tokens::save_tokens, tokens::clear_tokens])
         .setup(|app| {
             build_tray(app.handle())?;
             Ok(())

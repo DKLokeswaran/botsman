@@ -1,5 +1,5 @@
 .expo/
-android/
-ios/
+/android/
+/ios/
 dist/
 expo-env.d.ts

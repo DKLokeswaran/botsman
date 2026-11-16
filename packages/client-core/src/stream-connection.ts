@@ -1,14 +1,15 @@
 import type { ClientMessage, ServerMessage, StreamPosition } from "@botsman/protocol";
 import { Store } from "./store.ts";
 
-// The part of a WebSocket the connection uses, so each app can pass its own.
+// The part of a WebSocket the connection uses, so each app can pass its own. The handlers take `any` so that a
+// browser's WebSocket, React Native's, and Node's all fit without a wrapper.
 export type SocketLike = {
   send(data: string): void;
   close(): void;
-  onopen: ((event: unknown) => void) | null;
-  onmessage: ((event: { data: unknown }) => void) | null;
-  onclose: ((event: unknown) => void) | null;
-  onerror: ((event: unknown) => void) | null;
+  onopen: ((event: any) => void) | null;
+  onmessage: ((event: any) => void) | null;
+  onclose: ((event: any) => void) | null;
+  onerror: ((event: any) => void) | null;
 };
 
 export type ConnectionStatus = "offline" | "connecting" | "online" | "reconnecting";
@@ -89,7 +90,7 @@ export class StreamConnection {
     const socket = this.#options.createSocket(this.#options.url);
     this.#socket = socket;
     socket.onopen = () => this.#send({ type: "hello", token });
-    socket.onmessage = (event) => this.#receive(socket, String(event.data));
+    socket.onmessage = (event: { data: unknown }) => this.#receive(socket, String(event.data));
     socket.onclose = () => this.#lost(socket);
     socket.onerror = () => this.#lost(socket);
   }

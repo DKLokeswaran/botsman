@@ -1,6 +1,7 @@
 import type { Approval, Bot } from "@botsman/protocol";
 import { useEffect, useMemo, useSyncExternalStore } from "react";
 import type { ChatController } from "../chat-controller.ts";
+import { type ChatItem, chatItems } from "../chat-items.ts";
 import type { ChatState } from "../chat-state.ts";
 import { offeredSendModes, type SendMode } from "../send-rule.ts";
 import type { ServerState } from "../server-state.ts";
@@ -35,7 +36,7 @@ export function useNeedsYou(): Approval[] {
   return useServerState().approvals;
 }
 
-export type ChatView = { chat: ChatController; state: ChatState; sendModes: SendMode[] };
+export type ChatView = { chat: ChatController; state: ChatState; items: ChatItem[]; sendModes: SendMode[] };
 
 // One bot's chat, followed for as long as the screen showing it is mounted.
 export function useChat(botId: string): ChatView {
@@ -43,6 +44,16 @@ export function useChat(botId: string): ChatView {
   const chat = useMemo(() => client.chat(botId), [client, botId]);
   useEffect(() => chat.watch(), [chat]);
   const state = useStore(chat.state);
+  const items = useMemo(() => chatItems(state), [state]);
   const sendModes = useMemo(() => offeredSendModes(state.live), [state.live]);
-  return { chat, state, sendModes };
+  return { chat, state, items, sendModes };
+}
+
+export function useBot(botId: string): Bot | undefined {
+  return useBots().find((bot) => bot.id === botId);
+}
+
+// The approval a tool call is waiting on, once the server has sent it.
+export function useApproval(approvalId: string | undefined): Approval | undefined {
+  return useNeedsYou().find((approval) => approval.id === approvalId);
 }

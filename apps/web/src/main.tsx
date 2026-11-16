@@ -3,11 +3,13 @@ import "@botsman/pc-ui/styles.css";
 import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
 
-// The dashboard talks to the server that served it.
+// The dashboard talks to the server that served it, and its session lives in cookies the page can't read.
 const platform: Platform = {
   kind: "web",
   fetch: (url, init) => fetch(url, init),
-  homeServer: window.location.origin,
+  createSocket: (url) => new WebSocket(url),
+  deviceName: "Web dashboard",
+  fixedServer: window.location.origin,
 };
 
 createRoot(document.getElementById("root")!).render(
