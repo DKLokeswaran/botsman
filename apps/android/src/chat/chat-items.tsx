@@ -1,7 +1,8 @@
-import { type ChatController, type ChatItem, formatMessageTime, formatUsage, type RunItem, type RunStep, showsWorking, type ToolLine, workLabel } from "@botsman/client-core";
+import { type ChatController, type ChatItem, formatMessageTime, formatUsage, type RunItem, type RunStep, runText, showsWorking, type ToolLine, workLabel } from "@botsman/client-core";
 
 type WorkStep = Extract<RunStep, { kind: "work" }>;
 import { useAction } from "@botsman/client-core/react";
+import * as Clipboard from "expo-clipboard";
 import { useState } from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 import { fontFamilies, radius, space, useTheme } from "../theme";
@@ -90,7 +91,30 @@ function Run({ item, botName }: { item: RunItem; botName: string }) {
       )}
       {showsWorking(item) ? <Text style={[styles.body, { color: colors.mutedForeground }]}>Working…</Text> : null}
       {item.error === null ? null : <Text style={[styles.body, { color: colors.destructive }]}>{item.error}</Text>}
-      {item.usage === null || item.working ? null : <Text style={[styles.small, { color: colors.mutedForeground }]}>{formatUsage(item.usage)}</Text>}
+      {item.working ? null : <RunFooter item={item} />}
+    </View>
+  );
+}
+
+// Under a finished run: its tokens and cost, and Copy for everything it said.
+function RunFooter({ item }: { item: RunItem }) {
+  const { colors } = useTheme();
+  const [copied, setCopied] = useState(false);
+  const text = runText(item);
+  const copy = async () => {
+    await Clipboard.setStringAsync(text);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 1500);
+  };
+  if (item.usage === null && text === "") return null;
+  return (
+    <View style={styles.footer}>
+      {item.usage === null ? null : <Text style={[styles.small, { color: colors.mutedForeground }]}>{formatUsage(item.usage)}</Text>}
+      {text === "" ? null : (
+        <Pressable accessibilityRole="button" onPress={() => void copy()} hitSlop={8}>
+          <Text style={[styles.small, styles.copy, { color: colors.mutedForeground }]}>{copied ? "Copied" : "Copy"}</Text>
+        </Pressable>
+      )}
     </View>
   );
 }
@@ -169,6 +193,8 @@ const styles = StyleSheet.create({
   notice: { fontFamily: fontFamilies.body, fontSize: 12, textAlign: "center" },
   failure: { borderWidth: 1, borderRadius: radius.md, padding: space[3], gap: space[2] },
   failureText: { fontFamily: fontFamilies.body, fontSize: 14 },
+  footer: { flexDirection: "row", alignItems: "center", gap: space[3] },
+  copy: { fontFamily: fontFamilies.bodySemiBold },
   fold: { borderLeftWidth: 1, paddingLeft: space[3], gap: space[2] },
   thinkingText: { fontFamily: fontFamilies.body, fontSize: 14, lineHeight: 21 },
   thinking: { fontFamily: fontFamilies.body, fontSize: 14, lineHeight: 21, borderLeftWidth: 1, paddingLeft: space[3], marginTop: space[1] },

@@ -24,7 +24,7 @@ When a bot-written file is full, the write fails with the current usage, and the
 Every bot edit to a memory file asks the owner, in every permission mode. Three things make this work:
 
 - **Files sit outside the bot's folder.** Bots change them only through the memory tool, and notes only through the notes tool. A shell command can't reach them.
-- **An edit is an ordinary approval.** The memory tool's `edit_memory` call goes through the same approval as any tool call: the reply waits, the approval expires after the bot's approval wait, stopping the bot cancels it, and it survives a restart. The approval shows the file, the new content, and the content when the bot asked, so the apps can show the change. It shows the conversation it came from, so a bad fact can be traced.
+- **An edit is an ordinary approval.** The memory tool's `edit_memory` call goes through the same approval as any tool call: the reply waits, the approval expires after the bot's approval wait, stopping the bot cancels it, and it survives a restart. The approval shows the file, the new content, and the content when the bot asked. The apps draw it as "<bot> wants to change <file>", with the lines added and removed and a little context around them, and Confirm or Reject. It shows the conversation it came from, so a bad fact can be traced.
 - **Each edit is allowed on its own.** "Allow for this chat" doesn't apply to memory edits, so the apps offer only Allow and Deny.
 
 Who may write the file and its character limit are checked before the owner is asked, so the owner never allows an edit that then fails. Allowed, the tool writes the file and says so; denied, expired, or cancelled, the bot gets the usual refused tool result and the file is unchanged.

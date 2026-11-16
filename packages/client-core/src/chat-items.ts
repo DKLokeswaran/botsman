@@ -184,3 +184,8 @@ export function workLabel(step: Extract<RunStep, { kind: "work" }>, live: boolea
 export function showsWorking(run: RunItem): boolean {
   return run.working && (run.steps.length === 0 || run.steps.at(-1)!.kind === "text") && !run.steps.some((step) => step.id === `${LIVE_ID}-text`);
 }
+
+// What Copy puts on the clipboard for a run: everything the bot said, without its thinking or tool calls.
+export function runText(run: RunItem): string {
+  return run.steps.flatMap((step) => (step.kind === "text" ? [step.text.trim()] : [])).join("\n\n");
+}

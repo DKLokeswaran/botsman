@@ -1,7 +1,8 @@
-import { type ChatController, type ChatItem, formatMessageTime, formatUsage, type RunItem, type RunStep, showsWorking, type ToolLine, workLabel } from "@botsman/client-core";
+import { type ChatController, type ChatItem, formatMessageTime, formatUsage, type RunItem, type RunStep, runText, showsWorking, type ToolLine, workLabel } from "@botsman/client-core";
 
 type WorkStep = Extract<RunStep, { kind: "work" }>;
 import { useAction } from "@botsman/client-core/react";
+import { useState } from "react";
 import { ApprovalCard } from "./approval-card.tsx";
 import { Markdown } from "./markdown.tsx";
 import { Button } from "./ui/button.tsx";
@@ -78,8 +79,30 @@ function Run({ item, botName }: { item: RunItem; botName: string }) {
       )}
       {showsWorking(item) ? <p className="animate-pulse text-sm text-muted-foreground">Working…</p> : null}
       {item.error === null ? null : <p className="text-sm text-destructive">{item.error}</p>}
-      {item.usage === null || item.working ? null : <div className="text-xs text-muted-foreground">{formatUsage(item.usage)}</div>}
+      {item.working ? null : <RunFooter item={item} />}
     </article>
+  );
+}
+
+// Under a finished run: its tokens and cost, and Copy for everything it said.
+function RunFooter({ item }: { item: RunItem }) {
+  const [copied, setCopied] = useState(false);
+  const text = runText(item);
+  const copy = async () => {
+    await navigator.clipboard.writeText(text);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 1500);
+  };
+  if (item.usage === null && text === "") return null;
+  return (
+    <div className="flex items-center gap-3 text-xs text-muted-foreground">
+      {item.usage === null ? null : <span>{formatUsage(item.usage)}</span>}
+      {text === "" ? null : (
+        <button type="button" className="rounded-md px-1.5 py-0.5 font-semibold hover:bg-accent hover:text-foreground" onClick={() => void copy()}>
+          {copied ? "Copied" : "Copy"}
+        </button>
+      )}
+    </div>
   );
 }
 

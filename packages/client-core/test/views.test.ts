@@ -1,6 +1,6 @@
 import type { Bot, DeviceSession, UsageReport } from "@botsman/protocol";
 import { describe, expect, it } from "vitest";
-import { chatFromCache, chatToCache, emptyChat, emptyServerState, serverFromCache, serverToCache, backgroundLine, backgroundSteps, exactCommand, liveSessions, slashMatches, usageBots, usageDays } from "../src/index.ts";
+import { memoryDiff, chatFromCache, chatToCache, emptyChat, emptyServerState, serverFromCache, serverToCache, backgroundLine, backgroundSteps, exactCommand, liveSessions, slashMatches, usageBots, usageDays } from "../src/index.ts";
 
 const zero = { inputTokens: 0, outputTokens: 0, cacheReadTokens: 0, cacheWriteTokens: 0, totalTokens: 0, cost: 0 };
 const cost = (value: number) => ({ ...zero, cost: value });
@@ -76,5 +76,24 @@ describe("local cache", () => {
     expect(restored.messages).toHaveLength(50);
     expect(restored.messages[0]?.id).toBe("10");
     expect(restored.hasEarlier).toBe(true);
+  });
+});
+
+describe("memory edit diff", () => {
+  it("shows added and removed lines with a little context around them", () => {
+    const before = ["# Bot memory", "a", "b", "c", "d", "e", "f"].join("\n");
+    const after = ["# Bot memory", "a", "b", "c", "d", "E changed", "f", "g"].join("\n");
+    expect(memoryDiff(before, after)).toEqual([
+      { kind: "same", text: "c" },
+      { kind: "same", text: "d" },
+      { kind: "removed", text: "e" },
+      { kind: "added", text: "E changed" },
+      { kind: "same", text: "f" },
+      { kind: "added", text: "g" },
+    ]);
+  });
+
+  it("shows every line as added for an empty file", () => {
+    expect(memoryDiff("", "one\ntwo")).toEqual([{ kind: "added", text: "one" }, { kind: "added", text: "two" }]);
   });
 });
