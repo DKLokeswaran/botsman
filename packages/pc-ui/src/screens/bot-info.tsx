@@ -4,6 +4,7 @@ import type { Avatar as AvatarValue, Bot } from "@botsman/protocol";
 import { MARK_IDS, MARKS } from "@botsman/tokens";
 import { useRef, useState } from "react";
 import { Avatar, MarkIcon } from "../components/avatar.tsx";
+import { ModelPicker } from "../components/model-picker.tsx";
 import { ErrorText, LinkRow, Page } from "../components/page.tsx";
 import { Button } from "../components/ui/button.tsx";
 import { Field } from "../components/ui/field.tsx";
@@ -18,15 +19,29 @@ export function BotInfoScreen({ botId }: { botId: string }) {
     <Page title={bot.name} subtitle="Bot info" back={chatHref(bot.id)}>
       <FacePicker bot={bot} />
       <NameForm key={`${bot.name}\n${bot.description}`} bot={bot} />
-      <div className="flex items-center justify-between rounded-lg border border-border px-3 py-2.5 text-sm">
-        <span className="font-semibold">Model default</span>
-        <span className="text-muted-foreground">{bot.defaultModel === null ? "None" : `${bot.defaultModel.modelId} · ${effortLabel(bot.thinkingLevel)}`}</span>
-      </div>
+      <ModelDefault bot={bot} />
       <LinkRow href={memoryHref(bot.id)} title="Memory" detail="The four files this bot loads" />
       <LinkRow href={notesHref(bot.id)} title="Notes" detail="Longer records this bot keeps" />
       <LinkRow href={botSettingsHref(bot.id)} title="Bot settings" detail="Permissions, approval wait, network" />
       <DeleteBot bot={bot} />
     </Page>
+  );
+}
+
+// The bot's default model and reasoning effort, which opens the picker for them.
+function ModelDefault({ bot }: { bot: Bot }) {
+  const [open, setOpen] = useState(false);
+  return (
+    <div className="flex flex-col gap-2">
+      <button type="button" aria-expanded={open} onClick={() => setOpen(!open)} className="flex items-center justify-between rounded-lg border border-border px-3 py-2.5 text-left text-sm hover:bg-accent">
+        <span>
+          <span className="block font-semibold">Model default</span>
+          <span className="block text-xs text-muted-foreground">Used by chats that haven't picked their own</span>
+        </span>
+        <span className="text-muted-foreground">{bot.defaultModel === null ? "None" : `${bot.defaultModel.modelId} · ${effortLabel(bot.thinkingLevel)}`} ▾</span>
+      </button>
+      {open ? <ModelPicker bot={bot} onClose={() => setOpen(false)} className="w-full" /> : null}
+    </div>
   );
 }
 

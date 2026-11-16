@@ -4,25 +4,28 @@ import type { Bot, ChatSettings, ModelRef, ThinkingLevel } from "@botsman/protoc
 import { useState } from "react";
 import { ErrorText } from "./page.tsx";
 
-// Picks the model and reasoning effort for the open chat, or for the bot's default.
-export function ModelPicker({ chat, settings, bot, onClose }: { chat: ChatController; settings: ChatSettings; bot: Bot; onClose: () => void }) {
+const POPOVER = "absolute top-full left-4 z-10 mt-2 w-80";
+
+// Picks the model and reasoning effort for the open chat, or for the bot's default. Without a chat, such as on bot
+// info, it changes only the bot's default.
+export function ModelPicker({ chat, bot, onClose, className = POPOVER }: { chat?: { controller: ChatController; settings: ChatSettings }; bot: Bot; onClose: () => void; className?: string }) {
   const client = useBotsmanClient();
   const { models, loading } = useModels();
-  const [scope, setScope] = useState<PickerScope>("chat");
-  const value = pickerValue(scope, settings, bot);
+  const [scope, setScope] = useState<PickerScope>(chat === undefined ? "bot" : "chat");
+  const value = pickerValue(scope, chat?.settings ?? { model: bot.defaultModel, thinkingLevel: bot.thinkingLevel }, bot);
   const save = useAction((change: { model?: ModelRef | null; thinkingLevel?: ThinkingLevel }) =>
-    scope === "chat" ? chat.changeSettings(change) : client.updateBot(bot.id, { defaultModel: change.model, thinkingLevel: change.thinkingLevel }),
+    scope === "chat" && chat !== undefined ? chat.controller.changeSettings(change) : client.updateBot(bot.id, { defaultModel: change.model, thinkingLevel: change.thinkingLevel }),
   );
   const current = models.find((model) => sameModel(model, value.model));
   return (
-    <div role="dialog" aria-label="Model and reasoning" className="absolute top-full left-4 z-10 mt-2 flex w-80 flex-col gap-3 rounded-xl border border-border bg-card p-3 text-sm">
-      <div role="radiogroup" aria-label="Applies to" className="flex rounded-lg border border-border p-0.5">
+    <div role="dialog" aria-label="Model and reasoning" className={`flex flex-col gap-3 rounded-xl border border-border bg-card p-3 text-sm ${className}`}>
+      {chat === undefined ? null : <div role="radiogroup" aria-label="Applies to" className="flex rounded-lg border border-border p-0.5">
         {(["chat", "bot"] as const).map((option) => (
           <button key={option} type="button" role="radio" aria-checked={option === scope} onClick={() => setScope(option)} className={`flex-1 rounded-md px-2 py-1 font-semibold ${option === scope ? "bg-primary text-primary-foreground" : "hover:bg-accent"}`}>
             {option === "chat" ? "This chat" : "Bot default"}
           </button>
         ))}
-      </div>
+      </div>}
       <p className="text-xs text-muted-foreground">{value.note}</p>
       <h4 className="font-semibold">Model</h4>
       {loading ? <p className="text-muted-foreground">Loading…</p> : null}

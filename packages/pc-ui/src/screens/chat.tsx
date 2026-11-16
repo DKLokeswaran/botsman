@@ -34,7 +34,7 @@ export function ChatScreen({ botId }: { botId: string }) {
             {chatSubtitle(state.settings, state.totals.usage.cost, models, contextTokens(state.messages))} ▾
           </button>
         </div>
-        {picking ? <ModelPicker chat={chat} settings={state.settings} bot={bot} onClose={() => setPicking(false)} /> : null}
+        {picking ? <ModelPicker chat={{ controller: chat, settings: state.settings }} bot={bot} onClose={() => setPicking(false)} /> : null}
       </header>
       {reconnecting ? (
         <p role="status" className="border-b border-border bg-card px-4 py-1.5 text-center text-xs text-primary">

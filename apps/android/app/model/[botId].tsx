@@ -9,12 +9,12 @@ import { ErrorText, LinkRow, Note, Page, pageStyles, SectionTitle, Segmented } f
 
 // Picks the model and reasoning effort for the open chat, or for the bot's default.
 export default function ModelScreen() {
-  const { botId } = useLocalSearchParams<{ botId: string }>();
+  const { botId, scope: startScope } = useLocalSearchParams<{ botId: string; scope?: PickerScope }>();
   const client = useBotsmanClient();
   const bot = useBot(botId);
   const { chat, state } = useChat(botId);
   const { models, loading } = useModels();
-  const [scope, setScope] = useState<PickerScope>("chat");
+  const [scope, setScope] = useState<PickerScope>(startScope === "bot" ? "bot" : "chat");
   const save = useAction((change: { model?: ModelRef | null; thinkingLevel?: ThinkingLevel }) =>
     scope === "chat" ? chat.changeSettings(change) : client.updateBot(botId, { defaultModel: change.model, thinkingLevel: change.thinkingLevel }),
   );

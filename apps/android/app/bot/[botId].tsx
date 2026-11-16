@@ -80,14 +80,10 @@ function NameForm({ bot }: { bot: Bot }) {
   );
 }
 
+// The bot's default model and reasoning effort, which opens the picker for them.
 function ModelDefault({ bot }: { bot: Bot }) {
-  const { colors } = useTheme();
-  return (
-    <View style={[pageStyles.row, { borderColor: colors.border }]}>
-      <Text style={[pageStyles.rowTitle, styles.grow, { color: colors.foreground }]}>Model default</Text>
-      <Text style={[pageStyles.small, { color: colors.mutedForeground }]}>{bot.defaultModel === null ? "None" : `${bot.defaultModel.modelId} · ${effortLabel(bot.thinkingLevel)}`}</Text>
-    </View>
-  );
+  const current = bot.defaultModel === null ? "None" : `${bot.defaultModel.modelId} · ${effortLabel(bot.thinkingLevel)}`;
+  return <LinkRow title="Model default" detail={`${current} · used by chats that haven't picked their own`} onPress={() => router.push({ pathname: "/model/[botId]", params: { botId: bot.id, scope: "bot" } })} />;
 }
 
 function DeleteBot({ bot }: { bot: Bot }) {

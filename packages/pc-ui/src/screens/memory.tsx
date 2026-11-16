@@ -5,6 +5,7 @@ import { useState } from "react";
 import { ApprovalCard } from "../components/approval-card.tsx";
 import { ErrorText, Page } from "../components/page.tsx";
 import { Button } from "../components/ui/button.tsx";
+import { ReadOnlyText } from "../components/read-only-text.tsx";
 import { botInfoHref } from "../use-route.ts";
 
 // The four memory files a bot loads, with its memory edits waiting for the owner.
@@ -36,26 +37,42 @@ export function MemoryScreen({ botId }: { botId: string }) {
   );
 }
 
+// A memory file shown as it reads, with Edit to change it. Saving or cancelling returns to reading.
 function FileEditor({ botId, file, label, saved, onSaved, onEdit }: { botId: string; file: MemoryFile; label: string; saved: boolean; onSaved: () => void; onEdit: () => void }) {
   const client = useBotsmanClient();
+  const [editing, setEditing] = useState(false);
   const [text, setText] = useState(file.content);
   const save = useAction(async () => {
     await client.saveMemory(botId, file.name, text);
     onSaved();
   });
   const over = text.length > file.limit;
+  const cancel = () => (setText(file.content), setEditing(false));
   return (
     <div className="flex flex-col gap-2">
-      <label className="flex flex-col gap-1.5 text-sm">
-        <span className="font-medium">{label}</span>
-        <textarea rows={14} className="rounded-lg border border-input bg-background px-3 py-2 font-mono text-xs outline-none focus:border-ring" value={text} onChange={(event) => (setText(event.target.value), onEdit())} />
-      </label>
+      <span className="text-sm font-medium">{label}</span>
+      {editing ? (
+        <textarea rows={14} aria-label={label} className="rounded-lg border border-input bg-background px-3 py-2 font-mono text-xs outline-none focus:border-ring" value={text} onChange={(event) => (setText(event.target.value), onEdit())} />
+      ) : (
+        <ReadOnlyText text={file.content} />
+      )}
       <p className={`text-xs ${over ? "text-destructive" : "text-muted-foreground"}`}>{characterCount(text.length, file.limit)}</p>
       <ErrorText>{save.error}</ErrorText>
-      {saved ? <p className="text-xs text-muted-foreground">Saved. Each bot gets the change with its next message.</p> : null}
-      <Button variant="primary" className="self-start" disabled={over || text === file.content || save.busy} onClick={() => void save.run()}>
-        Save
-      </Button>
+      {saved && !editing ? <p className="text-xs text-muted-foreground">Saved. Each bot gets the change with its next message.</p> : null}
+      <div className="flex gap-2">
+        {editing ? (
+          <>
+            <Button variant="primary" disabled={over || text === file.content || save.busy} onClick={() => void save.run()}>
+              Save
+            </Button>
+            <Button variant="text" onClick={cancel}>
+              Cancel
+            </Button>
+          </>
+        ) : (
+          <Button onClick={() => setEditing(true)}>Edit</Button>
+        )}
+      </div>
     </div>
   );
 }

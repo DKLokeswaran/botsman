@@ -4,6 +4,7 @@ import type { Note } from "@botsman/protocol";
 import { useEffect, useState } from "react";
 import { ErrorText, Page } from "../components/page.tsx";
 import { Button } from "../components/ui/button.tsx";
+import { ReadOnlyText } from "../components/read-only-text.tsx";
 import { Field } from "../components/ui/field.tsx";
 import { botInfoHref, noteHref, notesHref } from "../use-route.ts";
 
@@ -52,20 +53,49 @@ export function NoteScreen({ botId, name }: { botId: string; name: string }) {
   );
 }
 
+// A note shown as it reads, with Edit and Delete. A new note opens ready to write.
 function NoteEditor({ botId, name, content, isNew }: { botId: string; name: string; content: string; isNew: boolean }) {
   const client = useBotsmanClient();
+  const [editing, setEditing] = useState(isNew);
+  const [saved, setSaved] = useState(content);
   const [fileName, setFileName] = useState(name);
   const [text, setText] = useState(content);
   const [asking, setAsking] = useState(false);
   const problem = noteNameProblem(fileName);
   const save = useAction(async () => {
     await client.saveNote(botId, fileName, text, isNew ? undefined : name);
+    setSaved(text);
+    setEditing(false);
     window.location.hash = noteHref(botId, fileName);
   });
   const remove = useAction(async () => {
     await client.deleteNote(botId, name);
     window.location.hash = notesHref(botId);
   });
+  if (!editing)
+    return (
+      <div className="flex flex-col gap-3">
+        <ReadOnlyText text={saved} />
+        <ErrorText>{remove.error}</ErrorText>
+        <div className="flex flex-wrap gap-2">
+          <Button onClick={() => setEditing(true)}>Edit</Button>
+          {asking ? (
+            <>
+              <Button variant="danger" disabled={remove.busy} onClick={() => void remove.run()}>
+                Delete this note
+              </Button>
+              <Button variant="text" onClick={() => setAsking(false)}>
+                Cancel
+              </Button>
+            </>
+          ) : (
+            <Button variant="danger" onClick={() => setAsking(true)}>
+              Delete
+            </Button>
+          )}
+        </div>
+      </div>
+    );
   return (
     <div className="flex flex-col gap-3">
       <Field label="File name" spellCheck={false} value={fileName} onChange={(event) => setFileName(event.target.value)} />
@@ -73,23 +103,14 @@ function NoteEditor({ botId, name, content, isNew }: { botId: string; name: stri
         <span className="font-medium">Text</span>
         <textarea rows={16} className="rounded-lg border border-input bg-background px-3 py-2 font-mono text-xs outline-none focus:border-ring" value={text} onChange={(event) => setText(event.target.value)} />
       </label>
-      <ErrorText>{problem ?? save.error ?? remove.error}</ErrorText>
+      <ErrorText>{problem ?? save.error}</ErrorText>
       <div className="flex flex-wrap gap-2">
         <Button variant="primary" disabled={problem !== undefined || save.busy} onClick={() => void save.run()}>
           Save
         </Button>
-        {isNew ? null : asking ? (
-          <>
-            <Button variant="danger" disabled={remove.busy} onClick={() => void remove.run()}>
-              Delete this note
-            </Button>
-            <Button variant="text" onClick={() => setAsking(false)}>
-              Cancel
-            </Button>
-          </>
-        ) : (
-          <Button variant="danger" onClick={() => setAsking(true)}>
-            Delete
+        {isNew ? null : (
+          <Button variant="text" onClick={() => (setText(saved), setFileName(name), setEditing(false))}>
+            Cancel
           </Button>
         )}
       </div>
