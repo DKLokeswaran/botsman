@@ -1,4 +1,4 @@
-import { App, type Platform } from "@botsman/pc-ui";
+import { App, indexedDbCache, type Platform } from "@botsman/pc-ui";
 import "@botsman/pc-ui/styles.css";
 import { fetch as rustFetch } from "@tauri-apps/plugin-http";
 import { StrictMode } from "react";
@@ -19,6 +19,7 @@ const platform: Platform = {
   updater,
   backgroundAlerts,
   autostart,
+  cache: indexedDbCache(),
 };
 
 createRoot(document.getElementById("root")!).render(

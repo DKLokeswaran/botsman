@@ -1,8 +1,8 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { alertText, BackgroundAlerts, type BackgroundAlertsService, type ChatState, modelProblem, newNoteName, noteNameProblem, offeredSendModes, suggestedModel } from "../src/index.ts";
-import type { Alert } from "@botsman/protocol";
+import { alertText, BackgroundAlerts, BotsmanClient, type LocalCache, type SocketLike, type BackgroundAlertsService, type ChatState, modelProblem, newNoteName, noteNameProblem, offeredSendModes, suggestedModel } from "../src/index.ts";
+import type { Alert, Tokens } from "@botsman/protocol";
 import { scriptSwitches } from "@botsman/server/src/testing/script-model.ts";
-import { PASSWORD, type Rig, startRig, until } from "./real-server.ts";
+import { memoryTokenStore, PASSWORD, proxiedFetch, type Rig, startRig, until } from "./real-server.ts";
 
 let rig: Rig;
 let mainId: string;
@@ -347,6 +347,34 @@ describe("background alerts", () => {
     expect(enabled).toBe(false);
     await background.disconnect();
     expect(calls.at(-1)).toBe("stop");
+  });
+});
+
+describe("local cache", () => {
+  it("saves the server state and a chat on the device, then shows them before the next snapshot, and forgets them on sign-out", async () => {
+    const entries = new Map<string, string>();
+    const cache: LocalCache = { get: async (key) => entries.get(key), set: async (key, value) => void entries.set(key, value), clear: async () => entries.clear() };
+    const tokens = memoryTokenStore();
+    const login = await rig.client.session.request<Tokens>("POST", "/api/auth/login", { password: PASSWORD, deviceName: "Cached" });
+    await tokens.save(login);
+    const make = () => new BotsmanClient({ baseUrl: rig.server.baseUrl, fetch: proxiedFetch, createSocket: (url) => new WebSocket(url, { headers: { "x-forwarded-proto": "https" } } as unknown as string[]) as unknown as SocketLike, deviceName: "Cached", tokenStore: tokens, cache });
+
+    const first = make();
+    await first.session.restore();
+    const unwatch = first.chat(mainId).watch();
+    await until(first.chat(mainId).state, (state) => state.status === "ready");
+    await new Promise((resolve) => setTimeout(resolve, 1_300));
+    unwatch();
+    first.connection.stop();
+    expect([...entries.keys()].some((key) => key.endsWith("|server"))).toBe(true);
+    expect([...entries.keys()].some((key) => key.endsWith(`|chat:${mainId}`))).toBe(true);
+
+    const second = make();
+    const chat = second.chat(mainId);
+    await until(chat.state, (state) => state.status === "cached");
+    expect(chat.state.get().messages.length).toBeGreaterThan(0);
+    await second.session.signOut();
+    expect(entries.size).toBe(0);
   });
 });
 

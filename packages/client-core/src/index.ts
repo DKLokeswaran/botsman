@@ -19,3 +19,4 @@ export * from "./usage-view.ts";
 export * from "./settings-view.ts";
 export * from "./alerts-connection.ts";
 export * from "./background-alerts.ts";
+export * from "./local-cache.ts";

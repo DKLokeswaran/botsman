@@ -3,6 +3,7 @@ import type { Tokens } from "@botsman/protocol";
 import * as SecureStore from "expo-secure-store";
 import { BotsmanAlerts } from "../modules/botsman-alerts";
 import { backgroundAlerts } from "./background-alerts";
+import { localCache } from "./local-cache";
 import { updater } from "./updater";
 
 const TOKENS_KEY = "botsman.tokens";
@@ -33,4 +34,5 @@ export const environment: AppEnvironment = {
   savedServer,
   updater,
   backgroundAlerts,
+  cache: localCache,
 };

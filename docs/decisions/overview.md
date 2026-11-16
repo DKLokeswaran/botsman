@@ -149,6 +149,8 @@ Model providers list every provider with its status, and connect it with an API 
 
 Slash commands cover compact, clear, memory, notes, usage, and help, and `/skills` follows with M4. A message that is one word starting with `/` shows the matching commands, and sending an exact command runs it instead of sending it to the bot. Usage shows the last 14 days by day and by bot, with deleted bots added together. Settings holds the alert switches for the kinds that can happen so far, approvals and failures, the signed-in devices with a way to sign another one out, model providers, the app's update, and the server. The PC footer and the phone's bot list link to Usage and Settings.
 
+The local cache keeps the last server state and each opened chat's newest 50 messages on the device, under the server's address, so the bot list and a chat show at once at launch. They show as cached until the live snapshot replaces them, and live state such as a running reply is never cached. Writes wait a second after the last change. Signing out clears the cache.
+
 The server serves the dashboard from its own origin, so the dashboard needs no CORS rules. The server builds the dashboard's files during install and has no build step of its own.
 
 ### Dashboard sign-in

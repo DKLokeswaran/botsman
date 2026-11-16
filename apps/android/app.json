@@ -42,7 +42,8 @@
             "node_modules/@expo-google-fonts/fragment-mono/400Regular/FragmentMono_400Regular.ttf"
           ]
         }
-      ]
+      ],
+      "expo-sqlite"
     ],
     "experiments": {
       "typedRoutes": false

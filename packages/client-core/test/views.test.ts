@@ -1,6 +1,6 @@
 import type { Bot, DeviceSession, UsageReport } from "@botsman/protocol";
 import { describe, expect, it } from "vitest";
-import { backgroundLine, backgroundSteps, exactCommand, liveSessions, slashMatches, usageBots, usageDays } from "../src/index.ts";
+import { chatFromCache, chatToCache, emptyChat, emptyServerState, serverFromCache, serverToCache, backgroundLine, backgroundSteps, exactCommand, liveSessions, slashMatches, usageBots, usageDays } from "../src/index.ts";
 
 const zero = { inputTokens: 0, outputTokens: 0, cacheReadTokens: 0, cacheWriteTokens: 0, totalTokens: 0, cost: 0 };
 const cost = (value: number) => ({ ...zero, cost: value });
@@ -58,5 +58,23 @@ describe("background alerts checklist", () => {
     expect(backgroundLine(status, false)).toMatch(/^Off/);
     expect(backgroundLine(status, true)).toMatch(/^Connected/);
     expect(backgroundLine({ ...status, connected: false }, true)).toBe("Connecting…");
+  });
+});
+
+describe("local cache", () => {
+  it("shows the saved server state only while the live one is loading", () => {
+    const saved = serverToCache({ ...emptyServerState, status: "ready", bots: [{ id: "a", name: "Atlas" } as Bot] });
+    expect(serverFromCache(emptyServerState, saved)).toMatchObject({ status: "cached", bots: [{ id: "a" }] });
+    expect(serverFromCache({ ...emptyServerState, status: "ready" }, saved).status).toBe("ready");
+    expect(serverFromCache(emptyServerState, undefined)).toBe(emptyServerState);
+  });
+
+  it("keeps a chat's newest messages and says there are earlier ones", () => {
+    const messages = Array.from({ length: 60 }, (_, index) => ({ type: "user" as const, id: String(index), at: null, text: `m${index}` }));
+    const restored = chatFromCache(emptyChat, chatToCache({ ...emptyChat, status: "ready", messages }));
+    expect(restored.status).toBe("cached");
+    expect(restored.messages).toHaveLength(50);
+    expect(restored.messages[0]?.id).toBe("10");
+    expect(restored.hasEarlier).toBe(true);
   });
 });

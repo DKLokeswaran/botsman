@@ -36,6 +36,7 @@ import {
 import { ApiClient, type Fetch } from "./api-client.ts";
 import { ChatController } from "./chat-controller.ts";
 import { AlertsConnection } from "./alerts-connection.ts";
+import { CacheWriter, chatFromCache, chatToCache, type LocalCache, serverFromCache, serverToCache } from "./local-cache.ts";
 import { applyServerEvent, applyServerSnapshot, emptyServerState, type ServerState, withLogin } from "./server-state.ts";
 import { Session, type TokenStore } from "./session.ts";
 import { Store } from "./store.ts";
@@ -49,6 +50,7 @@ export type BotsmanClientOptions = {
   // Leave out on the web dashboard, whose session lives in cookies.
   tokenStore?: TokenStore;
   newRequestId?: () => string;
+  cache?: LocalCache;
 };
 
 // Everything an app needs from one Botsman server: the session, the live connection, and the state screens show.
@@ -61,12 +63,14 @@ export class BotsmanClient {
   readonly #chats = new Map<string, ChatController>();
   readonly #newRequestId: () => string;
   #stopServerStream: (() => void) | undefined;
+  readonly #cache: { store: LocalCache; writer: CacheWriter; prefix: string } | undefined;
 
   constructor(options: BotsmanClientOptions) {
     this.#api = new ApiClient({ baseUrl: options.baseUrl, fetch: options.fetch });
     this.session = new Session(options);
     this.#newRequestId = options.newRequestId ?? randomId;
     this.#createSocket = options.createSocket;
+    this.#cache = options.cache === undefined ? undefined : { store: options.cache, writer: new CacheWriter(options.cache), prefix: `${this.#api.baseUrl}|` };
     this.connection = new StreamConnection({
       url: `${this.#api.baseUrl.replace(/^http/, "ws")}/api/ws`,
       createSocket: options.createSocket,
@@ -93,6 +97,7 @@ export class BotsmanClient {
     const known = this.#chats.get(botId);
     if (known !== undefined) return known;
     const chat = new ChatController(botId, this.session, this.connection, this.#newRequestId);
+    this.#keepCached(`chat:${botId}`, chat.state, chatFromCache, chatToCache);
     this.#chats.set(botId, chat);
     return chat;
   }
@@ -226,9 +231,21 @@ export class BotsmanClient {
     this.#stopServerStream = undefined;
     this.connection.stop();
     this.server.set(emptyServerState);
+    this.#cache?.writer.cancelAll();
+    void this.#cache?.store.clear().catch(() => undefined);
+  }
+
+  // Fills a store from the device's cache while it is still loading, then saves it again after each change.
+  #keepCached<T extends { status: string }>(name: string, store: Store<T>, restore: (state: T, text: string | undefined) => T, save: (state: T) => string): void {
+    const cache = this.#cache;
+    if (cache === undefined) return;
+    const key = cache.prefix + name;
+    void cache.store.get(key).then((text) => store.update((state) => restore(state, text)), () => undefined);
+    store.subscribe(() => store.get().status === "ready" && cache.writer.saveLater(key, () => save(store.get())));
   }
 
   #goOnline(): void {
+    if (this.#stopServerStream === undefined) this.#keepCached("server", this.server, serverFromCache, serverToCache);
     this.#stopServerStream ??= this.connection.subscribe(SERVER_STREAM, (message) => this.#receive(message));
     this.connection.start();
   }

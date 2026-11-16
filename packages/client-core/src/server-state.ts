@@ -2,7 +2,8 @@ import type { AlertSettings, Approval, Bot, BotActivity, ProviderLogin, ServerEv
 
 // What the `server` stream keeps current: the bots, and what is waiting for the owner.
 export type ServerState = {
-  status: "loading" | "ready";
+  // `cached` shows what this device saved last time, until the live snapshot arrives.
+  status: "loading" | "cached" | "ready";
   bots: Bot[];
   approvals: Approval[];
   // Each bot's activity line, by bot id.

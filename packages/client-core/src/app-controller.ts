@@ -5,6 +5,7 @@ import type { TokenStore } from "./session.ts";
 import { Store } from "./store.ts";
 import type { SocketLike } from "./stream-connection.ts";
 import { BackgroundAlerts, type BackgroundAlertsService } from "./background-alerts.ts";
+import type { LocalCache } from "./local-cache.ts";
 import { type AppUpdater, UpdateChecker } from "./updates.ts";
 
 // What each app supplies from its platform. The web dashboard has a fixed server, the one that served it,
@@ -18,6 +19,7 @@ export type AppEnvironment = {
   savedServer?: { load(): Promise<string | undefined>; save(address: string): Promise<void>; clear(): Promise<void> };
   updater?: AppUpdater;
   backgroundAlerts?: BackgroundAlertsService;
+  cache?: LocalCache;
 };
 
 // Where the app is on its way to a working connection. Each step is one screen.
@@ -108,8 +110,8 @@ export class AppController {
   }
 
   #clientFor(address: string): BotsmanClient {
-    const { fetch, createSocket, deviceName, tokenStore } = this.#environment;
-    return new BotsmanClient({ baseUrl: address, fetch, createSocket, deviceName, ...(tokenStore === undefined ? {} : { tokenStore }) });
+    const { fetch, createSocket, deviceName, tokenStore, cache } = this.#environment;
+    return new BotsmanClient({ baseUrl: address, fetch, createSocket, deviceName, ...(tokenStore === undefined ? {} : { tokenStore }), ...(cache === undefined ? {} : { cache }) });
   }
 
   #choose(address: string, error: string | undefined): void {

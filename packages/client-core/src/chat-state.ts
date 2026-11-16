@@ -6,7 +6,8 @@ type SendMode = NonNullable<SendMessageRequest["mode"]>;
 export type PendingSend = { requestId: string; text: string; mode: SendMode; failed: string | undefined };
 
 export type ChatState = {
-  status: "loading" | "ready";
+  // `cached` shows the messages this device saved last time, until the live snapshot arrives.
+  status: "loading" | "cached" | "ready";
   messages: ChatMessage[];
   hasEarlier: boolean;
   live: LiveState;
