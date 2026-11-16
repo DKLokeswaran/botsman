@@ -1,5 +1,5 @@
-import { type AppController, type BotsmanClient, formatCountdown } from "@botsman/client-core";
-import { useBots, useConnectionStatus, useNeedsYou, useNow, useServerState } from "@botsman/client-core/react";
+import { type AppController, type BotsmanClient, botRowText, formatCountdown } from "@botsman/client-core";
+import { useBotActivity, useBots, useConnectionStatus, useNeedsYou, useNow, useServerState } from "@botsman/client-core/react";
 import type { Approval, Bot } from "@botsman/protocol";
 import { Avatar } from "../components/avatar.tsx";
 import { Button } from "../components/ui/button.tsx";
@@ -68,6 +68,7 @@ function NeedsYouRow({ approval, bot }: { approval: Approval; bot: Bot | undefin
 }
 
 function BotRow({ bot, open, needsYou }: { bot: Bot; open: boolean; needsYou: boolean }) {
+  const text = botRowText(bot.description, useBotActivity(bot.id), useNow(60_000));
   return (
     <a href={chatHref(bot.id)} aria-current={open ? "page" : undefined} className={`flex items-center gap-3 rounded-lg px-2 py-2 hover:bg-accent ${open ? "bg-accent" : ""}`}>
       <Avatar bot={bot} />
@@ -76,9 +77,17 @@ function BotRow({ bot, open, needsYou }: { bot: Bot; open: boolean; needsYou: bo
           <span className="truncate font-display text-sm font-bold uppercase">{bot.name}</span>
           {bot.isMain ? <span className="text-xs text-muted-foreground">Main</span> : null}
         </span>
-        <span className="block truncate text-sm text-muted-foreground">{bot.description}</span>
+        <span className="block truncate text-sm text-muted-foreground">{text.subtitle}</span>
       </span>
-      {needsYou ? <span className="text-xs font-semibold">Needs you</span> : null}
+      <span className="flex shrink-0 flex-col items-end gap-1">
+        <span className="text-xs text-muted-foreground">{text.time}</span>
+        {needsYou ? <span className="text-xs font-semibold">Needs you</span> : null}
+        {text.unread === "" ? null : (
+          <span aria-label={`${text.unread} unread`} className="min-w-5 rounded-full bg-primary px-1.5 text-center font-mono text-xs text-primary-foreground">
+            {text.unread}
+          </span>
+        )}
+      </span>
     </a>
   );
 }

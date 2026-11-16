@@ -1,5 +1,5 @@
-import { formatCountdown } from "@botsman/client-core";
-import { useBots, useBotsmanClient, useConnectionStatus, useNeedsYou, useNow, useServerState } from "@botsman/client-core/react";
+import { botRowText, formatCountdown } from "@botsman/client-core";
+import { useBotActivity, useBots, useBotsmanClient, useConnectionStatus, useNeedsYou, useNow, useServerState } from "@botsman/client-core/react";
 import type { Approval, Bot } from "@botsman/protocol";
 import { router } from "expo-router";
 import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
@@ -81,6 +81,7 @@ function NeedsYouRow({ approval, bot }: { approval: Approval; bot: Bot | undefin
 
 function BotRow({ bot, needsYou }: { bot: Bot; needsYou: boolean }) {
   const { colors } = useTheme();
+  const text = botRowText(bot.description, useBotActivity(bot.id), useNow(60_000));
   return (
     <Pressable accessibilityRole="button" onPress={() => openChat(bot.id)} android_ripple={{ color: colors.accent }} style={styles.row}>
       <Avatar bot={bot} size={44} />
@@ -92,10 +93,18 @@ function BotRow({ bot, needsYou }: { bot: Bot; needsYou: boolean }) {
           {bot.isMain ? <Text style={[styles.sub, { color: colors.mutedForeground }]}>Main</Text> : null}
         </View>
         <Text numberOfLines={1} style={[styles.rowTitle, { color: colors.mutedForeground }]}>
-          {bot.description}
+          {text.subtitle}
         </Text>
       </View>
-      {needsYou ? <Text style={[styles.needs, { color: colors.foreground }]}>Needs you</Text> : null}
+      <View style={styles.rowEnd}>
+        <Text style={[styles.sub, { color: colors.mutedForeground }]}>{text.time}</Text>
+        {needsYou ? <Text style={[styles.needs, { color: colors.foreground }]}>Needs you</Text> : null}
+        {text.unread === "" ? null : (
+          <Text accessibilityLabel={`${text.unread} unread`} style={[styles.badge, { backgroundColor: colors.primary, color: colors.primaryForeground }]}>
+            {text.unread}
+          </Text>
+        )}
+      </View>
     </Pressable>
   );
 }
@@ -113,6 +122,8 @@ const styles = StyleSheet.create({
   sub: { fontFamily: fontFamilies.body, fontSize: 12 },
   mono: { fontFamily: fontFamilies.mono, fontSize: 12 },
   needs: { fontFamily: fontFamilies.bodySemiBold, fontSize: 12 },
+  rowEnd: { alignItems: "flex-end", gap: space[1] },
+  badge: { fontFamily: fontFamilies.mono, fontSize: 12, minWidth: 20, textAlign: "center", paddingHorizontal: 6, borderRadius: 10, overflow: "hidden" },
   dot: { width: 6, height: 6, borderRadius: 3, marginHorizontal: space[1] },
   update: { paddingHorizontal: space[3], paddingBottom: space[2] },
   footer: { flexDirection: "row", alignItems: "center", gap: space[2], borderTopWidth: 1, padding: space[3] },

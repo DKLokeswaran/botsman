@@ -1,4 +1,4 @@
-import { chatStream, type ChatSettings, type ChatSnapshot, type StreamEvent } from "@botsman/protocol";
+import { type ChatMessage, chatStream, type ChatSettings, type ChatSnapshot, type StreamEvent } from "@botsman/protocol";
 import { toChatMessage, toLiveState, toTotals, type ViewDocs, type ViewEntry } from "./chat-view.ts";
 import type { StreamHub } from "./stream-hub.ts";
 
@@ -60,6 +60,11 @@ export class ChatFeed {
     this.#publish(botId, { type: "settings", settings });
   }
 
+  // Every message the feed holds for a chat, oldest first.
+  messages(botId: string): ChatMessage[] {
+    return (this.#chats.get(botId)?.entries ?? []).flatMap((entry) => toChatMessage(entry) ?? []);
+  }
+
   // The oldest transcript entry the feed holds for a chat, so a caller can ask the engine what came before it.
   firstEntryId(botId: string): number | undefined {
     return this.#chats.get(botId)?.entries[0]?.id;
@@ -68,8 +73,7 @@ export class ChatFeed {
   // `earlierInTranscript` says whether the transcript has messages from before the entries the feed holds.
   snapshot(botId: string, settings: ChatSettings, earlierInTranscript = false): ChatSnapshot {
     const chat = this.#chats.get(botId);
-    const entries = chat?.entries ?? [];
-    const all = entries.flatMap((entry) => toChatMessage(entry) ?? []);
+    const all = this.messages(botId);
     const messages = all.slice(-SNAPSHOT_MESSAGES);
     return {
       botId,

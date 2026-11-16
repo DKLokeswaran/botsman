@@ -1,4 +1,4 @@
-import type { Approval, Bot } from "@botsman/protocol";
+import type { Approval, Bot, BotActivity } from "@botsman/protocol";
 import { useEffect, useMemo, useSyncExternalStore } from "react";
 import type { ChatController } from "../chat-controller.ts";
 import { type ChatItem, chatItems } from "../chat-items.ts";
@@ -30,6 +30,11 @@ export function useServerState(): ServerState {
 
 export function useBots(): Bot[] {
   return useServerState().bots;
+}
+
+// A bot's line in the bot list, or undefined before the server has sent it.
+export function useBotActivity(botId: string): BotActivity | undefined {
+  return useServerState().activity[botId];
 }
 
 // What is waiting for the owner, oldest first.

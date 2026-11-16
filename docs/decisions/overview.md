@@ -101,8 +101,9 @@ Our own schema, in the `protocol` package, defines every HTTP body and WebSocket
 
 - **Live updates.** The WebSocket sends events with a per-conversation sequence number. A client signs in with its first message, since browsers can't set headers on a WebSocket.
 - **Reconnect.** The client sends the server's epoch and the last sequence it saw, and the server replies with what it missed or a fresh snapshot. The server keeps the last 1,000 events per stream in memory, and its epoch changes on every start, so a client returning after a restart gets a snapshot.
+- **Bot list activity.** The `server` stream carries each bot's last message time, a one-line preview of its newest message, and its count of unread replies. One read marker per bot lives in `server.db`, so every device shows the same count. A chat open on any screen moves the marker to its newest message, and the marker only moves forward. Bots that existed before markers were added start as read. The count covers the messages the chat currently holds, up to its last compaction.
 - **Alerts stream.** A second, small stream carries only alert events, for the background connections.
-- **Protocol version.** The package holds one whole number that goes up on a breaking change. The server reports the range it accepts, and an app outside that range stops with a screen that says which side to update. See [versions and releases](stack.md#versions-and-releases).
+- **Protocol version.** The package holds one whole number that goes up on a breaking change. The server reports the range it accepts, and an app outside that range stops with a screen that says which side to update. Adding a field or an event leaves the number alone: apps ignore what they don't know, and treat a field a newer server added as possibly missing. See [versions and releases](stack.md#versions-and-releases).
 
 Rust and Kotlin message types for the alerts stream are generated from the same JSON Schema.
 

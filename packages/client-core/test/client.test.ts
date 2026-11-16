@@ -56,6 +56,21 @@ describe("server state", () => {
   });
 });
 
+describe("bot list activity", () => {
+  it("counts replies the owner hasn't seen, and clears them once a screen shows the chat", async () => {
+    const bot = await rig.client.createBot({ name: "Courier", defaultModel: { provider: "script", modelId: "script-1" } });
+    await rig.client.session.request("POST", `/api/bots/${bot.id}/chat/messages`, { text: "ping", mode: "send", requestId: "activity-1" });
+    const unread = await until(rig.client.server, (state) => state.activity[bot.id]?.unread === 1);
+    expect(unread.activity[bot.id]).toMatchObject({ preview: "echo: ping", lastAt: expect.any(Number) });
+
+    const chat = rig.client.chat(bot.id);
+    const unwatch = chat.watch();
+    await until(rig.client.server, (state) => state.activity[bot.id]?.unread === 0);
+    unwatch();
+    await rig.client.deleteBot(bot.id);
+  });
+});
+
 describe("chat", () => {
   it("shows a sent message as pending, then the reply, and offers the modes that fit", async () => {
     const chat = rig.client.chat(mainId);

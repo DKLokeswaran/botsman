@@ -1,24 +1,28 @@
-import type { Approval, Bot, ServerEvent, ServerSnapshot } from "@botsman/protocol";
+import type { Approval, Bot, BotActivity, ServerEvent, ServerSnapshot } from "@botsman/protocol";
 
 // What the `server` stream keeps current: the bots, and what is waiting for the owner.
 export type ServerState = {
   status: "loading" | "ready";
   bots: Bot[];
   approvals: Approval[];
+  // Each bot's activity line, by bot id.
+  activity: Record<string, BotActivity>;
   // Goes up whenever a provider is connected or removed, so screens showing providers or models load them again.
   providersVersion: number;
 };
 
-export const emptyServerState: ServerState = { status: "loading", bots: [], approvals: [], providersVersion: 0 };
+export const emptyServerState: ServerState = { status: "loading", bots: [], approvals: [], activity: {}, providersVersion: 0 };
 
 export function applyServerSnapshot(state: ServerState, snapshot: ServerSnapshot): ServerState {
-  return { ...state, status: "ready", bots: sortBots(snapshot.bots), approvals: snapshot.approvals };
+  const activity = Object.fromEntries((snapshot.activity ?? []).map((line) => [line.botId, line]));
+  return { ...state, status: "ready", bots: sortBots(snapshot.bots), approvals: snapshot.approvals, activity };
 }
 
 export function applyServerEvent(state: ServerState, event: ServerEvent): ServerState {
   if (event.type === "bot") return { ...state, bots: sortBots([...state.bots.filter((bot) => bot.id !== event.bot.id), event.bot]) };
   if (event.type === "bot_deleted") return withoutBot(state, event.botId);
   if (event.type === "approval") return { ...state, approvals: withApproval(state.approvals, event.approval) };
+  if (event.type === "activity") return { ...state, activity: { ...state.activity, [event.activity.botId]: event.activity } };
   if (event.type === "providers_changed") return { ...state, providersVersion: state.providersVersion + 1 };
   return state;
 }
@@ -29,7 +33,8 @@ export function sortBots(bots: Bot[]): Bot[] {
 }
 
 function withoutBot(state: ServerState, botId: string): ServerState {
-  return { ...state, bots: state.bots.filter((bot) => bot.id !== botId), approvals: state.approvals.filter((approval) => approval.botId !== botId) };
+  const { [botId]: _removed, ...activity } = state.activity;
+  return { ...state, bots: state.bots.filter((bot) => bot.id !== botId), approvals: state.approvals.filter((approval) => approval.botId !== botId), activity };
 }
 
 // Only approvals still waiting are kept. An answered or expired one leaves the list.

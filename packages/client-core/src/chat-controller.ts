@@ -17,6 +17,7 @@ export class ChatController {
   #unsubscribe: (() => void) | undefined;
   #watchers = 0;
   #loadingEarlier = false;
+  #readUpTo = 0;
 
   constructor(botId: string, session: Session, connection: StreamConnection, newRequestId: () => string) {
     this.botId = botId;
@@ -29,6 +30,7 @@ export class ChatController {
   watch(): () => void {
     this.#watchers += 1;
     this.#unsubscribe ??= this.#connection.subscribe(chatStream(this.botId), (message) => this.#receive(message));
+    this.#markRead();
     return () => this.#unwatch();
   }
 
@@ -83,9 +85,23 @@ export class ChatController {
   }
 
   #receive(message: StreamMessage): void {
-    if (message.type === "snapshot") return this.state.update((state) => applyChatSnapshot(state, message.snapshot as ChatSnapshot));
+    if (message.type === "snapshot") {
+      this.state.update((state) => applyChatSnapshot(state, message.snapshot as ChatSnapshot));
+      return this.#markRead();
+    }
     const events = message.type === "catchup" ? message.events.map((item) => item.event) : [message.event];
     this.state.update((state) => events.reduce((next, event) => applyChatEvent(next, event as ChatEvent), state));
+    this.#markRead();
+  }
+
+  // While a screen shows the chat, moves the server's read marker to the newest message, so every device clears its unread count.
+  #markRead(): void {
+    const newest = newestTime(this.state.get());
+    if (this.#watchers === 0 || newest <= this.#readUpTo) return;
+    this.#readUpTo = newest;
+    this.#session.request<Ok>("POST", `/api/bots/${this.botId}/read`, { upTo: newest }).catch(() => {
+      this.#readUpTo = 0;
+    });
   }
 
   #unwatch(): void {
@@ -94,4 +110,8 @@ export class ChatController {
     this.#unsubscribe?.();
     this.#unsubscribe = undefined;
   }
+}
+
+function newestTime(state: ChatState): number {
+  return state.messages.reduce((newest, message) => ("at" in message && message.at !== null ? Math.max(newest, message.at) : newest), 0);
 }

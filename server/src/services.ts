@@ -4,6 +4,7 @@ import path from "node:path";
 import { type Alert, type Approval, type Bot, SERVER_STREAM, type StreamEvent } from "@botsman/protocol";
 import type { Provider } from "@earendil-works/pi-ai";
 import { AuthService } from "./auth/auth-service.ts";
+import { BotActivityTracker } from "./bots/bot-activity.ts";
 import { BotRegistry } from "./bots/bot-registry.ts";
 import { BotService } from "./bots/bot-service.ts";
 import { type Config, dataPaths } from "./config.ts";
@@ -56,6 +57,7 @@ export async function createServices(config: Config, options: ServiceOptions = {
   const auth = new AuthService(db, box.deriveKey("access-tokens"));
 
   const feed = new ChatFeed(hub, (botId) => approvalStore.pendingByCall(botId), (botId) => alert("failure", botId, botId));
+  const activity = new BotActivityTracker(db, (botId) => feed.messages(botId), (line) => publish({ type: "activity", activity: line }));
 
   const memoryEdits = new MemoryEdits(memoryFiles);
   const policy = new PermissionPolicy(approvalStore, (bot, toolName, args) => memoryEdits.describe(bot, toolName, args), (approval: Approval) => {
@@ -83,7 +85,10 @@ export async function createServices(config: Config, options: ServiceOptions = {
       editMemory: (bot, file, content) => memoryEdits.apply(bot, file, content),
     },
     memorySnapshot: (botId) => memoryFiles.snapshot(botId),
-    onView: (botId, view) => feed.update(botId, view),
+    onView: (botId, view) => {
+      feed.update(botId, view);
+      activity.refresh(botId);
+    },
     log,
     cacheLifetimeMs: options.cacheLifetimeMs,
   });
@@ -107,6 +112,7 @@ export async function createServices(config: Config, options: ServiceOptions = {
         policy.cancelAll(botId);
         await engine.close(botId);
         feed.forget(botId);
+        activity.forget(botId);
         publish({ type: "bot_deleted", botId });
       },
     },
@@ -128,7 +134,7 @@ export async function createServices(config: Config, options: ServiceOptions = {
     db.close();
   }
 
-  return { config, paths, db, hub, alerts, auth, registry, bots, memoryFiles, notes, approvalStore, policy, sandbox, catalog, logins, engine, feed, resumeBots, close };
+  return { config, paths, db, hub, alerts, auth, registry, bots, memoryFiles, notes, approvalStore, policy, sandbox, catalog, logins, engine, feed, activity, resumeBots, close };
 }
 
 // A stable id for this server, which some sign-ins send as the device id.

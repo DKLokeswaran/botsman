@@ -1,4 +1,4 @@
-import { type Bot, BotCreate, type BotList, BotUpdate, type FreeSpace, FreeSpaceQuery, IdParams, type Ok } from "@botsman/protocol";
+import { type Bot, BotCreate, type BotList, BotUpdate, type FreeSpace, FreeSpaceQuery, IdParams, MarkRead, type Ok } from "@botsman/protocol";
 import type { FastifyInstance } from "fastify";
 import type { Services } from "../services.ts";
 
@@ -21,6 +21,13 @@ export function registerBotRoutes(app: FastifyInstance, services: Services): voi
   // Marks the bot deleted. Its files stay on disk, and only the main bot can restore it.
   app.delete<{ Params: IdParams }>("/api/bots/:id", { schema: { params: IdParams } }, async (request): Promise<Ok> => {
     await bots.delete(request.params.id);
+    return { ok: true };
+  });
+
+  // Marks the bot's chat read up to a message time, for every device.
+  app.post<{ Params: IdParams; Body: MarkRead }>("/api/bots/:id/read", { schema: { params: IdParams, body: MarkRead } }, async (request): Promise<Ok> => {
+    bots.get(request.params.id);
+    services.activity.markRead(request.params.id, request.body.upTo);
     return { ok: true };
   });
 

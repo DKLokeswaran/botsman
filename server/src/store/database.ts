@@ -87,6 +87,11 @@ const MIGRATIONS: readonly string[] = [
   );
   CREATE VIRTUAL TABLE note_index USING fts5 (bot_id UNINDEXED, name UNINDEXED, content, tokenize = 'porter unicode61');
   `,
+  // Read markers for the bot list's unread counts. Chats that exist already start as read.
+  `
+  CREATE TABLE read_markers (bot_id TEXT PRIMARY KEY, read_at INTEGER NOT NULL);
+  INSERT INTO read_markers (bot_id, read_at) SELECT id, CAST(unixepoch('subsec') * 1000 AS INTEGER) FROM bots;
+  `,
 ];
 
 // Opens server.db and brings its schema up to date.

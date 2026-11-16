@@ -1,4 +1,4 @@
-import type { Bot, ChatSettings, Usage } from "@botsman/protocol";
+import type { Bot, BotActivity, ChatSettings, Usage } from "@botsman/protocol";
 
 // Time left until a moment, as `47:10`, or `1:02:05` past an hour. Never below zero.
 export function formatCountdown(until: number, now: number): string {
@@ -44,6 +44,21 @@ export function formatMessageTime(at: number, now: number): string {
   if (days <= 0) return new Date(at).toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" });
   if (days === 1) return "Yesterday";
   return new Date(at).toLocaleDateString(undefined, { day: "numeric", month: "short" });
+}
+
+// What a bot list row shows: the newest message or else the bot's purpose, when the chat last moved, and the unread badge.
+export function botRowText(description: string, activity: BotActivity | undefined, now: number): { subtitle: string; time: string; unread: string } {
+  return {
+    subtitle: activity?.preview || description,
+    time: activity?.lastAt == null ? "" : formatMessageTime(activity.lastAt, now),
+    unread: formatUnread(activity?.unread ?? 0),
+  };
+}
+
+// An unread count as a badge shows it, or empty when nothing is unread.
+export function formatUnread(count: number): string {
+  if (count <= 0) return "";
+  return count > 99 ? "99+" : String(count);
 }
 
 // Midnight of a moment's day, in local time, shifted so whole days divide evenly.
