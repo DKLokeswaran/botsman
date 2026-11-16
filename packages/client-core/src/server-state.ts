@@ -34,9 +34,11 @@ export function applyServerEvent(state: ServerState, event: ServerEvent): Server
   return state;
 }
 
-// The main bot stays first, then the rest by name.
-export function sortBots(bots: Bot[]): Bot[] {
-  return [...bots].sort((a, b) => Number(b.isMain) - Number(a.isMain) || a.name.localeCompare(b.name));
+// The main bot stays first, then the rest by their latest activity, newest first. Bots with no messages yet come
+// after, newest bot first.
+export function sortBots(bots: Bot[], activity: Record<string, BotActivity> = {}): Bot[] {
+  const latest = (bot: Bot) => activity[bot.id]?.lastAt ?? 0;
+  return [...bots].sort((a, b) => Number(b.isMain) - Number(a.isMain) || latest(b) - latest(a) || b.createdAt - a.createdAt);
 }
 
 function withoutBot(state: ServerState, botId: string): ServerState {

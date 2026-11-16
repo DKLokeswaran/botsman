@@ -40,16 +40,19 @@ test("an older page goes in front, without repeating a message already shown", (
   expect(state.hasEarlier).toBe(false);
 });
 
-test("the main bot sorts first, then the rest by name", () => {
-  expect(sortBots([bot("1", "Nightwatch"), bot("2", "Junior", true), bot("3", "Atlas")]).map((each) => each.name)).toEqual(["Junior", "Atlas", "Nightwatch"]);
-});
-
 test("only approvals still waiting are listed, oldest first", () => {
   let state = applyServerEvent(emptyServerState, { type: "approval", approval: approval("b", "pending", 2) });
   state = applyServerEvent(state, { type: "approval", approval: approval("a", "pending", 1) });
   expect(state.approvals.map((each) => each.id)).toEqual(["a", "b"]);
   state = applyServerEvent(state, { type: "approval", approval: approval("a", "allowed", 1) });
   expect(state.approvals.map((each) => each.id)).toEqual(["b"]);
+});
+
+test("lists the main bot first, then the most recently active, then bots with no messages, newest first", () => {
+  const made = (id: string, name: string, createdAt: number, isMain = false) => ({ id, name, isMain, createdAt }) as Bot;
+  const bots = [made("a", "Atlas", 1), made("m", "Main", 0, true), made("z", "Zed", 2), made("n", "New", 5)];
+  const activity = { a: { botId: "a", lastAt: 100, preview: "", unread: 0 }, z: { botId: "z", lastAt: 300, preview: "", unread: 0 } };
+  expect(sortBots(bots, activity).map((bot) => bot.id)).toEqual(["m", "z", "a", "n"]);
 });
 
 test("deleting a bot removes it and its approvals", () => {

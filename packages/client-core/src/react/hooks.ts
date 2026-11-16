@@ -4,7 +4,7 @@ import type { ChatController } from "../chat-controller.ts";
 import { type ChatItem, chatItems } from "../chat-items.ts";
 import type { ChatState } from "../chat-state.ts";
 import { offeredSendModes, type SendMode } from "../send-rule.ts";
-import type { ServerState } from "../server-state.ts";
+import { type ServerState, sortBots } from "../server-state.ts";
 import type { SessionState } from "../session.ts";
 import type { Store } from "../store.ts";
 import type { ConnectionStatus } from "../stream-connection.ts";
@@ -28,8 +28,10 @@ export function useServerState(): ServerState {
   return useStore(useBotsmanClient().server);
 }
 
+// The bots in list order: the main bot, then the most recently active.
 export function useBots(): Bot[] {
-  return useServerState().bots;
+  const { bots, activity } = useServerState();
+  return useMemo(() => sortBots(bots, activity), [bots, activity]);
 }
 
 // A bot's line in the bot list, or undefined before the server has sent it.
