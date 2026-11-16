@@ -145,6 +145,8 @@ Bot faces are one of eight built-in line marks, kept as path data in the `tokens
 
 Bot settings offers approval waits of 15 minutes, 1 hour, 8 hours, 1 day, and 7 days. The server accepts one minute to seven days, so "until answered" is not offered, and a wait set to another value shows as its own choice. The Smart mode's note says it currently runs like Off. The connections and skills sections stay hidden until M4.
 
+Model providers list every provider with its status, and connect it with an API key or the server-run sign-in. A sign-in's steps arrive on the `server` stream. The app keeps the first reply to starting one and takes everything after from the stream, since the stream can be ahead of an HTTP reply. A sign-in link opens in the system browser. A chat whose model is missing, or whose provider isn't connected, shows why above the message box with a link to the providers. The model and reasoning picker opens from the chat header and changes either the open chat or the bot's default. A model without reasoning offers only Off.
+
 The server serves the dashboard from its own origin, so the dashboard needs no CORS rules. The server builds the dashboard's files during install and has no build step of its own.
 
 ### Dashboard sign-in

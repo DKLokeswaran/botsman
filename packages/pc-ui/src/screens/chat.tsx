@@ -1,9 +1,10 @@
-import { chatSubtitle } from "@botsman/client-core";
-import { useBot, useChat, useConnectionStatus } from "@botsman/client-core/react";
-import { useEffect, useRef } from "react";
+import { chatSubtitle, modelProblem } from "@botsman/client-core";
+import { useBot, useChat, useConnectionStatus, useModels } from "@botsman/client-core/react";
+import { useEffect, useRef, useState } from "react";
 import { Avatar } from "../components/avatar.tsx";
 import { ChatItemView } from "../components/chat-items.tsx";
 import { Composer } from "../components/composer.tsx";
+import { ModelPicker } from "../components/model-picker.tsx";
 import { Button } from "../components/ui/button.tsx";
 import { botInfoHref } from "../use-route.ts";
 
@@ -13,19 +14,27 @@ export function ChatScreen({ botId }: { botId: string }) {
   const { chat, state, items, sendModes } = useChat(botId);
   const reconnecting = useConnectionStatus() === "reconnecting";
   const scroller = useStickToBottom(items);
+  const [picking, setPicking] = useState(false);
+  const { models, loading } = useModels();
+  const problem = loading || state.status === "loading" ? undefined : modelProblem(models, state.settings.model);
 
   if (bot === undefined) return <p className="p-6 text-muted-foreground">This bot no longer exists.</p>;
   const busy = state.live.running || state.live.compacting;
   return (
     <section className="flex h-full min-w-0 flex-1 flex-col">
-      <header className="flex items-center gap-3 border-b border-border px-4 py-3">
-        <a href={botInfoHref(bot.id)} aria-label={`${bot.name} info`} className="flex min-w-0 items-center gap-3 rounded-lg hover:opacity-80">
+      <header className="relative flex items-center gap-3 border-b border-border px-4 py-3">
+        <a href={botInfoHref(bot.id)} aria-label={`${bot.name} info`} className="rounded-lg hover:opacity-80">
           <Avatar bot={bot} />
-          <div className="min-w-0">
-            <h1 className="truncate font-display text-base font-bold uppercase">{bot.name}</h1>
-            <p className="truncate text-xs text-muted-foreground">{chatSubtitle(state.settings, state.totals.usage.cost)}</p>
-          </div>
         </a>
+        <div className="min-w-0">
+          <a href={botInfoHref(bot.id)} className="block truncate font-display text-base font-bold uppercase hover:opacity-80">
+            {bot.name}
+          </a>
+          <button type="button" aria-expanded={picking} onClick={() => setPicking(!picking)} className="truncate text-xs text-muted-foreground hover:text-foreground">
+            {chatSubtitle(state.settings, state.totals.usage.cost)} ▾
+          </button>
+        </div>
+        {picking ? <ModelPicker chat={chat} settings={state.settings} bot={bot} onClose={() => setPicking(false)} /> : null}
       </header>
       {reconnecting ? (
         <p role="status" className="border-b border-border bg-card px-4 py-1.5 text-center text-xs text-primary">
@@ -46,7 +55,15 @@ export function ChatScreen({ botId }: { botId: string }) {
           {state.live.compacting ? <p className="text-center text-xs text-muted-foreground">Compacting the chat…</p> : null}
         </div>
       </div>
-      <div className="mx-auto w-full max-w-[var(--reading-width)] px-4 pb-4">
+      <div className="mx-auto flex w-full max-w-[var(--reading-width)] flex-col gap-2 px-4 pb-4">
+        {problem === undefined ? null : (
+          <p role="status" className="flex items-center justify-between gap-3 rounded-lg border border-primary px-3 py-2 text-sm">
+            <span>{problem}</span>
+            <a href="#/providers" className="shrink-0 font-semibold text-primary underline">
+              Model providers
+            </a>
+          </p>
+        )}
         <Composer chat={chat} botName={bot.name} sendModes={sendModes} busy={busy} />
       </div>
     </section>

@@ -11,6 +11,7 @@ import { ChatScreen } from "./chat.tsx";
 import { MemoryScreen } from "./memory.tsx";
 import { NewBotScreen } from "./new-bot.tsx";
 import { NoteScreen, NotesScreen } from "./notes.tsx";
+import { ProvidersScreen } from "./providers.tsx";
 
 // The main window: the bot list beside the open chat. Home is the main bot's chat.
 export function Shell({ app, client }: { app: AppController; client: BotsmanClient }) {
@@ -28,6 +29,7 @@ export function Shell({ app, client }: { app: AppController; client: BotsmanClie
 // The page beside the bot list. Home is the main bot's chat.
 function MainPane({ route, loading, botId }: { route: Route; loading: boolean; botId: string | undefined }) {
   if (route.name === "new-bot") return <NewBotScreen />;
+  if (route.name === "providers") return <ProvidersScreen />;
   if (loading || botId === undefined) return <p className="p-6 text-muted-foreground">Loading…</p>;
   if (route.name === "bot") return <BotInfoScreen key={botId} botId={botId} />;
   if (route.name === "bot-settings") return <BotSettingsScreen key={botId} botId={botId} />;
@@ -120,6 +122,9 @@ function SidebarFooter({ app, client }: { app: AppController; client: BotsmanCli
   return (
     <footer className="flex flex-col gap-2 border-t border-border p-3">
       <UpdateNotice updates={app.updates} />
+      <a href="#/providers" className="rounded-lg px-2 py-1.5 text-sm font-semibold hover:bg-accent">
+        Model providers
+      </a>
       <p className="truncate text-xs text-muted-foreground" role="status">
         {CONNECTION_LABELS[status]} {status === "online" || status === "reconnecting" ? host : ""}
       </p>

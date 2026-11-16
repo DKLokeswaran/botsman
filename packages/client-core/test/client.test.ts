@@ -1,5 +1,5 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { type ChatState, newNoteName, noteNameProblem, offeredSendModes, suggestedModel } from "../src/index.ts";
+import { type ChatState, modelProblem, newNoteName, noteNameProblem, offeredSendModes, suggestedModel } from "../src/index.ts";
 import { scriptSwitches } from "@botsman/server/src/testing/script-model.ts";
 import { PASSWORD, type Rig, startRig, until } from "./real-server.ts";
 
@@ -69,6 +69,14 @@ describe("bot list activity", () => {
     await until(rig.client.server, (state) => state.activity[bot.id]?.unread === 0);
     unwatch();
     await rig.client.deleteBot(bot.id);
+  });
+});
+
+describe("model providers", () => {
+  it("lists providers with the connected one marked, and its models", async () => {
+    const providers = await rig.client.providers();
+    expect(providers.find((provider) => provider.id === "script")).toMatchObject({ connected: true, connectedWith: "api_key" });
+    expect(modelProblem(await rig.client.models(), { provider: "script", modelId: "script-1" })).toBeUndefined();
   });
 });
 

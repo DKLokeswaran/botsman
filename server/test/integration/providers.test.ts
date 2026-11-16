@@ -50,4 +50,16 @@ describe("model providers", () => {
     const response = await server.client.raw("POST", "/api/providers/opencode-go/login");
     expect(response.status).toBe(400);
   });
+
+  // GitHub Copilot asks for an Enterprise domain before it contacts anything, so this stays offline.
+  it("says a cancelled sign-in is cancelled in the answer to the cancel", async () => {
+    type Login = { id: string; status: string; pendingPrompt: string | null };
+    const started = await server.client.request<Login>("POST", "/api/providers/github-copilot/login");
+    const deadline = Date.now() + 5_000;
+    while ((await server.client.request<Login>("GET", `/api/provider-logins/${started.id}`)).pendingPrompt === null && Date.now() < deadline) await new Promise((resolve) => setTimeout(resolve, 20));
+    const cancelled = await server.client.request<Login>("POST", `/api/provider-logins/${started.id}/cancel`);
+    expect(cancelled).toMatchObject({ status: "cancelled", pendingPrompt: null });
+    await new Promise((resolve) => setTimeout(resolve, 100));
+    expect((await server.client.request<Login>("GET", `/api/provider-logins/${started.id}`)).status).toBe("cancelled");
+  });
 });

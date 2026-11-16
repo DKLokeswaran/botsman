@@ -1,5 +1,5 @@
-import { type ChatItem, chatSubtitle } from "@botsman/client-core";
-import { useBot, useChat, useConnectionStatus } from "@botsman/client-core/react";
+import { type ChatItem, chatSubtitle, modelProblem } from "@botsman/client-core";
+import { useBot, useChat, useConnectionStatus, useModels } from "@botsman/client-core/react";
 import { LegendList } from "@legendapp/list/react-native";
 import { router, useLocalSearchParams } from "expo-router";
 import { Pressable, StyleSheet, Text, View } from "react-native";
@@ -18,6 +18,8 @@ export default function ChatScreen() {
   const bot = useBot(botId);
   const { chat, state, items, sendModes } = useChat(botId);
   const reconnecting = useConnectionStatus() === "reconnecting";
+  const { models, loading } = useModels();
+  const problem = loading || state.status === "loading" ? undefined : modelProblem(models, state.settings.model);
 
   if (bot === undefined) return <Text style={[styles.missing, { color: colors.mutedForeground }]}>This bot no longer exists.</Text>;
   const busy = state.live.running || state.live.compacting;
@@ -34,9 +36,11 @@ export default function ChatScreen() {
               <Text numberOfLines={1} style={[styles.name, { color: colors.foreground }]}>
                 {bot.name.toUpperCase()}
               </Text>
-              <Text numberOfLines={1} style={[styles.sub, { color: colors.mutedForeground }]}>
-                {chatSubtitle(state.settings, state.totals.usage.cost)}
-              </Text>
+              <Pressable accessibilityRole="button" accessibilityLabel="Model and reasoning" onPress={() => router.push({ pathname: "/model/[botId]", params: { botId: bot.id } })} hitSlop={8}>
+                <Text numberOfLines={1} style={[styles.sub, { color: colors.mutedForeground }]}>
+                  {chatSubtitle(state.settings, state.totals.usage.cost)} ▾
+                </Text>
+              </Pressable>
             </View>
           </Pressable>
         </View>
@@ -60,6 +64,12 @@ export default function ChatScreen() {
           ListHeaderComponent={state.hasEarlier ? <Button label="Show earlier messages" variant="text" onPress={() => void chat.loadEarlier()} /> : null}
           ListEmptyComponent={<Text style={[styles.empty, { color: colors.mutedForeground }]}>{state.status === "loading" ? "Loading…" : `Say hello to ${bot.name}.`}</Text>}
         />
+        {problem === undefined ? null : (
+          <Pressable accessibilityRole="button" onPress={() => router.push("/providers")} style={[styles.problem, { borderColor: colors.primary }]}>
+            <Text style={[styles.sub, { color: colors.foreground }]}>{problem}</Text>
+            <Text style={[styles.sub, { color: colors.primary }]}>Model providers ›</Text>
+          </Pressable>
+        )}
         <View style={styles.composer}>
           <Composer chat={chat} botName={bot.name} sendModes={sendModes} busy={busy} />
         </View>
@@ -71,6 +81,7 @@ export default function ChatScreen() {
 const styles = StyleSheet.create({
   screen: { flex: 1 },
   header: { flexDirection: "row", alignItems: "center", gap: space[3], paddingHorizontal: space[3], paddingVertical: space[2], borderBottomWidth: 1 },
+  problem: { marginHorizontal: space[3], marginBottom: space[2], borderWidth: 1, borderRadius: 4, padding: space[3], gap: space[1] },
   headerLink: { flex: 1, flexDirection: "row", alignItems: "center", gap: space[3], minWidth: 0 },
   headerText: { flex: 1, minWidth: 0 },
   back: { fontSize: 30, lineHeight: 32, paddingHorizontal: space[1] },

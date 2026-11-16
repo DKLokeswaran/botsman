@@ -21,6 +21,9 @@ import {
   type Ok,
   PROTOCOL_VERSION,
   type ProtocolFit,
+  type Provider,
+  type ProviderList,
+  type ProviderLogin,
   protocolFit,
   SERVER_STREAM,
   type ServerEvent,
@@ -29,7 +32,7 @@ import {
 } from "@botsman/protocol";
 import { ApiClient, type Fetch } from "./api-client.ts";
 import { ChatController } from "./chat-controller.ts";
-import { applyServerEvent, applyServerSnapshot, emptyServerState, type ServerState } from "./server-state.ts";
+import { applyServerEvent, applyServerSnapshot, emptyServerState, type ServerState, withLogin } from "./server-state.ts";
 import { Session, type TokenStore } from "./session.ts";
 import { Store } from "./store.ts";
 import { type SocketLike, StreamConnection, type StreamMessage } from "./stream-connection.ts";
@@ -134,6 +137,38 @@ export class BotsmanClient {
 
   deleteNote(botId: string, name: string): Promise<Ok> {
     return this.session.request("DELETE", `/api/bots/${botId}/notes/${encodeURIComponent(name)}`);
+  }
+
+  async providers(): Promise<Provider[]> {
+    return (await this.session.request<ProviderList>("GET", "/api/providers")).providers;
+  }
+
+  saveApiKey(providerId: string, key: string): Promise<Ok> {
+    return this.session.request("PUT", `/api/providers/${providerId}/key`, { key });
+  }
+
+  disconnectProvider(providerId: string): Promise<Ok> {
+    return this.session.request("DELETE", `/api/providers/${providerId}`);
+  }
+
+  // Starts a browser sign-in on the server. Its steps then arrive on the server stream.
+  async startLogin(providerId: string): Promise<ProviderLogin> {
+    return this.#keepLogin(await this.session.request<ProviderLogin>("POST", `/api/providers/${providerId}/login`));
+  }
+
+  // Later steps arrive on the server stream, which can be ahead of these answers, so they don't replace what it sent.
+  answerLogin(loginId: string, promptId: string, value: string): Promise<ProviderLogin> {
+    return this.session.request<ProviderLogin>("POST", `/api/provider-logins/${loginId}/answer`, { promptId, value });
+  }
+
+  cancelLogin(loginId: string): Promise<ProviderLogin> {
+    return this.session.request<ProviderLogin>("POST", `/api/provider-logins/${loginId}/cancel`);
+  }
+
+  // Keeps a sign-in's first copy, unless the stream already brought a newer one.
+  #keepLogin(login: ProviderLogin): ProviderLogin {
+    this.server.update((state) => (state.logins[login.id] === undefined ? withLogin(state, login) : state));
+    return login;
   }
 
   // Models from every connected provider.

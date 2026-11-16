@@ -42,6 +42,9 @@ export default function BotListScreen() {
       <View style={styles.update}>
         <UpdateNotice updates={app.updates} />
       </View>
+      <Pressable accessibilityRole="button" onPress={() => router.push("/providers")} style={styles.newBot}>
+        <Text style={[styles.needs, { color: colors.foreground }]}>Model providers</Text>
+      </Pressable>
       <View style={[styles.footer, { borderTopColor: colors.border }]}>
         <Text accessibilityRole="text" style={[styles.status, { color: colors.mutedForeground }]}>
           {CONNECTION_LABELS[connection]}
