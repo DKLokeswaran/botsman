@@ -88,6 +88,17 @@ describe("chat", () => {
     unwatch();
   });
 
+  it("follows the bot's default model while the chat has none of its own", async () => {
+    const bot = await rig.client.createBot({ name: "Follower" });
+    const chat = rig.client.chat(bot.id);
+    const unwatch = chat.watch();
+    await until(chat.state, (state) => state.status === "ready");
+    expect(chat.state.get().settings.model).toBeNull();
+    await rig.client.updateBot(bot.id, { defaultModel: { provider: "script", modelId: "script-1" } });
+    await until(chat.state, (state) => state.settings.model?.modelId === "script-1");
+    unwatch();
+  });
+
   it("marks a send that fails, and sends it again on retry", async () => {
     const bot = await rig.client.createBot({ name: "Modelless" });
     const chat = rig.client.chat(bot.id);

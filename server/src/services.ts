@@ -98,6 +98,8 @@ export async function createServices(config: Config, options: ServiceOptions = {
     lifecycle: {
       changed: async (bot: Bot, previous: Bot | undefined) => {
         publish({ type: "bot", bot });
+        // A chat with no model of its own follows the bot's default, so open chats hear about the change.
+        if (previous !== undefined) feed.settingsChanged(bot.id, registry.chatSettings(bot));
         if (previous !== undefined && previous.network !== bot.network) sandbox.stop(bot.id);
         if (sandbox.status.ok) await engine.configure(bot);
       },
