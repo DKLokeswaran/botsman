@@ -57,6 +57,21 @@ export class ChatController {
     await this.#session.request<Ok>("POST", `/api/bots/${this.botId}/chat/stop`);
   }
 
+  // Gives the bot a turn to save, then compacts the chat. The live state shows it compacting.
+  async compact(): Promise<void> {
+    await this.#session.request<Ok>("POST", `/api/bots/${this.botId}/chat/compact`);
+  }
+
+  // Starts a new context. Earlier messages stay visible above the notice.
+  async clear(): Promise<void> {
+    await this.#session.request<Ok>("POST", `/api/bots/${this.botId}/chat/clear`);
+  }
+
+  // Asks the model again after a reply failed.
+  async retryReply(): Promise<void> {
+    await this.#session.request<Ok>("POST", `/api/bots/${this.botId}/chat/retry`);
+  }
+
   async changeSettings(change: ChatSettingsUpdate): Promise<void> {
     const settings = await this.#session.request<ChatSettings>("PATCH", `/api/bots/${this.botId}/chat/settings`, change);
     this.state.update((state) => ({ ...state, settings }));

@@ -11,7 +11,7 @@ import {
   type SendMessageResponse,
 } from "@botsman/protocol";
 import type { FastifyInstance } from "fastify";
-import { ApiError, badRequest } from "../errors.ts";
+import { ApiError, badRequest, conflict } from "../errors.ts";
 import { chatSnapshot } from "./chat-snapshot.ts";
 import { toChatMessage } from "../events/chat-view.ts";
 import type { Services } from "../services.ts";
@@ -43,6 +43,28 @@ export function registerChatRoutes(app: FastifyInstance, services: Services): vo
   // Stops the reply, withdraws queued messages, and ends every process the bot started.
   app.post<{ Params: IdParams }>("/api/bots/:id/chat/stop", opts, async (request): Promise<Ok> => {
     await engine.stop(runnableBot(services, request.params.id));
+    return { ok: true };
+  });
+
+  // Gives the bot its save turn, then compacts the chat. Progress shows in the chat's live state.
+  app.post<{ Params: IdParams }>("/api/bots/:id/chat/compact", opts, async (request): Promise<Ok> => {
+    const bot = runnableBot(services, request.params.id);
+    await assertModelConnected(services, bot);
+    if (!(await engine.compact(bot))) throw conflict("This chat is already being compacted");
+    return { ok: true };
+  });
+
+  // Starts a new context. Earlier messages stay in the transcript, and memory and notes are kept.
+  app.post<{ Params: IdParams }>("/api/bots/:id/chat/clear", opts, async (request): Promise<Ok> => {
+    await engine.clear(runnableBot(services, request.params.id));
+    return { ok: true };
+  });
+
+  // Asks the model again after a reply failed.
+  app.post<{ Params: IdParams }>("/api/bots/:id/chat/retry", opts, async (request): Promise<Ok> => {
+    const bot = runnableBot(services, request.params.id);
+    await assertModelConnected(services, bot);
+    if (!(await engine.retry(bot))) throw conflict("The bot is still replying");
     return { ok: true };
   });
 

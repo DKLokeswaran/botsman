@@ -1,5 +1,6 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { type ChatState, offeredSendModes } from "../src/index.ts";
+import { scriptSwitches } from "@botsman/server/src/testing/script-model.ts";
 import { PASSWORD, type Rig, startRig, until } from "./real-server.ts";
 
 let rig: Rig;
@@ -66,6 +67,57 @@ describe("bot list activity", () => {
     const chat = rig.client.chat(bot.id);
     const unwatch = chat.watch();
     await until(rig.client.server, (state) => state.activity[bot.id]?.unread === 0);
+    unwatch();
+    await rig.client.deleteBot(bot.id);
+  });
+});
+
+describe("chat actions", () => {
+  const scriptModel = { provider: "script", modelId: "script-1" };
+
+  it("clears the context, keeping earlier messages above a notice", async () => {
+    const bot = await rig.client.createBot({ name: "Slate", defaultModel: scriptModel });
+    const chat = rig.client.chat(bot.id);
+    const unwatch = chat.watch();
+    await chat.send("first");
+    await until(chat.state, replied("echo: first"));
+    await chat.clear();
+    const state = await until(chat.state, (current) => current.messages.some((message) => message.type === "notice" && message.kind === "reset"));
+    expect(state.messages.some((message) => message.type === "user" && message.text === "first")).toBe(true);
+    unwatch();
+    await rig.client.deleteBot(bot.id);
+  });
+
+  it("gives the bot its save turn, then compacts", async () => {
+    const bot = await rig.client.createBot({ name: "Press", defaultModel: scriptModel });
+    const chat = rig.client.chat(bot.id);
+    const unwatch = chat.watch();
+    // Long messages, so older ones can be summarized while recent ones stay verbatim.
+    for (let index = 0; index < 4; index++) {
+      await chat.send(`part${index} ${"lorem ipsum ".repeat(2700)}`);
+      await until(chat.state, replied(`echo: part${index}`));
+    }
+    await chat.compact();
+    await until(chat.state, (state) => state.messages.some((message) => message.type === "notice" && message.kind === "pre_compaction_save"));
+    await until(chat.state, (state) => state.messages.some((message) => message.type === "notice" && message.kind === "compaction"), 20_000);
+    unwatch();
+    await rig.client.deleteBot(bot.id);
+  });
+
+  it("asks the model again after a reply failed", async () => {
+    const bot = await rig.client.createBot({ name: "Relay", defaultModel: scriptModel });
+    const chat = rig.client.chat(bot.id);
+    const unwatch = chat.watch();
+    scriptSwitches.failing = true;
+    try {
+      await chat.send("fail");
+      await until(chat.state, (state) => state.live.failure !== null && !state.live.running);
+    } finally {
+      scriptSwitches.failing = false;
+    }
+    await chat.retryReply();
+    const state = await until(chat.state, replied("echo: fail"));
+    expect(state.live.failure).toBeNull();
     unwatch();
     await rig.client.deleteBot(bot.id);
   });

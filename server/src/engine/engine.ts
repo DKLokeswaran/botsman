@@ -32,6 +32,18 @@ export class Engine {
     await (await this.open(bot)).stop();
   }
 
+  async compact(bot: Bot): Promise<boolean> {
+    return (await this.open(bot)).compact(bot);
+  }
+
+  async clear(bot: Bot): Promise<void> {
+    await (await this.open(bot)).clear();
+  }
+
+  async retry(bot: Bot): Promise<boolean> {
+    return (await this.open(bot)).retry();
+  }
+
   async configure(bot: Bot): Promise<void> {
     await (await this.open(bot)).configure(bot);
   }

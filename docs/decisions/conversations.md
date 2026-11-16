@@ -32,6 +32,16 @@ The apps never offer a mode that doesn't fit the bot's state. That rule lives in
 
 The server accepts any mode in any state, so a message is never lost when the bot finishes or starts a turn just as the owner sends. On an idle bot, `queue` and `steer` start a reply like `send`. On a busy bot, `send` waits like `queue`.
 
+## Compact, clear, and retry
+
+| Action | What happens |
+| --- | --- |
+| Compact | The bot gets the same save turn it gets near the context limit, with a prompt saying the owner asked, then the chat compacts. A chat already saving or compacting refuses a second request. A chat too short to summarize stays as it is, because Pi keeps recent messages word for word. |
+| Clear | Pi starts a new context. Earlier messages stay in the transcript above a notice, and memory files and notes are kept. There is no save turn, since the owner chose to drop the context. |
+| Retry | Pi answers the chat as it stands. A failed reply is left out of the model's context, so this asks again for the owner's last message. It is offered on a failed reply, and refused while the bot is replying. A finished reply is not regenerated. |
+
+Compact and clear will also be slash commands. Retry shows on the failure in both apps.
+
 ## Routines
 
 A routine runs in a fresh conversation, with the bot's model and tools. Its final result is written into the bot's chat as a message the model sees. Posting starts no reply, and later replies have the result in context. If a reply is running, the post joins at the next turn boundary.

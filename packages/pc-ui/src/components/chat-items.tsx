@@ -1,4 +1,5 @@
 import { type ChatController, type ChatItem, formatMessageTime, formatUsage, type ToolLine } from "@botsman/client-core";
+import { useAction } from "@botsman/client-core/react";
 import { ApprovalCard } from "./approval-card.tsx";
 import { Markdown } from "./markdown.tsx";
 import { Button } from "./ui/button.tsx";
@@ -11,7 +12,7 @@ export function ChatItemView({ item, chat, botName }: { item: ChatItem; chat: Ch
   if (item.kind === "reply") return <Reply item={item} botName={botName} />;
   if (item.kind === "queued") return <OwnerMessage text={item.text} note={item.mode === "steer" ? "Steering the reply" : "Queued"} muted />;
   if (item.kind === "pending") return <PendingMessage item={item} chat={chat} />;
-  if (item.kind === "failure") return <p className="rounded-lg border border-destructive p-3 text-sm text-destructive">{item.text}</p>;
+  if (item.kind === "failure") return <Failure text={item.text} chat={chat} />;
   return <p className="text-center text-xs text-muted-foreground">{item.text}</p>;
 }
 
@@ -25,6 +26,20 @@ function OwnerMessage({ text, note, muted = false }: { text: string; note?: stri
     <div className="flex flex-col items-end gap-1">
       <div className={`max-w-[85%] rounded-xl border border-border bg-card px-4 py-2.5 whitespace-pre-wrap ${muted ? "opacity-60" : ""}`}>{text}</div>
       {note === undefined ? null : <span className="text-xs text-muted-foreground">{note}</span>}
+    </div>
+  );
+}
+
+// A reply that failed, with a way to ask the model again.
+function Failure({ text, chat }: { text: string; chat: ChatController }) {
+  const retry = useAction(() => chat.retryReply());
+  return (
+    <div className="flex flex-col gap-2 rounded-lg border border-destructive p-3 text-sm text-destructive">
+      <p>{text}</p>
+      {retry.error === undefined ? null : <p className="text-xs">{retry.error}</p>}
+      <Button variant="text" className="self-start px-2 py-0.5 text-xs" disabled={retry.busy} onClick={() => void retry.run()}>
+        Retry
+      </Button>
     </div>
   );
 }

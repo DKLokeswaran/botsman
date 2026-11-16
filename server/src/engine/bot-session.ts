@@ -2,7 +2,7 @@ import { mkdirSync } from "node:fs";
 import path from "node:path";
 import type { Bot } from "@botsman/protocol";
 import { BACKGROUND_CONTEXT as context } from "@earendil-works/chord/context";
-import { type Conversation, type ConversationView, type ConversationWatch, type EntryId, Harness, LiveDoc } from "@earendil-works/pi-durable";
+import { type Conversation, ConversationBusy, type ConversationView, type ConversationWatch, type EntryId, Harness, LiveDoc } from "@earendil-works/pi-durable";
 import { openNodeSqliteStorage } from "@earendil-works/pi-durable/storage/sqlite/node";
 import { OWNER_MESSAGE_KIND, type ViewEntry } from "../events/chat-view.ts";
 import { memoryChangeText, renderMemorySection } from "../memory/prompt.ts";
@@ -95,6 +95,28 @@ export class BotSession {
   async stop(): Promise<void> {
     await this.#root.abort(context);
     this.#services.stopSandbox(this.botId);
+  }
+
+  // Starts compaction the owner asked for, after the bot's save turn. Returns false when one is already under way.
+  compact(bot: Bot): boolean {
+    const view = this.currentView();
+    return view !== undefined && this.#guard.compactNow(bot, view);
+  }
+
+  // Starts a new context. The transcript, memory files, and notes stay.
+  async clear(): Promise<void> {
+    await this.#root.reset(undefined, context);
+  }
+
+  // Answers the chat as it stands, after a reply failed. Returns false while a reply is running.
+  async retry(): Promise<boolean> {
+    try {
+      await this.#root.submit({ type: "continue" }, context);
+      return true;
+    } catch (error) {
+      if (error instanceof ConversationBusy) return false;
+      throw error;
+    }
   }
 
   // Entries older than `before`, newest first, for loading earlier chat history.

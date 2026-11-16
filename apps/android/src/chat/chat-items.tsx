@@ -1,4 +1,5 @@
 import { type ChatController, type ChatItem, formatMessageTime, formatUsage, type ToolLine } from "@botsman/client-core";
+import { useAction } from "@botsman/client-core/react";
 import { useState } from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 import { fontFamilies, radius, space, useTheme } from "../theme";
@@ -15,7 +16,7 @@ export function ChatItemView({ item, chat, botName }: { item: ChatItem; chat: Ch
   if (item.kind === "reply") return <Reply item={item} botName={botName} />;
   if (item.kind === "queued") return <OwnerMessage text={item.text} note={item.mode === "steer" ? "Steering the reply" : "Queued"} muted />;
   if (item.kind === "pending") return <PendingMessage item={item} chat={chat} />;
-  if (item.kind === "failure") return <Text style={[styles.failure, { color: colors.destructive, borderColor: colors.destructive }]}>{item.text}</Text>;
+  if (item.kind === "failure") return <Failure text={item.text} chat={chat} />;
   return <Text style={[styles.notice, { color: colors.mutedForeground }]}>{item.text}</Text>;
 }
 
@@ -34,6 +35,21 @@ function OwnerMessage({ text, note, muted = false }: { text: string; note?: stri
         </Text>
       </View>
       {note === undefined ? null : <Text style={[styles.small, { color: colors.mutedForeground }]}>{note}</Text>}
+    </View>
+  );
+}
+
+// A reply that failed, with a way to ask the model again.
+function Failure({ text, chat }: { text: string; chat: ChatController }) {
+  const { colors } = useTheme();
+  const retry = useAction(() => chat.retryReply());
+  return (
+    <View style={[styles.failure, { borderColor: colors.destructive }]}>
+      <Text style={[styles.failureText, { color: colors.destructive }]}>{text}</Text>
+      {retry.error === undefined ? null : <Text style={[styles.small, { color: colors.destructive }]}>{retry.error}</Text>}
+      <View style={styles.row}>
+        <Button label="Retry" variant="text" disabled={retry.busy} onPress={() => void retry.run()} />
+      </View>
     </View>
   );
 }
@@ -118,7 +134,8 @@ const styles = StyleSheet.create({
   body: { fontFamily: fontFamilies.body, fontSize: 15, lineHeight: 23 },
   small: { fontFamily: fontFamilies.body, fontSize: 12 },
   notice: { fontFamily: fontFamilies.body, fontSize: 12, textAlign: "center" },
-  failure: { fontFamily: fontFamilies.body, fontSize: 14, borderWidth: 1, borderRadius: radius.md, padding: space[3] },
+  failure: { borderWidth: 1, borderRadius: radius.md, padding: space[3], gap: space[2] },
+  failureText: { fontFamily: fontFamilies.body, fontSize: 14 },
   thinking: { fontFamily: fontFamilies.body, fontSize: 14, lineHeight: 21, borderLeftWidth: 1, paddingLeft: space[3], marginTop: space[1] },
   output: { fontFamily: fontFamilies.mono, fontSize: 12, borderWidth: 1, borderRadius: radius.md, padding: space[3], marginTop: space[1] },
 });
