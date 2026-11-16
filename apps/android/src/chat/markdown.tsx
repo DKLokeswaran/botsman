@@ -1,13 +1,15 @@
-import { useMemo } from "react";
+import { fadesIn } from "@botsman/client-core";
+import { memo, useMemo } from "react";
 import { EnrichedMarkdownText, type MarkdownStyle } from "react-native-enriched-markdown";
 import { fontFamilies, radius, type Theme, useTheme } from "../theme";
 
-// A reply's text drawn as Markdown in native text views, with tables and code blocks.
-export function Markdown({ text, streaming }: { text: string; streaming: boolean }) {
+// A reply's text drawn as Markdown in native text views, with tables and code blocks. It redraws only when its text
+// changes, so a streaming reply doesn't redraw the replies before it.
+export const Markdown = memo(function Markdown({ text, streaming }: { text: string; streaming: boolean }) {
   const theme = useTheme();
   const style = useMemo(() => markdownStyle(theme), [theme]);
-  return <EnrichedMarkdownText markdown={text} flavor="github" markdownStyle={style} streamingAnimation={streaming} />;
-}
+  return <EnrichedMarkdownText markdown={text} flavor="github" markdownStyle={style} streamingAnimation={fadesIn(text, streaming)} />;
+});
 
 // Matches the PC look in pc-ui's styles.css: a quote is a thin rule with muted text and no fill, inline code is mono on
 // the muted background with no border, and tables and code blocks sit on the card colour with a border.

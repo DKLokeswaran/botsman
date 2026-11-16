@@ -140,6 +140,7 @@ export async function createServices(config: Config, options: ServiceOptions = {
   async function close(): Promise<void> {
     policy.shutDown();
     await engine.closeAll();
+    feed.close();
     sandbox.stopAll();
     db.close();
   }

@@ -34,6 +34,8 @@ type ToolResult = Extract<ChatMessage, { type: "tool_result" }>;
 type Context = { results: Map<string, ToolResult>; waiting: Map<string, string> };
 
 const LIVE_ID = "live";
+// Past this length a streaming reply no longer fades in, since each fade redraws the whole reply every frame.
+const FADE_LIMIT = 4_000;
 const SUMMARY_LENGTH = 120;
 
 export function chatItems(state: ChatState): ChatItem[] {
@@ -188,4 +190,9 @@ export function showsWorking(run: RunItem): boolean {
 // What Copy puts on the clipboard for a run: everything the bot said, without its thinking or tool calls.
 export function runText(run: RunItem): string {
   return run.steps.flatMap((step) => (step.kind === "text" ? [step.text.trim()] : [])).join("\n\n");
+}
+
+// Whether newly streamed text fades in: only on the run's streaming edge, and only while the reply is short.
+export function fadesIn(text: string, streaming: boolean): boolean {
+  return streaming && text.length <= FADE_LIMIT;
 }

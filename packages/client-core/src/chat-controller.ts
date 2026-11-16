@@ -1,4 +1,4 @@
-import { type ChatEvent, type ChatHistoryPage, type ChatSettings, type ChatSettingsUpdate, type ChatSnapshot, chatStream, type Ok, type SendMessageResponse } from "@botsman/protocol";
+import { type ChatEvent, type ChatHistoryPage, type ChatSettings, type ChatSettingsUpdate, type ChatSnapshot, chatStream, type LiveState, type Ok, type SendMessageResponse } from "@botsman/protocol";
 import { addPending, applyChatEvent, applyChatSnapshot, applyHistoryPage, type ChatState, dropPending, emptyChat, failPending } from "./chat-state.ts";
 import { defaultSendMode, type SendMode } from "./send-rule.ts";
 import type { Session } from "./session.ts";
@@ -6,6 +6,16 @@ import { Store } from "./store.ts";
 import type { StreamConnection, StreamMessage } from "./stream-connection.ts";
 
 const HISTORY_PAGE = 50;
+// How long live updates gather before the chat redraws: 50 ms, and 1 ms more for every 100 characters streamed so
+// far, up to a second. Each redraw lays out the whole reply again, so a long reply redraws less often, and updates
+// that pile up while a slow device is still drawing become one redraw instead of a queue of them.
+export const LIVE_REDRAW_MS = 50;
+const MAX_REDRAW_MS = 1_000;
+
+export function liveRedrawDelay(live: LiveState): number {
+  const streamed = live.streamingText.length + live.streamingThinking.length;
+  return Math.min(MAX_REDRAW_MS, LIVE_REDRAW_MS + Math.floor(streamed / 100));
+}
 
 // One bot's chat: its state kept current from the stream, and the owner's actions on it.
 export class ChatController {
@@ -18,6 +28,8 @@ export class ChatController {
   #watchers = 0;
   #loadingEarlier = false;
   #readUpTo = 0;
+  #waitingLive: LiveState | undefined;
+  #liveTimer: ReturnType<typeof setTimeout> | undefined;
 
   constructor(botId: string, session: Session, connection: StreamConnection, newRequestId: () => string) {
     this.botId = botId;
@@ -101,12 +113,33 @@ export class ChatController {
 
   #receive(message: StreamMessage): void {
     if (message.type === "snapshot") {
+      this.#dropWaitingLive();
       this.state.update((state) => applyChatSnapshot(state, message.snapshot as ChatSnapshot));
       return this.#markRead();
     }
-    const events = message.type === "catchup" ? message.events.map((item) => item.event) : [message.event];
-    this.state.update((state) => events.reduce((next, event) => applyChatEvent(next, event as ChatEvent), state));
+    const events = (message.type === "catchup" ? message.events.map((item) => item.event) : [message.event]) as ChatEvent[];
+    if (events.every((event) => event.type === "live")) return this.#holdLive(events.at(-1)!.live);
+    this.#drawWaitingLive();
+    this.state.update((state) => events.reduce(applyChatEvent, state));
     this.#markRead();
+  }
+
+  // Keeps only the newest live state and draws it shortly, so a burst of updates draws once.
+  #holdLive(live: LiveState): void {
+    this.#waitingLive = live;
+    this.#liveTimer ??= setTimeout(() => this.#drawWaitingLive(), liveRedrawDelay(live));
+  }
+
+  #drawWaitingLive(): void {
+    const live = this.#waitingLive;
+    this.#dropWaitingLive();
+    if (live !== undefined) this.state.update((state) => applyChatEvent(state, { type: "live", live }));
+  }
+
+  #dropWaitingLive(): void {
+    clearTimeout(this.#liveTimer);
+    this.#liveTimer = undefined;
+    this.#waitingLive = undefined;
   }
 
   // While a screen shows the chat, moves the server's read marker to the newest message, so every device clears its unread count.
@@ -124,6 +157,7 @@ export class ChatController {
     if (this.#watchers > 0) return;
     this.#unsubscribe?.();
     this.#unsubscribe = undefined;
+    this.#dropWaitingLive();
   }
 }
 
