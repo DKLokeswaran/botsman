@@ -6,7 +6,10 @@ import {
   type Bot,
   type BotCreate,
   type BotUpdate,
+  type FreeSpace,
   type Health,
+  type ModelInfo,
+  type ModelList,
   type Ok,
   PROTOCOL_VERSION,
   type ProtocolFit,
@@ -91,6 +94,17 @@ export class BotsmanClient {
 
   answerApproval(approvalId: string, decision: ApprovalAnswer["decision"]): Promise<Approval> {
     return this.session.request("POST", `/api/approvals/${approvalId}/answer`, { decision });
+  }
+
+  // Models from every connected provider.
+  async models(): Promise<ModelInfo[]> {
+    return (await this.session.request<ModelList>("GET", "/api/models")).models;
+  }
+
+  // Free space on the disk that would hold a folder, and whether the server accepts that folder. No path means the default.
+  freeSpace(path: string): Promise<FreeSpace> {
+    const query = path.trim() === "" ? "" : `?path=${encodeURIComponent(path.trim())}`;
+    return this.session.request("GET", `/api/server/free-space${query}`);
   }
 
   // Spending over the last `days` days, by day and by bot, with days on this device's clock.

@@ -5,7 +5,7 @@ import type { dataPaths } from "../config.ts";
 import { ApiError, badRequest, notFound } from "../errors.ts";
 import type { MemoryFiles } from "../memory/memory-files.ts";
 import { BotRegistry } from "./bot-registry.ts";
-import { checkFolder, resolveReal } from "./folder-policy.ts";
+import { checkFolder, expandHome, resolveReal } from "./folder-policy.ts";
 
 export type BotLifecycle = {
   // Called after a bot is created or changed, to reopen or reconfigure what depends on it.
@@ -85,7 +85,7 @@ export class BotService {
 
   // Free space for a proposed folder, and whether the server would accept it for a new bot.
   freeSpace(requested: string | undefined): FreeSpace {
-    const target = requested ? resolveReal(requested) : this.#paths.workspacesDir;
+    const target = requested ? resolveReal(expandHome(requested, this.#homeDir)) : this.#paths.workspacesDir;
     const check = requested ? checkFolder(requested, this.#rules("new")) : ({ allowed: true } as const);
     const stats = statfsSync(existingAncestor(target));
     return {

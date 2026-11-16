@@ -14,8 +14,9 @@ export type FolderCheck = { readonly allowed: true; readonly path: string } | { 
 
 // Decides whether a bot may have read-write access to a folder, following the refused paths in docs/decisions/overview.md.
 export function checkFolder(requested: string, rules: FolderRules): FolderCheck {
-  if (!path.isAbsolute(requested)) return { allowed: false, path: requested, reason: "The folder must be an absolute path" };
-  const folder = resolveReal(requested);
+  const expanded = expandHome(requested, rules.homeDir);
+  if (!path.isAbsolute(expanded)) return { allowed: false, path: requested, reason: "The folder must be an absolute path or start with ~/" };
+  const folder = resolveReal(expanded);
   const reason = refusalReason(folder, resolveRules(rules));
   return reason === undefined ? { allowed: true, path: folder } : { allowed: false, path: folder, reason };
 }
@@ -49,6 +50,12 @@ function resolveRules(rules: FolderRules): FolderRules {
     defaultFolder: resolveReal(rules.defaultFolder),
     otherBotFolders: rules.otherBotFolders.map(resolveReal),
   };
+}
+
+// Reads a leading `~` as the owner's home folder, as the apps write paths.
+export function expandHome(requested: string, homeDir: string): string {
+  if (requested === "~") return homeDir;
+  return requested.startsWith("~/") ? path.join(homeDir, requested.slice(2)) : requested;
 }
 
 // Resolves symbolic links in the part of the path that exists, so a link can't hide where a folder really is.

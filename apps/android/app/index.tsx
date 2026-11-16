@@ -35,6 +35,9 @@ export default function BotListScreen() {
         {bots.map((bot) => (
           <BotRow key={bot.id} bot={bot} needsYou={waitingBots.has(bot.id)} />
         ))}
+        <Pressable accessibilityRole="button" onPress={() => router.push("/new-bot")} style={styles.newBot}>
+          <Text style={[styles.needs, { color: colors.primary }]}>New bot</Text>
+        </Pressable>
       </ScrollView>
       <View style={styles.update}>
         <UpdateNotice updates={app.updates} />
@@ -122,6 +125,7 @@ const styles = StyleSheet.create({
   sub: { fontFamily: fontFamilies.body, fontSize: 12 },
   mono: { fontFamily: fontFamilies.mono, fontSize: 12 },
   needs: { fontFamily: fontFamilies.bodySemiBold, fontSize: 12 },
+  newBot: { paddingHorizontal: space[2], paddingVertical: space[3] },
   rowEnd: { alignItems: "flex-end", gap: space[1] },
   badge: { fontFamily: fontFamilies.mono, fontSize: 12, minWidth: 20, textAlign: "center", paddingHorizontal: 6, borderRadius: 10, overflow: "hidden" },
   dot: { width: 6, height: 6, borderRadius: 3, marginHorizontal: space[1] },

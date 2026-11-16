@@ -8,24 +8,27 @@ import { chatHref, type Route, useRoute } from "../use-route.ts";
 import { BotInfoScreen } from "./bot-info.tsx";
 import { BotSettingsScreen } from "./bot-settings.tsx";
 import { ChatScreen } from "./chat.tsx";
+import { NewBotScreen } from "./new-bot.tsx";
 
 // The main window: the bot list beside the open chat. Home is the main bot's chat.
 export function Shell({ app, client }: { app: AppController; client: BotsmanClient }) {
   const route = useRoute();
   const { status, bots } = useServerState();
-  const openBotId = route.name === "home" ? bots[0]?.id : route.botId;
+  const openBotId = "botId" in route ? route.botId : route.name === "home" ? bots[0]?.id : undefined;
   return (
     <div className="flex h-screen">
       <Sidebar app={app} client={client} openBotId={openBotId} />
-      {status === "loading" || openBotId === undefined ? <p className="p-6 text-muted-foreground">Loading…</p> : <MainPane route={route.name} botId={openBotId} />}
+      <MainPane route={route} loading={status === "loading"} botId={openBotId} />
     </div>
   );
 }
 
 // The page beside the bot list. Home is the main bot's chat.
-function MainPane({ route, botId }: { route: Route["name"]; botId: string }) {
-  if (route === "bot") return <BotInfoScreen key={botId} botId={botId} />;
-  if (route === "bot-settings") return <BotSettingsScreen key={botId} botId={botId} />;
+function MainPane({ route, loading, botId }: { route: Route; loading: boolean; botId: string | undefined }) {
+  if (route.name === "new-bot") return <NewBotScreen />;
+  if (loading || botId === undefined) return <p className="p-6 text-muted-foreground">Loading…</p>;
+  if (route.name === "bot") return <BotInfoScreen key={botId} botId={botId} />;
+  if (route.name === "bot-settings") return <BotSettingsScreen key={botId} botId={botId} />;
   return <ChatScreen key={botId} botId={botId} />;
 }
 
@@ -49,6 +52,9 @@ function Sidebar({ app, client, openBotId }: { app: AppController; client: Botsm
         {bots.map((bot) => (
           <BotRow key={bot.id} bot={bot} open={bot.id === openBotId} needsYou={waitingBots.has(bot.id)} />
         ))}
+        <a href="#/new-bot" className="mt-1 block rounded-lg px-2 py-2 text-sm font-semibold text-primary hover:bg-accent">
+          New bot
+        </a>
       </nav>
       <SidebarFooter app={app} client={client} />
     </aside>

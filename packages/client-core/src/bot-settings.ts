@@ -1,4 +1,4 @@
-import type { Avatar, PermissionMode } from "@botsman/protocol";
+import type { Avatar, ModelInfo, ModelRef, PermissionMode } from "@botsman/protocol";
 
 // What each permission mode does, as bot settings explains it. Smart says it runs like Off until the classifier exists.
 export const PERMISSION_MODES: readonly { mode: PermissionMode; label: string; note: string }[] = [
@@ -43,4 +43,20 @@ export const PHOTO_SIZE = 256;
 export function photoAvatar(dataUrl: string): Avatar {
   if (dataUrl.length > PHOTO_LIMIT) throw new Error("That photo is too large. Try another.");
   return { kind: "photo", dataUrl };
+}
+
+// The model a new bot starts with: the main bot's default when it is still connected, else the first connected model.
+export function suggestedModel(models: readonly ModelInfo[], mainDefault: ModelRef | null | undefined): ModelRef | null {
+  const main = models.find((model) => model.provider === mainDefault?.provider && model.id === mainDefault?.modelId);
+  const pick = main ?? models[0];
+  return pick === undefined ? null : { provider: pick.provider, modelId: pick.id };
+}
+
+// A model as a picker lists it.
+export function modelLabel(model: ModelInfo): string {
+  return `${model.name} · ${model.provider}`;
+}
+
+export function sameModel(model: ModelInfo, ref: ModelRef | null): boolean {
+  return ref !== null && model.provider === ref.provider && model.id === ref.modelId;
 }

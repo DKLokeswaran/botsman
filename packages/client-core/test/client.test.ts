@@ -1,5 +1,5 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { type ChatState, offeredSendModes } from "../src/index.ts";
+import { type ChatState, offeredSendModes, suggestedModel } from "../src/index.ts";
 import { scriptSwitches } from "@botsman/server/src/testing/script-model.ts";
 import { PASSWORD, type Rig, startRig, until } from "./real-server.ts";
 
@@ -69,6 +69,18 @@ describe("bot list activity", () => {
     await until(rig.client.server, (state) => state.activity[bot.id]?.unread === 0);
     unwatch();
     await rig.client.deleteBot(bot.id);
+  });
+});
+
+describe("new bot", () => {
+  it("lists connected models, and checks a folder before the bot is created", async () => {
+    const models = await rig.client.models();
+    expect(models.some((model) => model.provider === "script" && model.id === "script-1")).toBe(true);
+    expect(suggestedModel(models, { provider: "script", modelId: "script-1" })).toEqual({ provider: "script", modelId: "script-1" });
+    expect((await rig.client.freeSpace("")).allowed).toBe(true);
+    const home = await rig.client.freeSpace("/");
+    expect(home.allowed).toBe(false);
+    expect(home.reason).toBeTruthy();
   });
 });
 

@@ -3,3 +3,4 @@ export * from "./hooks.ts";
 export * from "./use-action.ts";
 export * from "./use-app.ts";
 export * from "./use-now.ts";
+export * from "./use-models.ts";

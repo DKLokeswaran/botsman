@@ -42,7 +42,7 @@ Memory files and notes sit outside the bot's folder, so its sandbox hides them, 
 
 ### Bot folders
 
-The owner chooses a bot's folder when creating it, so a bot that clones large repos can sit on a disk with room for them. The path is on the server, so the form shows the server's free space. Left empty, the folder is `~/.botsman/workspaces/<id>`.
+The owner chooses a bot's folder when creating it, so a bot that clones large repos can sit on a disk with room for them. The path is on the server, so the form shows the server's free space. Left empty, the folder is `~/.botsman/workspaces/<id>`. A path may start with `~/`, which the server reads as the owner's home folder. The form checks the folder and shows the free space as the owner types, and a new bot's default model is the main bot's default.
 
 A bot gets read-write access to its whole folder, so the server refuses any path that would expose something else:
 
