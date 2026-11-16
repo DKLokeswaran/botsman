@@ -11,16 +11,19 @@ export class ChatFeed {
   readonly #hub: StreamHub<StreamEvent>;
   readonly #approvalsByCall: (botId: string) => ReadonlyMap<string, string>;
   readonly #onFailure: (botId: string, reason: string) => void;
+  readonly #onMessage: (botId: string, message: ChatMessage) => void;
   readonly #chats = new Map<string, ChatState>();
 
   constructor(
     hub: StreamHub<StreamEvent>,
     approvalsByCall: (botId: string) => ReadonlyMap<string, string>,
     onFailure: (botId: string, reason: string) => void = () => {},
+    onMessage: (botId: string, message: ChatMessage) => void = () => {},
   ) {
     this.#hub = hub;
     this.#approvalsByCall = approvalsByCall;
     this.#onFailure = onFailure;
+    this.#onMessage = onMessage;
   }
 
   update(botId: string, view: { entries: readonly ViewEntry[]; docs: ViewDocs }): void {
@@ -31,7 +34,9 @@ export class ChatFeed {
       if (chat.seen.has(entry.id)) continue;
       chat.seen.add(entry.id);
       const message = toChatMessage(entry);
-      if (message !== undefined) this.#publish(botId, { type: "message", message });
+      if (message === undefined) continue;
+      this.#publish(botId, { type: "message", message });
+      this.#onMessage(botId, message);
     }
     this.refreshLive(botId);
     const totals = toTotals(view.docs);

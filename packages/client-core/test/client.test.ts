@@ -72,6 +72,25 @@ describe("bot list activity", () => {
   });
 });
 
+describe("usage", () => {
+  it("counts each reply once, by day and by bot", async () => {
+    const bot = await rig.client.createBot({ name: "Meter", defaultModel: { provider: "script", modelId: "script-1" } });
+    const before = await rig.client.usage(7);
+    const chat = rig.client.chat(bot.id);
+    const unwatch = chat.watch();
+    await chat.send("count me");
+    await until(chat.state, replied("echo: count me"));
+    unwatch();
+    const after = await rig.client.usage(7);
+    const reply = chat.state.get().messages.find((message) => message.type === "assistant");
+    const tokens = reply?.type === "assistant" ? reply.usage!.totalTokens : 0;
+    expect(after.total.totalTokens - before.total.totalTokens).toBe(tokens);
+    expect(after.bots.find((line) => line.botId === bot.id)?.usage.totalTokens).toBe(tokens);
+    expect(after.days.at(-1)?.day).toMatch(/^\d{4}-\d{2}-\d{2}$/);
+    await rig.client.deleteBot(bot.id);
+  });
+});
+
 describe("alert settings", () => {
   it("starts with every kind on, and shares a change with every open app", async () => {
     const ready = await until(rig.client.server, (state) => state.alertSettings !== undefined);

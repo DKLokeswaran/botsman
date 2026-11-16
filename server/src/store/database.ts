@@ -92,6 +92,20 @@ const MIGRATIONS: readonly string[] = [
   CREATE TABLE read_markers (bot_id TEXT PRIMARY KEY, read_at INTEGER NOT NULL);
   INSERT INTO read_markers (bot_id, read_at) SELECT id, CAST(unixepoch('subsec') * 1000 AS INTEGER) FROM bots;
   `,
+  // Usage per reply, for spending by day and by bot. It starts empty: earlier replies kept no record here.
+  `
+  CREATE TABLE usage_log (
+    bot_id TEXT NOT NULL,
+    at INTEGER NOT NULL,
+    input_tokens INTEGER NOT NULL,
+    output_tokens INTEGER NOT NULL,
+    cache_read_tokens INTEGER NOT NULL,
+    cache_write_tokens INTEGER NOT NULL,
+    total_tokens INTEGER NOT NULL,
+    cost REAL NOT NULL
+  );
+  CREATE INDEX usage_log_at ON usage_log (at);
+  `,
 ];
 
 // Opens server.db and brings its schema up to date.

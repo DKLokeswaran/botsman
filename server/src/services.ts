@@ -1,7 +1,7 @@
 import { mkdirSync } from "node:fs";
 import { randomUUID } from "node:crypto";
 import path from "node:path";
-import { type Alert, type Approval, type Bot, SERVER_STREAM, type StreamEvent } from "@botsman/protocol";
+import { type Alert, type Approval, type Bot, type ChatMessage, SERVER_STREAM, type StreamEvent } from "@botsman/protocol";
 import type { Provider } from "@earendil-works/pi-ai";
 import { AuthService } from "./auth/auth-service.ts";
 import { BotActivityTracker } from "./bots/bot-activity.ts";
@@ -20,6 +20,7 @@ import { SealedCredentialStore } from "./providers/credential-store.ts";
 import { ProviderCatalog } from "./providers/provider-catalog.ts";
 import { ProviderLogins } from "./providers/provider-logins.ts";
 import { SandboxManager } from "./sandbox/sandbox-manager.ts";
+import { UsageLog } from "./usage/usage-log.ts";
 import { openDatabase, readSetting, writeSetting, type Database } from "./store/database.ts";
 import { AlertSettingsStore } from "./store/alert-settings.ts";
 import { SecretBox } from "./store/secret-box.ts";
@@ -60,7 +61,12 @@ export async function createServices(config: Config, options: ServiceOptions = {
   const catalog = new ProviderCatalog(credentials, options.extraProviders);
   const auth = new AuthService(db, box.deriveKey("access-tokens"));
 
-  const feed = new ChatFeed(hub, (botId) => approvalStore.pendingByCall(botId), (botId) => alert("failure", botId, botId));
+  const usage = new UsageLog(db);
+  // Each new reply's usage is logged once, when it first appears; replies already there at startup are not counted again.
+  const logUsage = (botId: string, message: ChatMessage) => {
+    if (message.type === "assistant" && message.usage !== null) usage.record(botId, message.at ?? Date.now(), message.usage);
+  };
+  const feed = new ChatFeed(hub, (botId) => approvalStore.pendingByCall(botId), (botId) => alert("failure", botId, botId), logUsage);
   const activity = new BotActivityTracker(db, (botId) => feed.messages(botId), (line) => publish({ type: "activity", activity: line }));
 
   const memoryEdits = new MemoryEdits(memoryFiles);
@@ -138,7 +144,7 @@ export async function createServices(config: Config, options: ServiceOptions = {
     db.close();
   }
 
-  return { config, paths, db, hub, alerts, auth, registry, bots, memoryFiles, notes, approvalStore, policy, sandbox, catalog, logins, engine, feed, activity, alertSettings, publish, resumeBots, close };
+  return { config, paths, db, hub, alerts, auth, registry, bots, memoryFiles, notes, approvalStore, policy, sandbox, catalog, logins, engine, feed, activity, alertSettings, usage, publish, resumeBots, close };
 }
 
 // A stable id for this server, which some sign-ins send as the device id.

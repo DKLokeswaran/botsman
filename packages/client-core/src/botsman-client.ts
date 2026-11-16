@@ -14,6 +14,7 @@ import {
   SERVER_STREAM,
   type ServerEvent,
   type ServerSnapshot,
+  type UsageReport,
 } from "@botsman/protocol";
 import { ApiClient, type Fetch } from "./api-client.ts";
 import { ChatController } from "./chat-controller.ts";
@@ -90,6 +91,11 @@ export class BotsmanClient {
 
   answerApproval(approvalId: string, decision: ApprovalAnswer["decision"]): Promise<Approval> {
     return this.session.request("POST", `/api/approvals/${approvalId}/answer`, { decision });
+  }
+
+  // Spending over the last `days` days, by day and by bot, with days on this device's clock.
+  usage(days: number): Promise<UsageReport> {
+    return this.session.request("GET", `/api/usage?days=${days}&tzOffset=${new Date().getTimezoneOffset()}`);
   }
 
   // Turns alert kinds on or off for every device. The server stream brings the result to every open app.

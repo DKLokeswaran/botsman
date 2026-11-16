@@ -11,3 +11,4 @@ export * from "./stream.ts";
 export * from "./system.ts";
 export * from "./alerts-schema.ts";
 export * from "./version.ts";
+export * from "./usage.ts";

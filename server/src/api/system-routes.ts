@@ -1,4 +1,4 @@
-import { type AlertSettings, AlertSettingsUpdate, type Health, OLDEST_ACCEPTED_PROTOCOL, PROTOCOL_VERSION, type ProtocolRange } from "@botsman/protocol";
+import { type AlertSettings, AlertSettingsUpdate, type Health, OLDEST_ACCEPTED_PROTOCOL, PROTOCOL_VERSION, type ProtocolRange, UsageQuery, type UsageReport } from "@botsman/protocol";
 import type { FastifyInstance } from "fastify";
 import type { Services } from "../services.ts";
 
@@ -7,6 +7,11 @@ const PROTOCOL: ProtocolRange = { oldest: OLDEST_ACCEPTED_PROTOCOL, current: PRO
 
 export function registerSystemRoutes(app: FastifyInstance, services: Services): void {
   app.get("/api/health", { config: { public: true } }, async (): Promise<Health> => ({ ok: services.sandbox.status.ok, version: VERSION, protocol: PROTOCOL, sandbox: services.sandbox.status }));
+
+  // Spending by day and by bot, for the usage screen.
+  app.get<{ Querystring: UsageQuery }>("/api/usage", { schema: { querystring: UsageQuery } }, async (request): Promise<UsageReport> =>
+    services.usage.report(request.query.days ?? 30, request.query.tzOffset ?? 0),
+  );
 
   app.get("/api/settings/alerts", async (): Promise<AlertSettings> => services.alertSettings.get());
 
