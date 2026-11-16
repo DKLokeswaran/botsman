@@ -7,7 +7,7 @@ const cost = (value: number) => ({ ...zero, cost: value });
 
 describe("slash commands", () => {
   it("offers commands only while the message is one word starting with a slash", () => {
-    expect(slashMatches("/")?.map((command) => command.name)).toEqual(["compact", "clear", "memory", "notes", "usage", "help"]);
+    expect(slashMatches("/")?.map((command) => command.name)).toEqual(["compact", "clear", "memory", "notes", "usage"]);
     expect(slashMatches("/c")?.map((command) => command.name)).toContain("clear");
     expect(slashMatches("/clear now")).toBeUndefined();
     expect(slashMatches("hello")).toBeUndefined();

@@ -9,7 +9,6 @@ export const SLASH_COMMANDS: readonly SlashCommand[] = [
   { name: "memory", hint: "Open this bot's memory files" },
   { name: "notes", hint: "Open this bot's notes" },
   { name: "usage", hint: "Tokens and cost by day and by bot" },
-  { name: "help", hint: "Commands in this chat" },
 ];
 
 // The commands to offer while the message is a single word starting with a slash, or undefined when it isn't.
@@ -26,12 +25,11 @@ export function exactCommand(text: string): SlashCommand | undefined {
 
 export type SlashScreen = "memory" | "notes" | "usage";
 
-// What a command does: runs on the chat, opens a screen, or lists the commands.
-export type SlashAction = { kind: "done" } | { kind: "open"; screen: SlashScreen } | { kind: "help" };
+// What a command does: runs on the chat, or opens a screen.
+export type SlashAction = { kind: "done" } | { kind: "open"; screen: SlashScreen };
 
 export async function runCommand(command: SlashCommand, chat: ChatController): Promise<SlashAction> {
   if (command.name === "compact") return (await chat.compact(), { kind: "done" });
   if (command.name === "clear") return (await chat.clear(), { kind: "done" });
-  if (command.name === "help") return { kind: "help" };
   return { kind: "open", screen: command.name as SlashScreen };
 }

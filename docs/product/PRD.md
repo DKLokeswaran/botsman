@@ -39,7 +39,7 @@ One owner per server. Anyone else who wants Botsman runs their own server. The p
 - CHAT-7. The owner can retry a reply, copy a reply, and quote a routine result when replying.
 - CHAT-8. Subagent work appears as a line alongside the tool lines. Opening it shows the task and the work so far.
 - CHAT-9. The app shows a banner while reconnecting, then catches up without losing the owner's place.
-- CHAT-10. Slash commands cover actions with no button: compact, clear, skills, memory, notes, usage, and help.
+- CHAT-10. Slash commands cover actions with no button: compact, clear, skills, memory, notes, and usage. Typing a slash lists them.
 - CHAT-11. A bot can ask clarifying questions on one card, with options and free text.
 
 ### Approvals

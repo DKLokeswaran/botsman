@@ -1,4 +1,6 @@
-import { type ChatController, type ChatItem, formatMessageTime, formatUsage, type ToolLine } from "@botsman/client-core";
+import { type ChatController, type ChatItem, formatMessageTime, formatUsage, type RunItem, type RunStep, showsWorking, type ToolLine, workLabel } from "@botsman/client-core";
+
+type WorkStep = Extract<RunStep, { kind: "work" }>;
 import { useAction } from "@botsman/client-core/react";
 import { ApprovalCard } from "./approval-card.tsx";
 import { Markdown } from "./markdown.tsx";
@@ -9,7 +11,7 @@ type ItemOf<Kind extends ChatItem["kind"]> = Extract<ChatItem, { kind: Kind }>;
 // Draws one item of a chat.
 export function ChatItemView({ item, chat, botName }: { item: ChatItem; chat: ChatController; botName: string }) {
   if (item.kind === "user") return <OwnerMessage text={item.text} note={timeLabel(item.at)} />;
-  if (item.kind === "reply") return <Reply item={item} botName={botName} />;
+  if (item.kind === "run") return <Run item={item} botName={botName} />;
   if (item.kind === "queued") return <OwnerMessage text={item.text} note={item.mode === "steer" ? "Steering the reply" : "Queued"} muted />;
   if (item.kind === "pending") return <PendingMessage item={item} chat={chat} />;
   if (item.kind === "failure") return <Failure text={item.text} chat={chat} />;
@@ -62,31 +64,40 @@ function PendingMessage({ item, chat }: { item: ItemOf<"pending">; chat: ChatCon
   );
 }
 
-function Reply({ item, botName }: { item: ItemOf<"reply">; botName: string }) {
+// One run: the bot's replies in order, with the thinking and tool calls between them folded away, and the run's
+// total cost at the end. An approval stays in view, outside its fold.
+function Run({ item, botName }: { item: RunItem; botName: string }) {
   return (
     <article className="flex flex-col gap-2">
       <div className="flex items-baseline gap-2">
         <span className="font-display text-sm font-bold uppercase">{botName}</span>
         <span className="text-xs text-muted-foreground">{timeLabel(item.at)}</span>
       </div>
-      {item.thinking === "" ? null : <Thinking text={item.thinking} open={item.streaming && item.text === ""} />}
-      {item.tools.map((tool) => (
-        <ToolLineView key={tool.callId} tool={tool} />
-      ))}
-      {item.text === "" ? null : <Markdown text={item.text} />}
-      {item.streaming && item.text === "" && item.thinking === "" && item.tools.length === 0 ? <p className="text-sm text-muted-foreground">Working…</p> : null}
+      {item.steps.map((step, index) =>
+        step.kind === "text" ? <Markdown key={step.id} text={step.text} /> : <WorkFold key={step.id} step={step} live={item.working && index === item.steps.length - 1} />,
+      )}
+      {showsWorking(item) ? <p className="animate-pulse text-sm text-muted-foreground">Working…</p> : null}
       {item.error === null ? null : <p className="text-sm text-destructive">{item.error}</p>}
-      {item.usage === null ? null : <div className="text-xs text-muted-foreground">{formatUsage(item.usage)}</div>}
+      {item.usage === null || item.working ? null : <div className="text-xs text-muted-foreground">{formatUsage(item.usage)}</div>}
     </article>
   );
 }
 
-function Thinking({ text, open }: { text: string; open: boolean }) {
+// Thinking and tool calls between two replies, folded into one line.
+function WorkFold({ step, live }: { step: WorkStep; live: boolean }) {
   return (
-    <details open={open} className="text-sm text-muted-foreground">
-      <summary className="cursor-pointer select-none">{open ? "Thinking" : "Thought"}</summary>
-      <p className="mt-1 border-l border-border pl-3 whitespace-pre-wrap">{text}</p>
-    </details>
+    <>
+      <details className="text-sm text-muted-foreground">
+        <summary className={`cursor-pointer select-none ${live ? "animate-pulse" : ""}`}>{workLabel(step, live)}</summary>
+        <div className="mt-2 flex flex-col gap-2 border-l border-border pl-3">
+          {step.thinking === "" ? null : <p className="whitespace-pre-wrap">{step.thinking}</p>}
+          {step.tools.map((tool) => (
+            <ToolLineView key={tool.callId} tool={tool} />
+          ))}
+        </div>
+      </details>
+      {step.tools.flatMap((tool) => (tool.approvalId === undefined ? [] : [<ApprovalCard key={tool.approvalId} approvalId={tool.approvalId} />]))}
+    </>
   );
 }
 
@@ -102,7 +113,6 @@ function ToolLineView({ tool }: { tool: ToolLine }) {
         </summary>
         {tool.output === "" ? null : <pre className="mt-1 max-h-64 overflow-auto rounded-lg border border-border bg-card p-3 font-mono text-xs whitespace-pre-wrap">{tool.output}</pre>}
       </details>
-      {tool.approvalId === undefined ? null : <ApprovalCard approvalId={tool.approvalId} />}
     </div>
   );
 }

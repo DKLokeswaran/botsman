@@ -1,4 +1,4 @@
-import type { Bot, BotActivity, ChatSettings, ModelInfo, Usage } from "@botsman/protocol";
+import type { Bot, BotActivity, ChatMessage, ChatSettings, ModelInfo, Usage } from "@botsman/protocol";
 import { sameModel } from "./bot-settings.ts";
 import { shownEffort } from "./providers.ts";
 
@@ -27,11 +27,24 @@ export function formatUsage(usage: Usage): string {
   return `${formatTokens(usage.totalTokens)} tokens · ${formatCost(usage.cost)}`;
 }
 
-// The line under a chat's title: the model, the reasoning effort it really runs at, and the chat's total cost.
-export function chatSubtitle(settings: ChatSettings, totalCost: number, models: readonly ModelInfo[] = []): string {
+// The line under a chat's title: the model, the reasoning effort it really runs at, how full the context is, and the
+// chat's total cost.
+export function chatSubtitle(settings: ChatSettings, totalCost: number, models: readonly ModelInfo[] = [], contextTokens = 0): string {
   const model = settings.model === null ? "No model chosen" : settings.model.modelId;
   const info = models.find((candidate) => sameModel(candidate, settings.model));
-  return `${model} · ${effortLabel(shownEffort(info, settings.thinkingLevel))} · ${formatCost(totalCost)} this chat`;
+  const context = info === undefined || info.contextWindow === 0 ? [] : [`${Math.round((contextTokens / info.contextWindow) * 100)}% context`];
+  return [model, effortLabel(shownEffort(info, settings.thinkingLevel)), ...context, `${formatCost(totalCost)} this chat`].join(" · ");
+}
+
+// The tokens the chat's context holds now: everything the newest reply's request carried, plus what it wrote. A clear
+// or compaction starts it again.
+export function contextTokens(messages: readonly ChatMessage[]): number {
+  for (let index = messages.length - 1; index >= 0; index--) {
+    const message = messages[index]!;
+    if (message.type === "notice" && (message.kind === "reset" || message.kind === "compaction")) return 0;
+    if (message.type === "assistant" && message.usage !== null && message.usage.totalTokens > 0) return message.usage.totalTokens;
+  }
+  return 0;
 }
 
 export function effortLabel(level: Bot["thinkingLevel"]): string {

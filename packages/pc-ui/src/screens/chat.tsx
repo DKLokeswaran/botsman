@@ -1,4 +1,4 @@
-import { chatSubtitle, modelProblem } from "@botsman/client-core";
+import { chatSubtitle, contextTokens, modelProblem } from "@botsman/client-core";
 import { useBot, useChat, useConnectionStatus, useModels } from "@botsman/client-core/react";
 import { useEffect, useRef, useState } from "react";
 import { Avatar } from "../components/avatar.tsx";
@@ -31,7 +31,7 @@ export function ChatScreen({ botId }: { botId: string }) {
             {bot.name}
           </a>
           <button type="button" aria-expanded={picking} onClick={() => setPicking(!picking)} className="truncate text-xs text-muted-foreground hover:text-foreground">
-            {chatSubtitle(state.settings, state.totals.usage.cost, models)} ▾
+            {chatSubtitle(state.settings, state.totals.usage.cost, models, contextTokens(state.messages))} ▾
           </button>
         </div>
         {picking ? <ModelPicker chat={chat} settings={state.settings} bot={bot} onClose={() => setPicking(false)} /> : null}

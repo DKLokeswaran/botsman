@@ -1,7 +1,7 @@
 import type { ChatEvent, ChatSnapshot } from "@botsman/protocol";
 import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
-import { applyChatEvent, applyChatSnapshot, type ChatItem, chatItems, type ChatState, emptyChat, type StreamMessage } from "../src/index.ts";
+import { applyChatEvent, applyChatSnapshot, type ChatItem, chatItems, type RunStep, type ChatState, emptyChat, type StreamMessage } from "../src/index.ts";
 
 // A chat stream recorded from the real server by record-chat.test.ts: a reply, a tool call that asked for approval,
 // a failed reply and its retry, and a clear. Both chat screens draw only what chatItems returns, so this pins what
@@ -23,25 +23,28 @@ function replay(messages: readonly StreamMessage[]): ChatState[] {
 // One line per item, with what a screen would show.
 function lines(items: ChatItem[]): string[] {
   return items.map((item) => {
-    if (item.kind === "reply") return `reply: ${item.text.trim()}${item.tools.map((tool) => ` [${tool.name} ${tool.status}${tool.approvalId === undefined ? "" : " awaiting approval"}]`).join("")}${item.error === null ? "" : ` (error: ${item.error})`}`;
+    if (item.kind === "run") return `run: ${item.steps.map(stepLine).join(" | ")}${item.error === null ? "" : ` (error: ${item.error})`}`;
     return `${item.kind}: ${"text" in item ? item.text : ""}`;
   });
+}
+
+function stepLine(step: RunStep): string {
+  if (step.kind === "text") return step.text.trim();
+  return `[${step.tools.map((tool) => `${tool.name} ${tool.status}${tool.approvalId === undefined ? "" : " awaiting approval"}`).join(", ")}]`;
 }
 
 describe("the recorded chat", () => {
   const states = replay(recording);
 
-  // The failed reply stays in the transcript with its error, and the retry's answer follows it.
-  it("ends with every turn in order, tool results inside their reply, and the clear notice last", () => {
+  // One run per message. The failed attempt is left out once the retry answered, and tool results sit in their call.
+  it("ends with one run per message, the retried failure left out, and the clear notice last", () => {
     expect(lines(chatItems(states.at(-1)!))).toEqual([
       "user: hello there",
-      "reply: echo: hello there",
+      "run: echo: hello there",
       'user: tool read {"path":"/etc/hostname"}',
-      "reply:  [read done]",
-      "reply: tool read returned: example-host",
+      "run: [read done] | tool read returned: example-host",
       "user: fail",
-      "reply:  (error: 400 invalid request (scripted failure))",
-      "reply: echo: fail",
+      "run: echo: fail",
       "notice: The chat context was cleared",
     ]);
   });

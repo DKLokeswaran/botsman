@@ -1,4 +1,4 @@
-import { type ChatItem, chatSubtitle, modelProblem } from "@botsman/client-core";
+import { type ChatItem, chatSubtitle, contextTokens, modelProblem } from "@botsman/client-core";
 import { useBot, useChat, useConnectionStatus, useModels } from "@botsman/client-core/react";
 import { LegendList } from "@legendapp/list/react-native";
 import { router, useLocalSearchParams } from "expo-router";
@@ -42,7 +42,7 @@ export default function ChatScreen() {
             </Pressable>
             <Pressable accessibilityRole="button" accessibilityLabel="Model and reasoning" onPress={() => router.push({ pathname: "/model/[botId]", params: { botId: bot.id } })} hitSlop={{ top: 2, bottom: 8 }}>
               <Text numberOfLines={1} style={[styles.sub, { color: colors.mutedForeground }]}>
-                {chatSubtitle(state.settings, state.totals.usage.cost, models)} ▾
+                {chatSubtitle(state.settings, state.totals.usage.cost, models, contextTokens(state.messages))} ▾
               </Text>
             </Pressable>
           </View>

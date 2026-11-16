@@ -2,7 +2,7 @@ import { type ChatController, exactCommand, runCommand, type SendMode, type Slas
 import { useAction } from "@botsman/client-core/react";
 import { router } from "expo-router";
 import { useState } from "react";
-import { Pressable, StyleSheet, Text, TextInput, View } from "react-native";
+import { Pressable, StyleSheet, Text, TextInput, useWindowDimensions, View } from "react-native";
 import { fontFamilies, radius, space, useTheme } from "../theme";
 import { Button } from "../ui/button";
 
@@ -12,12 +12,13 @@ const SEND_LABELS: Record<SendMode, string> = { send: "Send", queue: "Queue", st
 // with / offers commands.
 export function Composer({ chat, botName, sendModes, busy }: { chat: ChatController; botName: string; sendModes: SendMode[]; busy: boolean }) {
   const { colors } = useTheme();
+  // The box grows with the text up to 40% of the screen, then scrolls.
+  const maxHeight = useWindowDimensions().height * 0.4;
   const [text, setText] = useState("");
   const stop = useAction(() => chat.stop());
   const command = useAction(async (picked: SlashCommand) => {
     setText("");
     const action = await runCommand(picked, chat);
-    if (action.kind === "help") setText("/");
     if (action.kind === "open") openScreen(action.screen, chat.botId);
   });
   const matches = slashMatches(text);
@@ -42,7 +43,7 @@ export function Composer({ chat, botName, sendModes, busy }: { chat: ChatControl
         placeholder={`Message ${botName}`}
         placeholderTextColor={colors.mutedForeground}
         accessibilityLabel={`Message ${botName}`}
-        style={[styles.input, { color: colors.foreground }]}
+        style={[styles.input, { color: colors.foreground, maxHeight }]}
       />
       <View style={styles.actions}>
         {busy ? <Button label="Stop" variant="danger" disabled={stop.busy} onPress={() => void stop.run()} /> : null}
@@ -81,6 +82,6 @@ const styles = StyleSheet.create({
   command: { fontFamily: fontFamilies.mono, fontSize: 14 },
   hint: { fontFamily: fontFamilies.body, fontSize: 13, paddingHorizontal: space[2] },
   composer: { borderWidth: 1, borderRadius: radius.lg, padding: space[2], gap: space[2] },
-  input: { fontFamily: fontFamilies.body, fontSize: 16, maxHeight: 160, paddingHorizontal: space[2], paddingVertical: space[1] },
+  input: { fontFamily: fontFamilies.body, fontSize: 16, paddingHorizontal: space[2], paddingVertical: space[1] },
   actions: { flexDirection: "row", justifyContent: "flex-end", gap: space[2] },
 });

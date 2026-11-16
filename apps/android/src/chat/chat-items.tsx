@@ -1,4 +1,6 @@
-import { type ChatController, type ChatItem, formatMessageTime, formatUsage, type ToolLine } from "@botsman/client-core";
+import { type ChatController, type ChatItem, formatMessageTime, formatUsage, type RunItem, type RunStep, showsWorking, type ToolLine, workLabel } from "@botsman/client-core";
+
+type WorkStep = Extract<RunStep, { kind: "work" }>;
 import { useAction } from "@botsman/client-core/react";
 import { useState } from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
@@ -13,7 +15,7 @@ type ItemOf<Kind extends ChatItem["kind"]> = Extract<ChatItem, { kind: Kind }>;
 export function ChatItemView({ item, chat, botName }: { item: ChatItem; chat: ChatController; botName: string }) {
   const { colors } = useTheme();
   if (item.kind === "user") return <OwnerMessage text={item.text} note={timeLabel(item.at)} />;
-  if (item.kind === "reply") return <Reply item={item} botName={botName} />;
+  if (item.kind === "run") return <Run item={item} botName={botName} />;
   if (item.kind === "queued") return <OwnerMessage text={item.text} note={item.mode === "steer" ? "Steering the reply" : "Queued"} muted />;
   if (item.kind === "pending") return <PendingMessage item={item} chat={chat} />;
   if (item.kind === "failure") return <Failure text={item.text} chat={chat} />;
@@ -69,23 +71,55 @@ function PendingMessage({ item, chat }: { item: ItemOf<"pending">; chat: ChatCon
   );
 }
 
-function Reply({ item, botName }: { item: ItemOf<"reply">; botName: string }) {
+// One run: the bot's replies in order, with the thinking and tool calls between them folded away, and the run's
+// total cost at the end. An approval stays in view, outside its fold.
+function Run({ item, botName }: { item: RunItem; botName: string }) {
   const { colors } = useTheme();
-  const idle = item.streaming && item.text === "" && item.thinking === "" && item.tools.length === 0;
   return (
     <View style={styles.reply}>
       <View style={styles.nameLine}>
         <Text style={[styles.name, { color: colors.foreground }]}>{botName.toUpperCase()}</Text>
         <Text style={[styles.small, { color: colors.mutedForeground }]}>{timeLabel(item.at)}</Text>
       </View>
-      {item.thinking === "" ? null : <Foldout label={item.streaming && item.text === "" ? "Thinking" : "Thought"} body={item.thinking} startOpen={item.streaming && item.text === ""} />}
-      {item.tools.map((tool) => (
-        <ToolLineView key={tool.callId} tool={tool} />
-      ))}
-      {item.text === "" ? null : <Markdown text={item.text} streaming={item.streaming} />}
-      {idle ? <Text style={[styles.body, { color: colors.mutedForeground }]}>Working…</Text> : null}
+      {item.steps.map((step, index) =>
+        step.kind === "text" ? (
+          <Markdown key={step.id} text={step.text} streaming={item.working && index === item.steps.length - 1} />
+        ) : (
+          <WorkFold key={step.id} step={step} live={item.working && index === item.steps.length - 1} />
+        ),
+      )}
+      {showsWorking(item) ? <Text style={[styles.body, { color: colors.mutedForeground }]}>Working…</Text> : null}
       {item.error === null ? null : <Text style={[styles.body, { color: colors.destructive }]}>{item.error}</Text>}
-      {item.usage === null ? null : <Text style={[styles.small, { color: colors.mutedForeground }]}>{formatUsage(item.usage)}</Text>}
+      {item.usage === null || item.working ? null : <Text style={[styles.small, { color: colors.mutedForeground }]}>{formatUsage(item.usage)}</Text>}
+    </View>
+  );
+}
+
+// Thinking and tool calls between two replies, folded into one line.
+function WorkFold({ step, live }: { step: WorkStep; live: boolean }) {
+  const { colors } = useTheme();
+  const [open, setOpen] = useState(false);
+  return (
+    <View style={styles.tool}>
+      <Pressable accessibilityRole="button" accessibilityState={{ expanded: open }} onPress={() => setOpen(!open)} hitSlop={8}>
+        <Text style={[styles.body, { color: colors.mutedForeground }]}>
+          {open ? "▾ " : "▸ "}
+          {workLabel(step, live)}
+        </Text>
+      </Pressable>
+      {open ? (
+        <View style={[styles.fold, { borderColor: colors.border }]}>
+          {step.thinking === "" ? null : (
+            <Text selectable style={[styles.thinkingText, { color: colors.mutedForeground }]}>
+              {step.thinking}
+            </Text>
+          )}
+          {step.tools.map((tool) => (
+            <ToolLineView key={tool.callId} tool={tool} />
+          ))}
+        </View>
+      ) : null}
+      {step.tools.flatMap((tool) => (tool.approvalId === undefined ? [] : [<ApprovalCard key={tool.approvalId} approvalId={tool.approvalId} />]))}
     </View>
   );
 }
@@ -97,7 +131,6 @@ function ToolLineView({ tool }: { tool: ToolLine }) {
   return (
     <View style={styles.tool}>
       <Foldout label={`${TOOL_VERBS[tool.status]}: ${tool.summary}`} body={tool.output} startOpen={false} failed={tool.status === "failed"} mono />
-      {tool.approvalId === undefined ? null : <ApprovalCard approvalId={tool.approvalId} />}
     </View>
   );
 }
@@ -136,6 +169,8 @@ const styles = StyleSheet.create({
   notice: { fontFamily: fontFamilies.body, fontSize: 12, textAlign: "center" },
   failure: { borderWidth: 1, borderRadius: radius.md, padding: space[3], gap: space[2] },
   failureText: { fontFamily: fontFamilies.body, fontSize: 14 },
+  fold: { borderLeftWidth: 1, paddingLeft: space[3], gap: space[2] },
+  thinkingText: { fontFamily: fontFamilies.body, fontSize: 14, lineHeight: 21 },
   thinking: { fontFamily: fontFamilies.body, fontSize: 14, lineHeight: 21, borderLeftWidth: 1, paddingLeft: space[3], marginTop: space[1] },
   output: { fontFamily: fontFamilies.mono, fontSize: 12, borderWidth: 1, borderRadius: radius.md, padding: space[3], marginTop: space[1] },
 });

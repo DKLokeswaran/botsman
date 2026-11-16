@@ -1,6 +1,6 @@
 import type { Approval, Bot, ChatMessage } from "@botsman/protocol";
 import { expect, test } from "vitest";
-import { addPending, chatItems, formatCost, formatCountdown, formatMessageTime, formatTokens, toolSummary, applyChatEvent, applyHistoryPage, applyServerEvent, defaultSendMode, emptyChat, emptyServerState, offeredSendModes, sortBots } from "../src/index.ts";
+import { addPending, chatItems, chatSubtitle, contextTokens, formatCost, formatCountdown, formatMessageTime, formatTokens, toolSummary, applyChatEvent, applyHistoryPage, applyServerEvent, defaultSendMode, emptyChat, emptyServerState, offeredSendModes, sortBots } from "../src/index.ts";
 
 const user = (id: string, text: string): ChatMessage => ({ type: "user", id, at: null, text });
 const bot = (id: string, name: string, isMain = false) => ({ id, name, isMain }) as Bot;
@@ -64,20 +64,60 @@ test("a tool's result is drawn inside the reply that called it", () => {
   const reply: ChatMessage = { type: "assistant", id: "2", at: null, text: "", thinking: "", toolCalls: [call], model: null, usage: null, stopReason: "toolUse", error: null };
   const result: ChatMessage = { type: "tool_result", id: "3", toolCallId: "c1", toolName: "bash", output: "hi", isError: false };
   const items = chatItems({ ...emptyChat, messages: [user("1", "run it"), reply, result] });
-  expect(items.map((item) => item.kind)).toEqual(["user", "reply"]);
-  expect(items[1]).toMatchObject({ tools: [{ summary: "bash · echo hi", status: "done", output: "hi" }] });
+  expect(items.map((item) => item.kind)).toEqual(["user", "run"]);
+  expect(items[1]).toMatchObject({ steps: [{ kind: "work", tools: [{ summary: "bash · echo hi", status: "done", output: "hi" }] }] });
 });
 
 test("the reply being written comes after the settled messages, with a call that waits on the owner", () => {
   const live = { ...emptyChat.live, running: true, streamingText: "Working on it", tools: [{ callId: "c9", name: "read", status: "pending" as const, output: "", awaitingApproval: "a1" }] };
   const items = chatItems({ ...emptyChat, messages: [user("1", "go")], live });
-  expect(items.at(-1)).toMatchObject({ kind: "reply", streaming: true, text: "Working on it", tools: [{ status: "waiting", approvalId: "a1" }] });
+  expect(items.at(-1)).toMatchObject({ kind: "run", working: true, steps: [{ kind: "work", tools: [{ status: "waiting", approvalId: "a1" }] }, { kind: "text", text: "Working on it" }] });
 });
 
 test("queued and pending messages come last", () => {
   const live = { ...emptyChat.live, running: true, streamingText: "…", queued: [{ id: "q1", text: "later", mode: "queue" as const }] };
   const state = addPending({ ...emptyChat, live }, { requestId: "r1", text: "sending", mode: "queue", failed: undefined });
-  expect(chatItems(state).map((item) => item.kind)).toEqual(["reply", "queued", "pending"]);
+  expect(chatItems(state).map((item) => item.kind)).toEqual(["run", "queued", "pending"]);
+});
+
+const assistant = (id: string, text: string, change: Partial<Extract<ChatMessage, { type: "assistant" }>> = {}): ChatMessage => ({
+  type: "assistant", id, at: null, text, thinking: "", toolCalls: [], model: null, usage: null, stopReason: "stop", error: null, ...change,
+});
+const usage = (cost: number) => ({ inputTokens: 10, outputTokens: 5, cacheReadTokens: 0, cacheWriteTokens: 0, totalTokens: 15, cost });
+
+test("one run per owner message: replies stay in view, thinking and tool calls fold between them, and the cost is the run's total", () => {
+  const call = { id: "c1", name: "bash", arguments: { command: "ls" } };
+  const messages: ChatMessage[] = [
+    user("1", "look around"),
+    assistant("2", "Let me check.", { thinking: "plan", toolCalls: [call], stopReason: "toolUse", usage: usage(0.1) }),
+    { type: "tool_result", id: "3", toolCallId: "c1", toolName: "bash", output: "a b", isError: false },
+    assistant("4", "Found two files.", { thinking: "done", usage: usage(0.2) }),
+  ];
+  const items = chatItems({ ...emptyChat, messages });
+  expect(items.map((item) => item.kind)).toEqual(["user", "run"]);
+  const run = items[1] as Extract<typeof items[number], { kind: "run" }>;
+  expect(run.steps.map((step) => step.kind)).toEqual(["work", "text", "work", "text"]);
+  expect(run.usage?.cost).toBeCloseTo(0.3);
+  expect(run.usage?.totalTokens).toBe(30);
+});
+
+test("an attempt cut off and retried is left out, and a run that ends in an error keeps it", () => {
+  const retried = chatItems({ ...emptyChat, messages: [user("1", "hi"), assistant("2", "half an ans", { stopReason: "error", error: "terminated" }), assistant("3", "The full answer.")] });
+  expect(retried[1]).toMatchObject({ kind: "run", steps: [{ kind: "text", text: "The full answer." }], error: null });
+  const failed = chatItems({ ...emptyChat, messages: [user("1", "hi"), assistant("2", "", { stopReason: "error", error: "rate limited" })] });
+  expect(failed[1]).toMatchObject({ kind: "run", error: "rate limited" });
+});
+
+test("the bot shows as working from the moment it starts, before anything streams", () => {
+  const items = chatItems({ ...emptyChat, messages: [user("1", "hi")], live: { ...emptyChat.live, running: true } });
+  expect(items.at(-1)).toMatchObject({ kind: "run", working: true, steps: [] });
+});
+
+test("the context in use is the newest reply's total, until a clear or compaction", () => {
+  const replied = [user("1", "hi"), assistant("2", "a", { usage: usage(0) }), assistant("3", "b", { usage: { ...usage(0), totalTokens: 900 } })];
+  expect(contextTokens(replied)).toBe(900);
+  expect(contextTokens([...replied, { type: "notice", id: "4", kind: "reset", text: "cleared" }])).toBe(0);
+  expect(chatSubtitle({ model: { provider: "a", modelId: "m" }, thinkingLevel: "off" }, 0, [{ provider: "a", id: "m", name: "M", contextWindow: 1000, reasoning: false }], 250)).toBe("m · Off · 25% context · $0.00 this chat");
 });
 
 test("a tool summary is one short line", () => {
@@ -92,7 +132,7 @@ test("a settled call that waits on the owner carries its approval, and is drawn 
   const live = { ...emptyChat.live, running: true, tools: [{ callId: "c1", name: "read", status: "pending" as const, output: "", awaitingApproval: "a1" }] };
   const items = chatItems({ ...emptyChat, messages: [reply], live });
   expect(items).toHaveLength(1);
-  expect(items[0]).toMatchObject({ kind: "reply", tools: [{ status: "waiting", approvalId: "a1", summary: "read · /etc/hostname" }] });
+  expect(items[0]).toMatchObject({ kind: "run", steps: [{ kind: "work", tools: [{ status: "waiting", approvalId: "a1", summary: "read · /etc/hostname" }] }] });
 });
 
 test("formats countdowns, costs, and token counts", () => {

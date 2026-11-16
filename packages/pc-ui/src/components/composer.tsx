@@ -1,6 +1,6 @@
 import { type ChatController, exactCommand, runCommand, type SendMode, type SlashCommand, type SlashScreen, slashMatches } from "@botsman/client-core";
 import { useAction } from "@botsman/client-core/react";
-import { type KeyboardEvent, useState } from "react";
+import { type KeyboardEvent, useLayoutEffect, useRef, useState } from "react";
 import { memoryHref, notesHref } from "../use-route.ts";
 import { Button } from "./ui/button.tsx";
 
@@ -14,10 +14,10 @@ export function Composer({ chat, botName, sendModes, busy }: { chat: ChatControl
   const command = useAction(async (picked: SlashCommand) => {
     setText("");
     const action = await runCommand(picked, chat);
-    if (action.kind === "help") setText("/");
     if (action.kind === "open") window.location.hash = screenHref(action.screen, chat.botId);
   });
   const matches = slashMatches(text);
+  const grow = useAutoGrow(text);
 
   const send = (mode: SendMode) => {
     const message = text.trim();
@@ -41,10 +41,11 @@ export function Composer({ chat, botName, sendModes, busy }: { chat: ChatControl
         value={text}
         onChange={(event) => setText(event.target.value)}
         onKeyDown={onKeyDown}
-        rows={Math.min(8, Math.max(1, text.split("\n").length))}
+        ref={grow}
+        rows={1}
         placeholder={`Message ${botName}`}
         aria-label={`Message ${botName}`}
-        className="resize-none bg-transparent px-1 py-1 outline-none placeholder:text-muted-foreground"
+        className="max-h-[40vh] resize-none overflow-y-auto bg-transparent px-1 py-1 outline-none placeholder:text-muted-foreground"
       />
       <div className="flex items-center justify-end gap-2">
         {busy ? (
@@ -80,4 +81,16 @@ function screenHref(screen: SlashScreen, botId: string): string {
   if (screen === "memory") return memoryHref(botId);
   if (screen === "notes") return notesHref(botId);
   return "#/usage";
+}
+
+// Sizes the box to its text, wrapped lines included, up to the CSS max height, past which it scrolls.
+function useAutoGrow(text: string) {
+  const box = useRef<HTMLTextAreaElement>(null);
+  useLayoutEffect(() => {
+    const element = box.current;
+    if (element === null) return;
+    element.style.height = "auto";
+    element.style.height = `${element.scrollHeight}px`;
+  }, [text]);
+  return box;
 }
