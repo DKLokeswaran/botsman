@@ -21,7 +21,7 @@ The app's workflow then checks that the tag and the config file agree, builds an
 
 An app offers a build only when it is newer than the installed one and the connected server accepts its protocol number.
 
-The Android app asks once for Android's "install unknown apps" permission, then downloads the APK, checks its digest, and hands it to Android's installer, which asks the owner to confirm. The Windows app closes while its installer runs.
+The Android app asks once for Android's "install unknown apps" permission, then downloads the APK, checks its digest, and hands it to Android's installer, which asks the owner to confirm. On a phone with Google Play Protect, Play Protect may then offer to scan the app; "More details", then "Install without scanning", installs it without sending it to Google, after the phone's lock screen check. The Windows app closes while its installer runs.
 
 ## The server and dashboard
 
