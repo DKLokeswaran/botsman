@@ -40,7 +40,7 @@ The server accepts any mode in any state, so a message is never lost when the bo
 | Clear | Pi starts a new context. Earlier messages stay in the transcript above a notice, and memory files and notes are kept. There is no save turn, since the owner chose to drop the context. |
 | Retry | Pi answers the chat as it stands. A failed reply is left out of the model's context, so this asks again for the owner's last message. It is offered on a failed reply, and refused while the bot is replying. A finished reply is not regenerated. |
 
-Compact and clear will also be slash commands. Retry shows on the failure in both apps.
+Compact and clear will also be slash commands. Retry shows on the failure in both apps. A reply the owner stopped is not a failure: it shows a plain "Stopped" note under the reply, without Retry, and sends no failure alert.
 
 ## Routines
 

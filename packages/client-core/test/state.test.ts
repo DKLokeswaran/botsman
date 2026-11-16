@@ -152,3 +152,9 @@ test("shows a message's time today, Yesterday for the day before, and the date b
   expect(formatMessageTime(new Date(2026, 10, 15, 23, 59).getTime(), now)).toBe("Yesterday");
   expect(formatMessageTime(new Date(2026, 9, 12, 9, 0).getTime(), now)).toMatch(/12/);
 });
+
+test("a reply the owner stopped shows a plain Stopped note, and a failed one shows why with Retry", () => {
+  const ended = (reason: string, detail: string | null = null) => chatItems({ ...emptyChat, live: { ...emptyChat.live, failure: { reason, detail } } }).at(-1);
+  expect(ended("aborted")).toEqual({ kind: "notice", id: "stopped", text: "Stopped" });
+  expect(ended("error", "The provider refused the key")).toEqual({ kind: "failure", id: "failure", text: "The provider refused the key" });
+});

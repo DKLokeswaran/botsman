@@ -42,8 +42,14 @@ export function chatItems(state: ChatState): ChatItem[] {
   const context: Context = { results: toolResults(state.messages), waiting: waitingApprovals(state.live) };
   const items = groupRuns(state.messages, context);
   const withLive = addLive(items, state.live);
-  const failure: ChatItem[] = state.live.failure === null ? [] : [{ kind: "failure", id: "failure", text: state.live.failure.detail ?? state.live.failure.reason }];
-  return [...withLive, ...failure, ...state.live.queued.map(queuedItem), ...state.pending.map(pendingItem)];
+  return [...withLive, ...failureItems(state.live), ...state.live.queued.map(queuedItem), ...state.pending.map(pendingItem)];
+}
+
+// A reply that failed shows why, with Retry. One the owner stopped shows a plain note instead.
+function failureItems(live: LiveState): ChatItem[] {
+  if (live.failure === null) return [];
+  if (live.failure.reason === "aborted") return [{ kind: "notice", id: "stopped", text: "Stopped" }];
+  return [{ kind: "failure", id: "failure", text: live.failure.detail ?? live.failure.reason }];
 }
 
 // A short line saying what a tool call does: the command, the path, or the first argument.
