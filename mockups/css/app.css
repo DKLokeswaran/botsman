@@ -262,6 +262,7 @@ input:focus-visible, textarea:focus-visible, select:focus-visible { outline: non
   font-size: 13px;
   padding: 3px 0;
 }
+.work-fold { border-left: 1px solid var(--border); padding-left: 12px; margin: 2px 0 6px; }
 .think-body, .tool-body {
   color: var(--fg-2);
   font-size: 13.5px;
@@ -367,7 +368,6 @@ tr:last-child td { border-bottom: 0; }
   overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
   flex: 0 1 auto;
 }
-.slash-btn { min-width: 34px; flex: none; }
 .send, .stop {
   width: 34px; height: 34px; border-radius: var(--r-av);
   background: var(--fill); color: var(--fill-fg);
@@ -546,3 +546,12 @@ html[data-device="phone"] .dock { padding-bottom: 18px; }
 .card .diff { margin: 0 0 8px; }
 
 .card .diff-line { white-space: pre-wrap; }
+
+/* A message waiting for the running turn, as the app shows it. */
+.msg-user.queued .bubble { opacity: 0.6; }
+
+/* A memory file or note before Edit, drawn as it reads. */
+.read-only { border: 1px solid var(--border); border-radius: var(--r); padding: 10px 12px; max-height: 60vh; overflow-y: auto; }
+
+/* Stop is the one red action in the message box, as in the apps. */
+.ghost.stop { color: var(--destructive); border-color: var(--destructive); }

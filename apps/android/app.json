@@ -1,0 +1,55 @@
+{
+  "expo": {
+    "name": "Botsman",
+    "slug": "botsman",
+    "version": "0.1.0",
+    "scheme": "botsman",
+    "orientation": "portrait",
+    "userInterfaceStyle": "automatic",
+    "icon": "./assets/icon.png",
+    "platforms": [
+      "android"
+    ],
+    "android": {
+      "package": "dev.botsman.app",
+      "versionCode": 100,
+      "edgeToEdgeEnabled": true,
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/icon.png",
+        "backgroundColor": "#000000"
+      }
+    },
+    "plugins": [
+      "expo-router",
+      "expo-secure-store",
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": false,
+          "cameraPermission": false,
+          "microphonePermission": false
+        }
+      ],
+      [
+        "expo-font",
+        {
+          "fonts": [
+            "node_modules/@expo-google-fonts/orbitron/700Bold/Orbitron_700Bold.ttf",
+            "node_modules/@expo-google-fonts/orbitron/900Black/Orbitron_900Black.ttf",
+            "node_modules/@expo-google-fonts/inter/400Regular/Inter_400Regular.ttf",
+            "node_modules/@expo-google-fonts/inter/500Medium/Inter_500Medium.ttf",
+            "node_modules/@expo-google-fonts/inter/600SemiBold/Inter_600SemiBold.ttf",
+            "node_modules/@expo-google-fonts/fragment-mono/400Regular/FragmentMono_400Regular.ttf"
+          ]
+        }
+      ],
+      "expo-sqlite"
+    ],
+    "experiments": {
+      "typedRoutes": false
+    },
+    "extra": {
+      "updateManifestUrl": "https://github.com/DKLokeswaran/botsman/releases/download/updates/android.json"
+    }
+  }
+}

@@ -1,7 +1,9 @@
 import { botIdOfStream, type ChatSnapshot, ClientMessage, SERVER_STREAM, type ServerMessage, type ServerSnapshot, type StreamEvent, type StreamPosition } from "@botsman/protocol";
 import { compile } from "@earendil-works/pi-schema";
-import type { FastifyInstance } from "fastify";
+import type { FastifyInstance, FastifyRequest } from "fastify";
 import type { WebSocket } from "ws";
+import { socketToken } from "../auth/socket-token.ts";
+import { earlierInTranscript } from "./chat-snapshot.ts";
 import type { Sequenced } from "../events/stream-hub.ts";
 import type { Services } from "../services.ts";
 
@@ -11,21 +13,23 @@ const SESSION_CHECK_MS = 60_000;
 // The live updates socket. A client signs in with its first message, then subscribes to streams. On subscribe it
 // sends where it left off; the server replies with what it missed, or with a fresh snapshot when it can't.
 export function registerSocket(app: FastifyInstance, services: Services): void {
-  app.get("/api/ws", { websocket: true, config: { public: true } }, (socket) => {
-    new SocketSession(socket as unknown as WebSocket, services).start();
+  app.get("/api/ws", { websocket: true, config: { public: true } }, (socket, request) => {
+    new SocketSession(socket as unknown as WebSocket, services, request).start();
   });
 }
 
 class SocketSession {
   readonly #socket: WebSocket;
   readonly #services: Services;
+  readonly #request: FastifyRequest;
   readonly #subscriptions = new Map<string, () => void>();
   #sessionId: string | undefined;
   #timer: NodeJS.Timeout | undefined;
 
-  constructor(socket: WebSocket, services: Services) {
+  constructor(socket: WebSocket, services: Services, request: FastifyRequest) {
     this.#socket = socket;
     this.#services = services;
+    this.#request = request;
   }
 
   start(): void {
@@ -46,7 +50,7 @@ class SocketSession {
 
   #hello(token: string): void {
     try {
-      this.#sessionId = this.#services.auth.verifyAccess(token);
+      this.#sessionId = this.#services.auth.verifyAccess(socketToken(this.#request, token));
     } catch {
       return this.#fail("unauthorized", "Access token is not valid");
     }
@@ -86,7 +90,8 @@ class SocketSession {
     if (botId === undefined) return { snapshot: this.#serverSnapshot(), seq: services.hub.currentSeq(stream) };
     const bot = services.bots.get(botId);
     if (services.sandbox.status.ok) await services.engine.view(bot);
-    return { snapshot: services.feed.snapshot(bot.id, services.registry.chatSettings(bot)), seq: services.hub.currentSeq(stream) };
+    const earlier = services.sandbox.status.ok ? await earlierInTranscript(services, bot) : false;
+    return { snapshot: services.feed.snapshot(bot.id, services.registry.chatSettings(bot), earlier), seq: services.hub.currentSeq(stream) };
   }
 
   #serverSnapshot(): ServerSnapshot {
@@ -96,6 +101,8 @@ class SocketSession {
     return {
       bots,
       approvals: services.approvalStore.list({ status: "pending", botIds }),
+      activity: botIds.map((botId) => services.activity.get(botId)),
+      alertSettings: services.alertSettings.get(),
     };
   }
 

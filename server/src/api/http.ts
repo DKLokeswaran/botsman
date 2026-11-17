@@ -3,6 +3,7 @@ import type { ErrorBody } from "@botsman/protocol";
 import { compile } from "@earendil-works/pi-schema";
 import websocket from "@fastify/websocket";
 import Fastify, { type FastifyInstance, type FastifyReply, type FastifyRequest } from "fastify";
+import { ACCESS_COOKIE, readCookie, requireOwnPage } from "../auth/cookies.ts";
 import { ApiError } from "../errors.ts";
 import type { Services } from "../services.ts";
 import { registerAlertsSocket } from "./alerts-socket.ts";
@@ -10,6 +11,7 @@ import { registerApprovalRoutes } from "./approval-routes.ts";
 import { registerAuthRoutes } from "./auth-routes.ts";
 import { registerBotRoutes } from "./bot-routes.ts";
 import { registerChatRoutes } from "./chat-routes.ts";
+import { registerDashboardRoutes } from "./dashboard-routes.ts";
 import { registerMemoryRoutes } from "./memory-routes.ts";
 import { registerNoteRoutes } from "./note-routes.ts";
 import { registerProviderRoutes } from "./provider-routes.ts";
@@ -48,6 +50,7 @@ export async function buildHttp(services: Services): Promise<FastifyInstance> {
   // Client messages are small; a large frame is refused before it is parsed.
   await app.register(websocket, { options: { maxPayload: MAX_SOCKET_MESSAGE_BYTES } });
   registerSystemRoutes(app, services);
+  registerDashboardRoutes(app, services);
   registerAuthRoutes(app, services);
   registerBotRoutes(app, services);
   registerChatRoutes(app, services);
@@ -68,8 +71,21 @@ async function requireHttps(request: FastifyRequest): Promise<void> {
 async function authenticate(services: Services, request: FastifyRequest): Promise<void> {
   if (request.routeOptions.config?.public) return;
   const header = request.headers.authorization;
-  if (header === undefined || !header.startsWith("Bearer ")) throw new ApiError(401, "unauthorized", "Sign in first");
-  request.sessionId = services.auth.verifyAccess(header.slice(7));
+  if (header?.startsWith("Bearer ")) {
+    request.sessionId = services.auth.verifyAccess(header.slice(7));
+    return;
+  }
+  request.sessionId = services.auth.verifyAccess(cookieToken(request));
+}
+
+// The dashboard's access token. A browser attaches cookies to requests other sites start, so a request that
+// changes anything must also come from the dashboard's own pages.
+function cookieToken(request: FastifyRequest): string {
+  const token = readCookie(request.headers.cookie, ACCESS_COOKIE);
+  if (token === undefined) throw new ApiError(401, "unauthorized", "Sign in first");
+  const reads = request.method === "GET" || request.method === "HEAD";
+  if (!reads) requireOwnPage(request);
+  return token;
 }
 
 function sendError(reply: FastifyReply, error: unknown): FastifyReply {

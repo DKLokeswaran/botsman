@@ -21,7 +21,11 @@ FCM isn't used. A self-hosted server can't push to a published app without the a
 
 - Type `specialUse`. Android 15's ban on starting foreground services at boot doesn't list it, and its 6-hour limit applies to `dataSync` and `mediaProcessing`.
 - It restarts after a reboot, through a boot receiver.
-- After any reconnect, it catches up on missed alerts, so a killed service delays alerts rather than losing them.
+- After any reconnect, it catches up on missed alerts, so a killed service delays alerts rather than losing them. The server then sends `ready`, so the connection's state shows connected even when nothing was missed.
+- It signs in with an alerts token, which opens only the alerts stream and works while the phone's device session stays signed in. Signing the phone out from another device ends it within a minute. The service never holds the refresh token, so it can't race the app's own renewals.
+- It is on by default and starts when the owner signs in. Settings has a Keep connected switch, the connection's state, and a checklist: notifications allowed, battery unrestricted, and a link to dontkillmyapp.com for makers known to stop background apps.
+- Its notifications use the wording and bot names the app hands it, so the text matches the other apps. It posts nothing while the app is in front, and a tap opens that bot's chat.
+- It keeps the server address, the alerts token, and its place in the stream in the app's private storage, so it can start again after a reboot without the app.
 - The ntfy author measured 0 to 1% battery over 17 hours for a similar connection, on one phone.
 
 ### Phone makers
@@ -42,9 +46,19 @@ If Play rejects it, the Play build ships with UnifiedPush only, and other builds
 
 The alerts socket runs in Tauri's Rust side, and the tray shows notifications. Tauri's `backgroundThrottling` setting doesn't work on Windows, and reports disagree on whether a hidden WebView2 window gets throttled. Rust avoids the question.
 
+It works like the Android service: the same alerts-only token, the wording and bot names the app hands it, and its place in the stream, kept in `alerts.json` in the app's config folder, which the window and the connection change one at a time, and which is replaced whole on each change so a read never sees half of one. It notifies only while the window is hidden or not focused. Closing the window hides it to the tray, and the tray's Quit ends the app. Only one copy runs: starting Botsman again, for example from the Start menu, shows the running window. Settings has Keep connected and Start with Windows, which opens the app hidden in the tray. A notification's click doesn't open the chat yet; the tray's Open Botsman does.
+
 ## Web dashboard
 
 The open page's WebSocket carries alerts, and the browser shows them as notifications after the owner allows them once. Notifications arrive only while the site is open in a tab. Nothing arrives after the tab closes.
+
+The page follows the alerts stream through `client-core` and shows a notification only while it isn't in front, since the page itself already shows what needs the owner. A click brings the page forward on that bot's chat. Settings asks for the browser's permission with a Turn on button, and says when the browser has blocked it.
+
+## Alert settings
+
+The owner turns each alert type on or off in the apps. The server stores these settings, so one choice applies to every device. The server leaves a type that is off out of the alerts stream. This follows the rule that state lives on the server.
+
+Every type starts on. The settings live in `server.db`, are read and changed at `/api/settings/alerts`, and reach every open app through the `server` stream. An alert that was off when it happened is not sent later when the type is turned back on.
 
 ## Alert content
 

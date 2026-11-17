@@ -444,8 +444,8 @@
   }
 
   function thinkOpen(m) {
-    if (Object.prototype.hasOwnProperty.call(state.openThink, m.id)) return state.openThink[m.id];
-    return !!(m.thinking && m.thinking.open);
+    // Folds start closed, as in the app.
+    return Object.prototype.hasOwnProperty.call(state.openThink, m.id) && state.openThink[m.id];
   }
   function toolOpen(id) { return !!state.openTool[id]; }
 
@@ -481,18 +481,32 @@
       "<div><div class=\"who\">" + esc(botName(m.who)) + " <span>" + esc(m.time || "") + "</span></div>" +
       paras(text) + "</div></div>";
   }
+  // The app folds a run's thinking, tool calls, and subagent work into one line between replies, labelled with what
+  // is running while live, or a summary such as "Thought · ran 2 tools" once done.
+  function workLabel(m) {
+    const live = (m.tools || []).concat(m.subagents || []).filter(function (t) { return t.running; })[0];
+    if (live) return "Running " + (live.line ? live.line.replace(/^Running:\s*/, "") : "Subagent · " + live.name);
+    if (m.thinking && m.thinking.streaming) return "Thinking…";
+    const count = (m.tools || []).length + (m.subagents || []).length;
+    const parts = m.thinking ? ["Thought"] : [];
+    if (count) parts.push("ran " + count + (count === 1 ? " tool" : " tools"));
+    const label = parts.join(" · ");
+    return label.charAt(0).toUpperCase() + label.slice(1);
+  }
   function assistantMessage(m) {
-    const open = !!(m.thinking && thinkOpen(m));
-    let think = "";
-    if (m.thinking) {
-      const label = m.thinking.streaming ? "Thinking…" : "Thought for " + m.thinking.seconds + "s";
-      think = '<button type="button" class="think" data-act="think" data-id="' + m.id + '">' + (open ? "▾" : "▸") + " " + label + "</button>";
-      if (open) {
-        const cls = m.thinking.streaming ? "think-body caret" : "think-body";
-        think += '<div class="' + cls + '">' + esc(m.thinking.text) + "</div>";
-      }
+    const hasWork = !!(m.thinking || (m.tools || []).length || (m.subagents || []).length);
+    const open = hasWork && thinkOpen(m);
+    let work = "";
+    if (hasWork) {
+      const live = (m.thinking && m.thinking.streaming) || (m.tools || []).concat(m.subagents || []).some(function (t) { return t.running; });
+      work = '<button type="button" class="think" data-act="think" data-id="' + m.id + '">' + (live ? '<i class="work-dot pulse"></i>' : "") + (open ? "▾ " : "▸ ") + esc(workLabel(m)) + "</button>";
     }
-    const tools = (m.tools || []).map(function (t) {
+    let think = "";
+    if (open && m.thinking) {
+      const cls = m.thinking.streaming ? "think-body caret" : "think-body";
+      think = '<div class="' + cls + '">' + esc(m.thinking.text) + "</div>";
+    }
+    const tools = !open ? "" : (m.tools || []).map(function (t) {
       const opened = toolOpen(t.id);
       let block = '<button type="button" class="tool" data-act="tool" data-id="' + t.id + '">' +
         (t.running ? '<i class="work-dot pulse"></i>' : "") + (opened ? "▾ " : "▸ ") + esc(t.line) + "</button>";
@@ -501,7 +515,7 @@
       }
       return block;
     }).join("");
-    const subs = (m.subagents || []).map(function (s) {
+    const subs = !open ? "" : (m.subagents || []).map(function (s) {
       const opened = toolOpen(s.id);
       let block = '<button type="button" class="tool" data-act="tool" data-id="' + s.id + '">' +
         (s.running ? '<i class="work-dot pulse"></i>' : "") + (opened ? "▾ " : "▸ ") + "Subagent · " + esc(s.name) + " · " + esc(s.status) + "</button>";
@@ -510,6 +524,7 @@
       }
       return block;
     }).join("");
+    think = work + (open ? '<div class="work-fold">' + think + tools + subs + "</div>" : "");
     const todos = m.todos && m.todos.length ? '<div class="todos">' + m.todos.map(function (td) {
       return '<div class="todo' + (td.done ? " done" : "") + '"><span class="box' + (td.done ? " on" : "") + '">' + (td.done ? svg(IC.check, 12) : "") + "</span><span>" + esc(td.text) + "</span></div>";
     }).join("") + "</div>" : "";
@@ -520,17 +535,15 @@
       return '<div class="diff-line ' + kind + '">' + pre + esc(ln.s) + "</div>";
     }).join("") + "</div>" : "";
     const code = m.code ? '<div class="code"><div class="code-bar"><span>' + esc(m.code.lang) + '</span><button type="button" class="text-btn" data-act="copy-code" data-id="' + m.id + '">Copy</button></div><pre>' + esc(m.code.text) + "</pre></div>" : "";
+    // Tokens and cost for the whole run, once it ends, with Copy for everything the bot said.
     let usage = "";
-    if (state.retrying === m.id) usage = '<div class="usage-line">Retrying…</div>';
-    else if (m.usage) {
+    if (m.usage) {
       usage = '<div class="usage-line"><span>' + toks(m.usage.tokens) + " · " + money(m.usage.cost) + "</span>" +
-        '<button type="button" class="text-btn" data-act="retry" data-id="' + m.id + '">Retry</button>' +
-        '<button type="button" class="text-btn" data-act="copy-msg" data-id="' + m.id + '">Copy</button>' +
-        (state.retried[m.id] ? "<span>Retried</span>" : "") + "</div>";
+        '<button type="button" class="text-btn" data-act="copy-msg" data-id="' + m.id + '">Copy</button></div>';
     }
     return '<div class="msg msg-assistant">' + avatar(m.who, { sm: true }) + "<div>" +
       '<div class="who">' + esc(botName(m.who)) + " <span>" + esc(m.time || "") + "</span></div>" +
-      think + tools + subs + todos + body + diff + code + usage + "</div></div>";
+      think + todos + body + diff + code + usage + "</div></div>";
   }
   function renderMessage(m, list) {
     let html;
@@ -618,6 +631,12 @@
         '<button type="button" data-act="unattach" data-id="' + a.id + '" aria-label="Remove">×</button></span>';
     }).join("") + "</div>";
   }
+  // Messages waiting for the running turn, shown greyed at the end of the chat as the app shows them.
+  function queuedMessages(bot) {
+    return (bot.queue || []).map(function (q) {
+      return '<div class="msg msg-user queued"><div class="bubble">' + esc(q) + '</div><div class="msg-time">Queued</div></div>';
+    }).join("");
+  }
   function queueRow(bot) {
     if (!bot.queue || !bot.queue.length) return "";
     return '<div class="queue">' + bot.queue.map(function (q, i) {
@@ -662,19 +681,19 @@
     const eff = bot ? effective(bot) : null;
     const placeholder = room ? "Message " + room.name : (working ? "Queue a message" : "Message " + bot.name);
     const sendBtn = working
-      ? '<button type="button" class="text-btn" id="queue-btn" data-act="send"' + (canSend() ? "" : " hidden") + ">Queue</button>" +
-        '<button type="button" class="ghost" data-act="stop">' + svg(IC.square, 12) + " Stop</button>"
+      ? '<button type="button" class="text-btn" id="queue-btn" data-act="send"' + (canSend() ? "" : " disabled") + ">Queue</button>" +
+        '<button type="button" class="ghost" id="steer-btn" data-act="steer"' + (canSend() ? "" : " disabled") + ">Steer</button>" +
+        '<button type="button" class="ghost stop" data-act="stop">' + svg(IC.square, 12) + " Stop</button>"
       : '<button type="button" class="send" id="send-btn" data-act="send"' + (canSend() ? "" : " disabled") + ' aria-label="Send">' + svg(IC.up, 18) + "</button>";
     const modelBtn = eff ? '<button type="button" class="model-chip" data-act="toggle-model">' + esc(eff.model) + " · " + esc(eff.effort) + "</button>" : "";
-    const steer = working ? '<div class="steer-row"><input id="steer" data-field="steer" placeholder="Steer · add a note to this turn" value="' + esc(state.steer) + '">' +
-      '<button type="button" class="ghost" id="steer-btn" data-act="steer"' + (state.steer.trim() ? "" : " disabled") + ">Steer</button></div>" : "";
-    return '<div class="dock"><div class="dock-inner">' + replyHtml + attachRow() + (bot ? queueRow(bot) : "") + steer +
+    // The app has one box while the bot works: Queue sends after the turn, and Steer adds the text to the turn.
+    const steer = "";
+    return '<div class="dock"><div class="dock-inner">' + replyHtml + attachRow() + steer +
       (state.modelOpen && bot ? modelPop(bot) : "") +
       '<div id="slash-host">' + slashHtml() + "</div>" +
       '<div class="composer-box"><textarea id="composer" rows="1" placeholder="' + esc(placeholder) + '" autocomplete="off">' + esc(state.composer) + "</textarea>" +
       '<div class="composer-tools"><button type="button" class="icon-btn" data-act="pick-file" aria-label="Attach file">' + svg(IC.clip) + "</button>" +
       '<button type="button" class="icon-btn" data-act="paste-sample" aria-label="Paste image">' + svg(IC.image) + "</button>" +
-      '<button type="button" class="icon-btn slash-btn" data-act="slash-ins" aria-label="Commands">/</button>' +
       '<span class="spacer"></span>' +
       modelBtn + sendBtn + "</div></div>" +
       '<input id="file-in" type="file" multiple hidden accept="image/*,.pdf,.txt,.md,.json,.csv"></div></div>';
@@ -706,7 +725,7 @@
     const eff = effective(bot);
     const bits = [];
     if (state.view === "attach") bits.push("Attachments");
-    bits.push(eff.model, eff.effort);
+    bits.push(eff.model, eff.effort, "18.2k/200k context");
     if (eff.custom) bits.push("this chat");
     const cost = chatCost(list);
     if (cost) bits.push(money(cost) + " this chat");
@@ -720,7 +739,7 @@
       '<div class="topbar-text"><strong>' + esc(bot.name) + "</strong><span>" + esc(bits.join(" · ")) + "</span></div>" +
       chatActions(bot) + "</div>" + bannerHtml() +
       '<div class="pane"><div class="thread">' + list.map(function (m) { return renderMessage(m, list); }).join("") +
-      (cards ? '<div class="msg">' + cards + "</div>" : "") + "</div></div>" + dock(bot, null) + "</div>";
+      (cards ? '<div class="msg">' + cards + "</div>" : "") + queuedMessages(bot) + "</div></div>" + dock(bot, null) + "</div>";
   }
   function roomColumn(roomId) {
     const room = rooms.filter(function (r) { return r.id === roomId; })[0];
@@ -872,12 +891,12 @@
         : '<button type="button" class="ghost" data-act="delete-ask" data-id="bot:' + bot.id + '">Delete bot</button>');
     const body = '<div class="pane"><div class="page"><div class="hero">' + avatar(bot.id, { lg: true }) +
       '<button type="button" class="primary" data-act="pick-avatar">Upload a photo</button>' +
+      '<button type="button" class="text-btn">Use the initial</button>' +
       '<input id="avatar-in" type="file" accept="image/*" hidden></div>' +
       '<div class="lbl">Or choose</div><div class="marks">' + marks + "</div>" +
       '<div class="field"><label for="bot-name">Name</label><input id="bot-name" data-field="bot:name" value="' + esc(bot.name) + '"></div>' +
       '<div class="field"><label for="bot-desc">Description</label><input id="bot-desc" data-field="bot:description" value="' + esc(bot.description) + '"></div>' +
-      '<div class="static-row"><b>Model default</b><span>' + esc(bot.model) + " · " + esc(bot.effort) + "</span></div>" +
-      '<p class="need-k">Change the model from the chip on the message box. That can apply to this chat, or to the bot\'s default. The face updates everywhere this bot appears.</p>' +
+      '<button type="button" class="set-row wide" data-act="toggle-model"><span><b>Model default</b><span class="sub block">' + esc(bot.model) + " · " + esc(bot.effort) + " · used by chats that haven't picked their own</span></span><span>›</span></button>" +
       links + '<div style="margin-top:12px">' + remove + "</div></div></div>";
     return column(bot.name, "Bot info", body);
   }
@@ -901,13 +920,42 @@
       '<div class="field"><label for="sv-port">Port</label><input id="sv-port" data-field="add:port" value="' + esc(add.port) + '" inputmode="numeric"></div>' +
       (add.error ? '<div class="err">' + esc(add.error) + "</div>" : "") +
       '<button type="button" class="primary" data-act="add-server">Add server</button>' +
+      alertsSection() + backgroundSection() + devicesSection() +
       '<div class="group-label">Mode</div><div class="seg" style="margin-bottom:12px">' + seg + "</div>" +
       '<div class="set-row"><div><b>Model providers</b><div class="sub">' + providerCount + ' connected</div></div><button type="button" class="text-btn" data-act="nav" data-to="#/providers">Open</button></div>' +
-      '<div class="set-row"><div><b>Notifications</b><div class="sub">Phone: this app\'s background connection. Windows: this app\'s tray.</div></div><button type="button" class="text-btn" data-act="nav" data-to="#/notifications">Open</button></div>' +
-      '<div class="set-row"><div><b>Botsman ' + esc(version()) + '</b><div class="sub">' + (state.installed ? "Up to date" : "Update available · " + HB.nextVersion) + "</div></div>" +
-      (state.installed ? "" : '<button type="button" class="ghost" data-act="nav" data-to="#/update">View</button>') + "</div>" +
+      '<div class="group-label">This app</div>' +
+      '<div class="set-row"><div><b>Botsman ' + esc(version()) + '</b><div class="sub">' + (state.installed ? "Up to date, checked at 9:52 PM" : "Version " + HB.nextVersion + " is available") + "</div></div>" +
+      (state.installed ? '<button type="button" class="ghost">Check for updates</button>' : '<button type="button" class="primary" data-act="nav" data-to="#/update">Install</button>') + "</div>" +
       "</div></div>";
     return column("Settings", currentServer().name, body);
+  }
+  // Settings as the app draws it: alert switches that apply to every device, the background connection, and the
+  // devices signed in to this server.
+  function alertsSection() {
+    const kinds = [["approval", "Approvals", "A bot asks before an action or a memory edit"], ["errors", "Failures", "A reply stops with an error"]];
+    return '<div class="group-label">Alerts</div><p class="need-k">These apply to every device signed in to this server.</p>' + kinds.map(function (k) {
+      const on = state.notif[k[0]] !== false;
+      return '<button type="button" class="set-row wide" data-act="notif" data-id="' + k[0] + '"><span><b>' + k[1] + '</b><span class="sub block">' + k[2] + '</span></span><span class="toggle' + (on ? " on" : "") + '"><i></i></span></button>';
+    }).join("");
+  }
+  function backgroundSection() {
+    if (device() === "phone") {
+      return '<div class="group-label">Alerts when the app is closed</div>' +
+        '<button type="button" class="set-row wide"><span><b>Keep connected</b><span class="sub block">Botsman keeps its own connection to your server and posts alerts itself.</span></span><span class="toggle on"><i></i></span></button>' +
+        '<p class="need-k">Connected. An ongoing notification shows while it runs.</p>' +
+        '<div class="set-row"><div><b>Notifications</b><div class="sub">Allowed</div></div><span class="tag">Done</span></div>' +
+        '<div class="set-row"><div><b>Battery</b><div class="sub">Android may pause the connection to save battery</div></div><button type="button" class="ghost">Open</button></div>' +
+        '<div class="set-row"><div><b>Phone maker</b><div class="sub">Samsung can stop background apps. Its steps are on dontkillmyapp.com.</div></div><button type="button" class="ghost">Guide</button></div>';
+    }
+    return '<div class="group-label">Alerts when the window is closed</div>' +
+      '<button type="button" class="set-row wide"><span><b>Keep connected</b><span class="sub block">Botsman stays in the tray, keeps its connection to your server, and posts its own notifications.</span></span><span class="toggle on"><i></i></span></button>' +
+      '<button type="button" class="set-row wide"><span><b>Start with Windows</b><span class="sub block">Opens hidden in the tray when you sign in to Windows.</span></span><span class="toggle on"><i></i></span></button>';
+  }
+  function devicesSection() {
+    const devices = [["Windows app", "This device", false], ["Pixel 8, Android 16", "Last used 9:40 PM", true], ["Web dashboard", "Yesterday", true]];
+    return '<div class="group-label">Signed-in devices</div>' + devices.map(function (d) {
+      return '<div class="set-row"><div><b>' + esc(d[0]) + '</b><div class="sub">' + esc(d[1]) + "</div></div>" + (d[2] ? '<button type="button" class="ghost">Sign out</button>' : "") + "</div>";
+    }).join("");
   }
   function notifView() {
     const phone = device() === "phone";
@@ -999,11 +1047,15 @@
     const body = '<div class="pane"><div class="page">' + pending +
       '<div class="seg" style="margin-bottom:12px">' + tabs + "</div>" +
       '<p class="lede">' + esc(FILE_INFO[file]) + "</p>" +
-      '<div class="field"><label for="mem-text">' + esc(file) + ".md · " + esc(level) + '</label><textarea id="mem-text" class="file-text" rows="11" data-field="mem:' + bot.id + ":" + file + '">' + esc(text) + "</textarea>" +
+      '<div class="field"><label for="mem-text">' + esc(file) + ".md · " + esc(level) + "</label>" + (state.memEditing === bot.id + ":" + file
+        ? '<textarea id="mem-text" class="file-text" rows="11" data-field="mem:' + bot.id + ":" + file + '">' + esc(text) + "</textarea>"
+        : '<div class="read-only">' + (text.trim() ? paras(text) : '<span class="need-k">Empty</span>') + "</div>") +
       '<div class="count" id="mem-count">' + text.length.toLocaleString("en-US") + " / " + LIMITS[file].toLocaleString("en-US") + " characters</div></div>" +
       (state.memError ? '<div class="err">' + esc(state.memError) + "</div>" : "") +
       (state.memSaved ? '<p class="need-k">Saved. Each bot gets the change with its next message.</p>' : "") +
-      '<div class="choices"><button type="button" class="primary" data-act="mem-save" data-bot="' + bot.id + '" data-id="' + file + '">Save</button></div>' +
+      (state.memEditing === bot.id + ":" + file
+        ? '<div class="choices"><button type="button" class="primary" data-act="mem-save" data-bot="' + bot.id + '" data-id="' + file + '">Save</button><button type="button" class="text-btn" data-act="mem-cancel">Cancel</button></div>'
+        : '<div class="choices"><button type="button" class="ghost" data-act="mem-edit" data-bot="' + bot.id + '" data-id="' + file + '">Edit</button></div>') +
       "</div></div>";
     return column("Memory", bot.name, body);
   }
@@ -1038,11 +1090,16 @@
     const remove = state.confirmDelete === "note:" + note.id
       ? '<span class="confirm">Delete this note?<button type="button" class="text-btn" data-act="delete-note" data-bot="' + bot.id + '" data-id="' + note.id + '">Delete</button><button type="button" class="text-btn" data-act="delete-no">Cancel</button></span>'
       : '<button type="button" class="ghost" data-act="delete-ask" data-id="note:' + note.id + '">Delete</button>';
-    const body = '<div class="pane"><div class="page">' +
-      '<div class="field"><label for="note-name">File name</label><input id="note-name" data-field="note:' + bot.id + ":" + note.id + ':name" value="' + esc(note.name) + '" spellcheck="false"></div>' +
-      '<div class="field"><label for="note-text">Text</label><textarea id="note-text" class="file-text" rows="13" data-field="note:' + bot.id + ":" + note.id + ':text">' + esc(note.text) + "</textarea></div>" +
-      (state.noteSaved ? '<p class="need-k">Saved.</p>' : "") +
-      '<div class="choices"><button type="button" class="primary" data-act="note-save">Save</button>' + remove + "</div></div></div>";
+    // A note opens read-only, as in the app. Edit turns it into the form; a new note opens ready to write.
+    const editing = state.noteEditing === note.id;
+    const body = editing
+      ? '<div class="pane"><div class="page">' +
+        '<div class="field"><label for="note-name">File name</label><input id="note-name" data-field="note:' + bot.id + ":" + note.id + ':name" value="' + esc(note.name) + '" spellcheck="false"></div>' +
+        '<div class="field"><label for="note-text">Text</label><textarea id="note-text" class="file-text" rows="13" data-field="note:' + bot.id + ":" + note.id + ':text">' + esc(note.text) + "</textarea></div>" +
+        '<div class="choices"><button type="button" class="primary" data-act="note-save">Save</button></div></div></div>'
+      : '<div class="pane"><div class="page"><div class="read-only">' + (note.text.trim() ? paras(note.text) : '<span class="need-k">Empty</span>') + "</div>" +
+        (state.noteSaved ? '<p class="need-k">Saved.</p>' : "") +
+        '<div class="choices"><button type="button" class="ghost" data-act="note-edit" data-id="' + note.id + '">Edit</button>' + remove + "</div></div></div>";
     return column(note.name, bot.name + " · Notes", body);
   }
   function cfgFor(botId) {
@@ -1080,7 +1137,7 @@
     const modes = [["manual", "Manual"], ["smart", "Smart"], ["off", "Off"]].map(function (m) {
       return '<button type="button" class="' + (cfg.mode === m[0] ? "on" : "") + '" data-act="cfg-mode" data-bot="' + bot.id + '" data-id="' + m[0] + '">' + m[1] + "</button>";
     }).join("");
-    const waits = ["15 minutes", "1 hour", "8 hours", "Until answered"].map(function (w) {
+    const waits = ["15 minutes", "1 hour", "8 hours", "1 day", "7 days"].map(function (w) {
       return "<option" + (cfg.wait === w ? " selected" : "") + ">" + esc(w) + "</option>";
     }).join("");
     const mcp = HB.mcp.map(function (c) { return toggleRow("cfg-mcp", bot.id, c.id, !!cfg.mcp[c.id], c.name, c.detail); }).join("");
@@ -1242,48 +1299,45 @@
     state.newBot = { name: "", description: "", purpose: "", model: HB.models[1], folder: "", error: "" };
     location.hash = "#/chat/" + id;
   }
+  // First run as the app does it: the server's address, then the owner password and the main bot's name, which
+  // create both together, then a model provider, which can wait.
   function setupFields(s) {
     if (s.step === 0) {
-      return "<h1>Connect to your server</h1><p class=\"lede\">Enter the address of your Botsman server. This first sign-in sets the owner password.</p>" +
-        '<div class="field"><label for="su-url">Server address</label><input id="su-url" data-field="setup:url" value="' + esc(s.url) + '" placeholder="https://bots.example.com" spellcheck="false"></div>' +
-        '<div class="field"><label for="su-pass">Owner password</label><input id="su-pass" type="password" data-field="setup:password" value="' + esc(s.password) + '" autocomplete="new-password"></div>';
+      return "<h1>Connect to your server</h1><p class=\"lede\">Enter the address of your Botsman server. It must use HTTPS.</p>" +
+        '<div class="field"><label for="su-url">Server address</label><input id="su-url" data-field="setup:url" value="' + esc(s.url) + '" placeholder="https://bots.example.com" spellcheck="false"></div>';
     }
     if (s.step === 1) {
-      const options = HB.providerNames.map(function (n) { return "<option" + (n === s.provider ? " selected" : "") + ">" + esc(n) + "</option>"; }).join("");
-      return "<h1>Add a model provider</h1><p class=\"lede\">Bots need one provider to run. Its key or sign-in is stored only on the server, and it cannot be viewed after saving.</p>" +
-        '<div class="field"><label for="su-provider">Provider</label><select id="su-provider" data-field="setup:provider">' + options + "</select></div>" + authFields(s, "setup");
+      return "<h1>Set up your server</h1><p class=\"lede\">Step 1 of 2. This first sign-in sets the owner password and creates your main bot. The main bot can change your other bots, and it cannot be deleted.</p>" +
+        '<div class="field"><label for="su-pass">Owner password</label><input id="su-pass" type="password" data-field="setup:password" value="' + esc(s.password) + '" autocomplete="new-password"></div>' +
+        '<div class="field"><label for="su-main">Main bot\'s name</label><input id="su-main" data-field="setup:main" value="' + esc(s.main) + '" placeholder="Junior"></div>';
     }
-    if (s.step === 2) {
-      return "<h1>Name your main bot</h1><p class=\"lede\">The main bot can change your other bots and your user files, and each change asks you first. It cannot be deleted.</p>" +
-        '<div class="field"><label for="su-main">Name</label><input id="su-main" data-field="setup:main" value="' + esc(s.main) + '"></div>' +
-        hostShellRow("setup-host-shell", "", s.hostShell);
-    }
-    return device() === "phone"
-      ? "<h1>Alerts when the app is closed</h1><p class=\"lede\">Botsman keeps its own connection to your server, so nothing else needs installing. Android requires an ongoing notification while it runs. You can silence it in Android settings.</p>"
-      : "<h1>Alerts in the tray</h1><p class=\"lede\">Botsman stays in the tray and keeps its connection to your server. Closing the window does not stop alerts.</p>";
+    const options = HB.providerNames.map(function (n) { return "<option" + (n === s.provider ? " selected" : "") + ">" + esc(n) + "</option>"; }).join("");
+    return "<h1>Add a model provider</h1><p class=\"lede\">Step 2 of 2. Bots need one provider to run. Its key or sign-in is stored only on the server, and it can't be viewed after saving.</p>" +
+      '<div class="field"><label for="su-provider">Provider</label><select id="su-provider" data-field="setup:provider">' + options + "</select></div>" + authFields(s, "setup") +
+      '<button type="button" class="text-btn" data-act="setup-skip">Skip for now</button>';
   }
   function setupNext() {
     const s = state.setup;
     let error = "";
-    if (s.step === 0 && (!s.url.trim() || !s.password)) error = "Enter the address and a password.";
-    if (s.step === 1) error = authError(s);
-    if (s.step === 2 && !s.main.trim()) error = "Name the main bot.";
+    if (s.step === 0 && !s.url.trim()) error = "Enter the address of your server.";
+    if (s.step === 1 && (!s.password || !s.main.trim())) error = "Enter a password and name the main bot.";
+    if (s.step === 2) error = authError(s);
     s.error = error;
     if (error) { render({ preserve: true }); return; }
-    if (s.step === 3) {
-      cfgFor(bots.filter(function (b) { return b.pinned; })[0].id).hostShell = s.hostShell;
+    if (s.step === 2) {
       location.hash = homeHash();
       return;
     }
     s.step += 1;
     render({ preserve: true });
   }
+
   function setupView() {
     const s = state.setup;
     const back = s.step ? '<button type="button" class="ghost" data-act="setup-back">Back</button>' : "";
-    const next = s.step === 3 ? (device() === "phone" ? "Allow notifications and finish" : "Finish") : "Continue";
+    const next = s.step === 0 ? "Connect" : "Continue";
     return '<div class="login"><div class="login-card"><div class="wordmark" style="margin-bottom:18px">Botsman</div>' +
-      '<div class="need-k" style="margin-bottom:8px">Step ' + (s.step + 1) + " of 4</div>" + setupFields(s) +
+      setupFields(s) +
       (s.error ? '<div class="err">' + esc(s.error) + "</div>" : "") +
       '<div class="choices">' + back + '<button type="button" class="primary" data-act="setup-next">' + esc(next) + "</button></div></div></div>";
   }
@@ -1477,10 +1531,10 @@
     render({ preserve: true });
   }
   function doSteer(bot) {
-    const text = state.steer.trim();
+    const text = state.composer.trim();
     if (!text || !bot) return;
     currentThread(bot.id).push({ id: uid(), role: "system", text: "Steered · " + text });
-    state.steer = "";
+    state.composer = "";
     render({ scroll: "bottom" });
   }
   function imageAtt() { return state.attachments.filter(function (a) { return a.kind === "image"; })[0] || null; }
@@ -1570,8 +1624,6 @@
     } else if (name === "usage") {
       const tokens = list.reduce(function (s, m) { return s + ((m.usage && m.usage.tokens) || 0); }, 0);
       list.push({ id: uid(), role: "system", text: "This chat · " + toks(tokens) + " · " + money(chatCost(list)) + "." });
-    } else if (name === "help") {
-      list.push({ id: uid(), role: "system", text: "Commands: " + (HB.commands || []).map(function (c) { return "/" + c.name; }).join(", ") + "." });
     }
     render({ scroll: "bottom", focus: "composer" });
   }
@@ -1651,8 +1703,10 @@
     const has = canSend();
     const send = document.getElementById("send-btn");
     if (send) send.disabled = !has;
-    const q = document.getElementById("queue-btn");
-    if (q) q.hidden = !has;
+    ["queue-btn", "steer-btn"].forEach(function (id) {
+      const button = document.getElementById(id);
+      if (button) button.disabled = !has;
+    });
   }
   function onComposer(el) {
     state.composer = el.value;
@@ -1687,19 +1741,6 @@
     },
     summarize: function (el) { summarize(el.dataset.id); },
     slash: function (el) { runCommand(el.dataset.id); },
-    "slash-ins": function () {
-      const el = document.getElementById("composer");
-      if (!el) return;
-      if ((state.composer || "").charAt(0) !== "/") {
-        state.composer = "/" + (state.composer || "");
-        el.value = state.composer;
-        try { el.setSelectionRange(1, 1); } catch (e) { /* ignore */ }
-      }
-      state.slashIndex = 0;
-      paintSlash();
-      syncSend();
-      try { el.focus({ preventScroll: true }); } catch (e2) { el.focus(); }
-    },
     menu: function () { state.menu = !state.menu; render({ preserve: true }); },
     think: function (el) {
       const m = findMessage(el.dataset.id);
@@ -1881,17 +1922,22 @@
       const over = fileText(el.dataset.bot, file).length > LIMITS[file];
       state.memError = over ? file + ".md is over its limit. Trim it, then save." : "";
       state.memSaved = over ? null : file;
+      if (!over) state.memEditing = null;
       render({ preserve: true });
     },
+    "mem-edit": function (el) { state.memEditing = el.dataset.bot + ":" + el.dataset.id; state.memSaved = null; render({ preserve: true }); },
+    "mem-cancel": function () { state.memEditing = null; render({ preserve: true }); },
     "proposal-yes": function (el) { settleProposal(el.dataset.id, true); },
     "proposal-no": function (el) { settleProposal(el.dataset.id, false); },
     "note-new": function (el) {
       const botId = el.dataset.bot;
       const id = uid();
       notesFor(botId).unshift({ id: id, name: "untitled.md", updated: "Just now", text: "" });
+      state.noteEditing = id;
       location.hash = "#/notes/" + botId + "/" + id;
     },
-    "note-save": function () { state.noteSaved = true; render({ preserve: true }); },
+    "note-save": function () { state.noteSaved = true; state.noteEditing = null; render({ preserve: true }); },
+    "note-edit": function (el) { state.noteEditing = el.dataset.id; state.noteSaved = false; render({ preserve: true }); },
     "delete-note": function (el) {
       const list = notesFor(el.dataset.bot);
       const i = list.findIndex(function (n) { return n.id === el.dataset.id; });
@@ -1992,6 +2038,7 @@
     },
     "restore-no": function () { state.restoreDeclined = true; render({ preserve: true }); },
     "setup-next": function () { setupNext(); },
+    "setup-skip": function () { location.hash = homeHash(); },
     "setup-back": function () {
       state.setup.step = Math.max(0, state.setup.step - 1);
       state.setup.error = "";

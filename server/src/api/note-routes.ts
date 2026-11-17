@@ -14,7 +14,7 @@ export function registerNoteRoutes(app: FastifyInstance, services: Services): vo
   app.get<{ Params: NoteParams }>("/api/bots/:id/notes/:name", { schema: { params: NoteParams } }, async (request): Promise<Note> => notes.read(bots.get(request.params.id).id, request.params.name));
 
   app.put<{ Params: NoteParams; Body: NoteWrite }>("/api/bots/:id/notes/:name", { schema: { params: NoteParams, body: NoteWrite } }, async (request): Promise<Note> =>
-    notes.write(bots.get(request.params.id).id, request.params.name, request.body.content),
+    notes.write(bots.get(request.params.id).id, request.params.name, request.body.content, request.body.onlyNew ?? false),
   );
 
   app.delete<{ Params: NoteParams }>("/api/bots/:id/notes/:name", { schema: { params: NoteParams } }, async (request): Promise<Ok> => {

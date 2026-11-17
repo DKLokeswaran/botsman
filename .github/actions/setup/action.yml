@@ -1,0 +1,15 @@
+name: Set up Node and pnpm
+description: Installs the pinned Node and pnpm versions, then the workspace's dependencies.
+runs:
+  using: composite
+  steps:
+    - uses: actions/setup-node@v7
+      with:
+        node-version-file: .node-version
+    # pnpm comes from npm, because Windows Defender can block its standalone executable.
+    - name: Install pnpm
+      shell: bash
+      run: npm install --global pnpm@12.18.0
+    - name: Install dependencies
+      shell: bash
+      run: pnpm install --frozen-lockfile

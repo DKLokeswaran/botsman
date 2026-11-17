@@ -1,9 +1,10 @@
 import { mkdirSync } from "node:fs";
 import { randomUUID } from "node:crypto";
 import path from "node:path";
-import { type Alert, type Approval, type Bot, SERVER_STREAM, type StreamEvent } from "@botsman/protocol";
+import { type Alert, type Approval, type Bot, type ChatMessage, SERVER_STREAM, type StreamEvent } from "@botsman/protocol";
 import type { Provider } from "@earendil-works/pi-ai";
 import { AuthService } from "./auth/auth-service.ts";
+import { BotActivityTracker } from "./bots/bot-activity.ts";
 import { BotRegistry } from "./bots/bot-registry.ts";
 import { BotService } from "./bots/bot-service.ts";
 import { type Config, dataPaths } from "./config.ts";
@@ -19,7 +20,9 @@ import { SealedCredentialStore } from "./providers/credential-store.ts";
 import { ProviderCatalog } from "./providers/provider-catalog.ts";
 import { ProviderLogins } from "./providers/provider-logins.ts";
 import { SandboxManager } from "./sandbox/sandbox-manager.ts";
+import { UsageLog } from "./usage/usage-log.ts";
 import { openDatabase, readSetting, writeSetting, type Database } from "./store/database.ts";
+import { AlertSettingsStore } from "./store/alert-settings.ts";
 import { SecretBox } from "./store/secret-box.ts";
 
 export const ALERTS_STREAM = "alerts";
@@ -43,8 +46,11 @@ export async function createServices(config: Config, options: ServiceOptions = {
   const hub = new StreamHub<StreamEvent>();
   const alerts = new StreamHub<Alert>();
   const publish = (event: StreamEvent) => hub.publish(SERVER_STREAM, event);
-  const alert = (kind: Alert["kind"], botId: string, refId: string) =>
-    alerts.publish(ALERTS_STREAM, { id: randomUUID(), kind, botId, refId, createdAt: Date.now() });
+  const alertSettings = new AlertSettingsStore(db);
+  // Kinds the owner turned off never reach the alerts stream.
+  const alert = (kind: Alert["kind"], botId: string, refId: string) => {
+    if (alertSettings.wants(kind)) alerts.publish(ALERTS_STREAM, { id: randomUUID(), kind, botId, refId, createdAt: Date.now() });
+  };
 
   const registry = new BotRegistry(db);
   const memoryFiles = new MemoryFiles(paths.userDir, paths.botDir);
@@ -55,7 +61,13 @@ export async function createServices(config: Config, options: ServiceOptions = {
   const catalog = new ProviderCatalog(credentials, options.extraProviders);
   const auth = new AuthService(db, box.deriveKey("access-tokens"));
 
-  const feed = new ChatFeed(hub, (botId) => approvalStore.pendingByCall(botId), (botId) => alert("failure", botId, botId));
+  const usage = new UsageLog(db);
+  // Each new reply's usage is logged once, when it first appears; replies already there at startup are not counted again.
+  const logUsage = (botId: string, message: ChatMessage) => {
+    if (message.type === "assistant" && message.usage !== null) usage.record(botId, message.at ?? Date.now(), message.usage);
+  };
+  const feed = new ChatFeed(hub, (botId) => approvalStore.pendingByCall(botId), (botId) => alert("failure", botId, botId), logUsage);
+  const activity = new BotActivityTracker(db, (botId) => feed.messages(botId), (botId) => feed.working(botId), (line) => publish({ type: "activity", activity: line }));
 
   const memoryEdits = new MemoryEdits(memoryFiles);
   const policy = new PermissionPolicy(approvalStore, (bot, toolName, args) => memoryEdits.describe(bot, toolName, args), (approval: Approval) => {
@@ -83,7 +95,10 @@ export async function createServices(config: Config, options: ServiceOptions = {
       editMemory: (bot, file, content) => memoryEdits.apply(bot, file, content),
     },
     memorySnapshot: (botId) => memoryFiles.snapshot(botId),
-    onView: (botId, view) => feed.update(botId, view),
+    onView: (botId, view) => {
+      feed.update(botId, view);
+      activity.refresh(botId);
+    },
     log,
     cacheLifetimeMs: options.cacheLifetimeMs,
   });
@@ -98,6 +113,8 @@ export async function createServices(config: Config, options: ServiceOptions = {
     lifecycle: {
       changed: async (bot: Bot, previous: Bot | undefined) => {
         publish({ type: "bot", bot });
+        // A chat with no model of its own follows the bot's default, so open chats hear about the change.
+        if (previous !== undefined) feed.settingsChanged(bot.id, registry.chatSettings(bot));
         if (previous !== undefined && previous.network !== bot.network) sandbox.stop(bot.id);
         if (sandbox.status.ok) await engine.configure(bot);
       },
@@ -105,6 +122,7 @@ export async function createServices(config: Config, options: ServiceOptions = {
         policy.cancelAll(botId);
         await engine.close(botId);
         feed.forget(botId);
+        activity.forget(botId);
         publish({ type: "bot_deleted", botId });
       },
     },
@@ -122,11 +140,12 @@ export async function createServices(config: Config, options: ServiceOptions = {
   async function close(): Promise<void> {
     policy.shutDown();
     await engine.closeAll();
+    feed.close();
     sandbox.stopAll();
     db.close();
   }
 
-  return { config, paths, db, hub, alerts, auth, registry, bots, memoryFiles, notes, approvalStore, policy, sandbox, catalog, logins, engine, feed, resumeBots, close };
+  return { config, paths, db, hub, alerts, auth, registry, bots, memoryFiles, notes, approvalStore, policy, sandbox, catalog, logins, engine, feed, activity, alertSettings, usage, publish, resumeBots, close };
 }
 
 // A stable id for this server, which some sign-ins send as the device id.

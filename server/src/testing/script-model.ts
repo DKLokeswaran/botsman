@@ -7,7 +7,11 @@ export const SCRIPT_MODEL = "script-1";
 // The owner's last message decides the reply:
 //   "tool <name> <json args>"  calls that tool, then reports its result
 //   "slow <n>"                 streams n words slowly, for stop and steer tests
+//   "fail"                     fails while `scriptSwitches.failing` is on, and answers "echo: fail" once it is off
 //   anything else              answers "echo: <message>", cut to 200 characters
+// Test switches shared by every scripted model in the process.
+export const scriptSwitches = { failing: false };
+
 export function scriptModelProvider(options: { provider?: string; contextWindow?: number } = {}) {
   const faux = fauxProvider({
     provider: options.provider ?? SCRIPT_PROVIDER,
@@ -29,6 +33,7 @@ function reply(messages: readonly Message[]) {
   const text = lastLine(textOf(last));
   const tool = /^tool (\S+) (\{.*\})$/s.exec(text);
   if (tool) return fauxAssistantMessage([fauxToolCall(tool[1]!, JSON.parse(tool[2]!))], { stopReason: "toolUse" });
+  if (text === "fail" && scriptSwitches.failing) return fauxAssistantMessage([], { stopReason: "error", errorMessage: "400 invalid request (scripted failure)" });
   const slow = /^slow (\d+)$/.exec(text);
   if (slow) return fauxAssistantMessage(fauxText(Array.from({ length: Number(slow[1]) }, (_, index) => `word${index}`).join(" ")));
   return fauxAssistantMessage(fauxText(`echo: ${text.slice(0, 200)}`));

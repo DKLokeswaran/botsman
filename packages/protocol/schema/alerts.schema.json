@@ -163,6 +163,18 @@
           "type": "object",
           "properties": {
             "type": {
+              "const": "ready"
+            }
+          },
+          "required": [
+            "type"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "type": {
               "const": "pong"
             }
           },

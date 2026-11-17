@@ -1,7 +1,7 @@
-import { existsSync, mkdirSync, readdirSync, readFileSync, renameSync, rmSync, statSync, writeFileSync } from "node:fs";
+import { existsSync, linkSync, mkdirSync, readdirSync, readFileSync, renameSync, rmSync, statSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import type { Note, NoteInfo, NoteSearchHit } from "@botsman/protocol";
-import { badRequest, notFound } from "../errors.ts";
+import { badRequest, conflict, notFound } from "../errors.ts";
 import { type Database, type Row, transaction } from "../store/database.ts";
 
 const NOTE_NAME = /^[A-Za-z0-9][A-Za-z0-9 ._-]*\.md$/;
@@ -35,11 +35,14 @@ export class NotesStore {
     return { name, content: readFileSync(file, "utf8"), modifiedAt: Math.floor(statSync(file).mtimeMs) };
   }
 
-  write(botId: string, name: string, content: string): Note {
+  // Writes a note in one step. With `onlyNew`, a note that already has the name is left alone and the write is
+  // refused, even when two devices create the same name at once.
+  write(botId: string, name: string, content: string, onlyNew = false): Note {
     const file = this.#file(botId, name);
     mkdirSync(path.dirname(file), { recursive: true });
     writeFileSync(`${file}.tmp`, content, { mode: 0o600 });
-    renameSync(`${file}.tmp`, file);
+    if (onlyNew) createOnly(`${file}.tmp`, file, name);
+    else renameSync(`${file}.tmp`, file);
     return this.read(botId, name);
   }
 
@@ -98,4 +101,16 @@ export class NotesStore {
 function toMatchQuery(text: string): string {
   const terms = text.match(/[\p{L}\p{N}_]+/gu) ?? [];
   return terms.map((term) => `"${term}"`).join(" ");
+}
+
+// Gives the written file its name only if no file has it, then drops the temporary name.
+function createOnly(temporary: string, file: string, name: string): void {
+  try {
+    linkSync(temporary, file);
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === "EEXIST") throw conflict(`A note named ${name} already exists`);
+    throw error;
+  } finally {
+    rmSync(temporary, { force: true });
+  }
 }

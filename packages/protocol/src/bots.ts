@@ -4,7 +4,8 @@ export const PermissionModes = ["manual", "smart", "off"] as const;
 export const PermissionMode = oneOf(PermissionModes);
 export type PermissionMode = Static<typeof PermissionMode>;
 
-export const ThinkingLevels = ["off", "minimal", "low", "medium", "high", "xhigh"] as const;
+// Pi's reasoning levels, lowest first. Each model supports some of them; see ModelInfo.thinkingLevels.
+export const ThinkingLevels = ["off", "minimal", "low", "medium", "high", "xhigh", "max"] as const;
 export const ThinkingLevel = oneOf(ThinkingLevels);
 export type ThinkingLevel = Static<typeof ThinkingLevel>;
 
@@ -81,3 +82,19 @@ export const FreeSpace = obj({
   reason: opt(str()),
 });
 export type FreeSpace = Static<typeof FreeSpace>;
+
+// What the bot list shows under each bot: when its chat last moved, the newest message, and replies the owner hasn't seen.
+// `lastAt` is null for a chat with no timed messages yet. `preview` is empty for an empty chat.
+export const BotActivity = obj({
+  botId: str(),
+  lastAt: nullable(int()),
+  preview: str(),
+  unread: int({ minimum: 0 }),
+  // Whether the bot is replying or using tools right now. Missing from servers older than this field.
+  working: opt(bool()),
+});
+export type BotActivity = Static<typeof BotActivity>;
+
+// Marks a chat read up to the time of the newest message the owner has seen, on every device.
+export const MarkRead = obj({ upTo: int({ minimum: 0 }) });
+export type MarkRead = Static<typeof MarkRead>;

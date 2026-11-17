@@ -1,0 +1,27 @@
+[package]
+name = "botsman"
+version = "0.1.0"
+description = "Botsman for Windows"
+edition = "2021"
+
+[lib]
+name = "botsman_lib"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[build-dependencies]
+tauri-build = { version = "=2.7.4", features = [] }
+
+[dependencies]
+tauri = { version = "=2.12.5", features = ["tray-icon"] }
+tauri-plugin-http = "=2.9.0"
+tauri-plugin-updater = "=2.14.1"
+keyring = "=4.2.0"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+tauri-plugin-notification = "=2.8.1"
+tauri-plugin-autostart = "=2.7.0"
+tauri-plugin-single-instance = "=2.5.5"
+tauri-plugin-opener = "=2.7.2"
+tokio-tungstenite = { version = "=0.30.0", features = ["native-tls"] }
+futures-util = "=0.3.34"
+tokio = { version = "=1.54.1", features = ["time", "macros"] }

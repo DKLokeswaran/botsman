@@ -1,0 +1,23 @@
+plugins {
+  id 'com.android.library'
+  id 'expo-module-gradle-plugin'
+}
+
+group = 'dev.botsman'
+version = '0.1.0'
+
+android {
+  namespace "dev.botsman.alerts"
+  defaultConfig {
+    versionCode 1
+    versionName "0.1.0"
+  }
+  lintOptions {
+    abortOnError false
+  }
+}
+
+dependencies {
+  // The same OkHttp React Native ships, for the alerts WebSocket.
+  implementation 'com.squareup.okhttp3:okhttp:4.9.2'
+}

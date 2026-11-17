@@ -1,8 +1,11 @@
 packages:
   - packages/*
+  - apps/*
   - server
 
 # Install scripts stay blocked unless listed here as true.
 allowBuilds:
   "@google/genai": false
   protobufjs: false
+  # Downloads the code highlighting and math files the Markdown view needs.
+  react-native-enriched-markdown: true

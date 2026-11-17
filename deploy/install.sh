@@ -55,9 +55,15 @@ install_apparmor_profile() {
   bwrap_works || echo "warning: bwrap still can't create a sandbox, so bots won't run. /api/health gives the reason."
 }
 
+# Installs what the server and the dashboard need, and leaves out the Windows and Android apps.
 install_dependencies() {
   say "Installing dependencies"
-  (cd "$REPO" && "$PNPM" install --frozen-lockfile)
+  (cd "$REPO" && "$PNPM" install --frozen-lockfile --filter "@botsman/server..." --filter "@botsman/web...")
+}
+
+build_dashboard() {
+  say "Building the web dashboard"
+  (cd "$REPO" && "$PNPM" --filter @botsman/web build)
 }
 
 install_service() {
@@ -77,6 +83,7 @@ check_pnpm
 install_bwrap
 install_apparmor_profile
 install_dependencies
+build_dashboard
 install_service
 
 say "Botsman is running on 127.0.0.1:7600"

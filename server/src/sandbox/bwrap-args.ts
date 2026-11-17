@@ -52,6 +52,10 @@ export function sandboxArgs(spec: SandboxSpec): string[] {
     "--bind",
     spec.folder,
     spec.folder,
+    // Everything not mounted above lives in the sandbox's in-memory root. Making it read-only turns a write outside the
+    // folder and /tmp into a clear error instead of a file that silently vanishes when the sandbox stops.
+    "--remount-ro",
+    "/",
     "--chdir",
     spec.folder,
     "--clearenv",

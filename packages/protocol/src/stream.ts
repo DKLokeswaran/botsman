@@ -1,6 +1,7 @@
 import { int, lit, obj, opt, type Static, str, union } from "@earendil-works/pi-schema";
+import type { AlertSettings } from "./alerts.ts";
 import type { Approval } from "./approvals.ts";
-import type { Bot } from "./bots.ts";
+import type { Bot, BotActivity } from "./bots.ts";
 import type { ChatEvent, ChatSnapshot } from "./chat.ts";
 import type { ProviderLogin } from "./providers.ts";
 
@@ -29,12 +30,18 @@ export type ServerEvent =
   | { type: "approval"; approval: Approval }
   | { type: "bot"; bot: Bot }
   | { type: "bot_deleted"; botId: string }
+  | { type: "activity"; activity: BotActivity }
+  | { type: "alert_settings"; settings: AlertSettings }
   | { type: "login"; login: ProviderLogin }
   | { type: "providers_changed" };
 
 export type ServerSnapshot = {
   bots: Bot[];
   approvals: Approval[];
+  // Missing from servers older than the bot list's activity line; additions like this don't raise the protocol number.
+  activity?: BotActivity[];
+  // Missing from servers older than alert settings.
+  alertSettings?: AlertSettings;
 };
 
 export type StreamEvent = ChatEvent | ServerEvent;

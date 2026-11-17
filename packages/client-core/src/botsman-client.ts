@@ -1,0 +1,258 @@
+import {
+  type Alert,
+  type AlertSettings,
+  type AlertSettingsUpdate,
+  type Approval,
+  type ApprovalAnswer,
+  type Bot,
+  type BotCreate,
+  type BotUpdate,
+  type DeviceSession,
+  type DeviceSessionList,
+  type FreeSpace,
+  type Health,
+  type MemoryFile,
+  type MemoryFileName,
+  type MemoryFiles,
+  type Note,
+  type NoteInfo,
+  type NoteList,
+  type NoteSearchHit,
+  type NoteSearchResult,
+  type ModelInfo,
+  type ModelList,
+  type Ok,
+  type Provider,
+  type ProviderList,
+  type ProviderLogin,
+  SERVER_STREAM,
+  type ServerEvent,
+  type ServerSnapshot,
+  type UsageReport,
+} from "@botsman/protocol";
+import { ApiClient, type Fetch } from "./api-client.ts";
+import { ChatController } from "./chat-controller.ts";
+import { AlertsConnection } from "./alerts-connection.ts";
+import { CacheWriter, chatFromCache, chatToCache, type LocalCache, serverFromCache, serverToCache } from "./local-cache.ts";
+import { applyServerEvent, applyServerSnapshot, emptyServerState, type ServerState, withLogin } from "./server-state.ts";
+import { Session, type TokenStore } from "./session.ts";
+import { Store } from "./store.ts";
+import { type SocketLike, StreamConnection, type StreamMessage } from "./stream-connection.ts";
+
+export type BotsmanClientOptions = {
+  baseUrl: string;
+  fetch: Fetch;
+  createSocket: (url: string) => SocketLike;
+  deviceName: string;
+  // Leave out on the web dashboard, whose session lives in cookies.
+  tokenStore?: TokenStore;
+  newRequestId?: () => string;
+  cache?: LocalCache;
+};
+
+// Everything an app needs from one Botsman server: the session, the live connection, and the state screens show.
+export class BotsmanClient {
+  readonly session: Session;
+  readonly connection: StreamConnection;
+  readonly server = new Store<ServerState>(emptyServerState);
+  readonly #api: ApiClient;
+  readonly #createSocket: (url: string) => SocketLike;
+  readonly #chats = new Map<string, ChatController>();
+  readonly #newRequestId: () => string;
+  #stopServerStream: (() => void) | undefined;
+  readonly #cache: { store: LocalCache; writer: CacheWriter; prefix: string } | undefined;
+
+  constructor(options: BotsmanClientOptions) {
+    this.#api = new ApiClient({ baseUrl: options.baseUrl, fetch: options.fetch });
+    this.session = new Session(options);
+    this.#newRequestId = options.newRequestId ?? randomId;
+    this.#createSocket = options.createSocket;
+    this.#cache = options.cache === undefined ? undefined : { store: options.cache, writer: new CacheWriter(options.cache), prefix: `${this.#api.baseUrl}|` };
+    this.connection = new StreamConnection({
+      url: `${this.#api.baseUrl.replace(/^http/, "ws")}/api/ws`,
+      createSocket: options.createSocket,
+      token: () => this.session.socketToken(),
+      onUnauthorized: () => this.session.renew(),
+    });
+    this.session.state.subscribe(() => this.#followSession());
+  }
+
+  get baseUrl(): string {
+    return this.#api.baseUrl;
+  }
+
+  health(): Promise<Health> {
+    return this.#api.health();
+  }
+
+  chat(botId: string): ChatController {
+    const known = this.#chats.get(botId);
+    if (known !== undefined) return known;
+    const chat = new ChatController(botId, this.session, this.connection, this.#newRequestId);
+    this.#keepCached(`chat:${botId}`, chat.state, chatFromCache, chatToCache);
+    this.#chats.set(botId, chat);
+    return chat;
+  }
+
+  createBot(bot: BotCreate): Promise<Bot> {
+    return this.session.request("POST", "/api/bots", bot);
+  }
+
+  updateBot(botId: string, change: BotUpdate): Promise<Bot> {
+    return this.session.request("PATCH", `/api/bots/${botId}`, change);
+  }
+
+  deleteBot(botId: string): Promise<Ok> {
+    return this.session.request("DELETE", `/api/bots/${botId}`);
+  }
+
+  answerApproval(approvalId: string, decision: ApprovalAnswer["decision"]): Promise<Approval> {
+    return this.session.request("POST", `/api/approvals/${approvalId}/answer`, { decision });
+  }
+
+  memory(botId: string): Promise<MemoryFiles> {
+    return this.session.request("GET", `/api/bots/${botId}/memory`);
+  }
+
+  // The owner's own edit to a memory file. Bots get the change with their next message.
+  saveMemory(botId: string, file: MemoryFileName, content: string): Promise<MemoryFile> {
+    return this.session.request("PUT", `/api/bots/${botId}/memory/${file}`, { content });
+  }
+
+  async notes(botId: string): Promise<NoteInfo[]> {
+    return (await this.session.request<NoteList>("GET", `/api/bots/${botId}/notes`)).notes;
+  }
+
+  async searchNotes(botId: string, query: string): Promise<NoteSearchHit[]> {
+    return (await this.session.request<NoteSearchResult>("GET", `/api/bots/${botId}/notes-search?q=${encodeURIComponent(query)}`)).hits;
+  }
+
+  note(botId: string, name: string): Promise<Note> {
+    return this.session.request("GET", `/api/bots/${botId}/notes/${encodeURIComponent(name)}`);
+  }
+
+  // Saves a note, and removes the old file when the owner renamed it. A new note or a new name never replaces
+  // another note.
+  async saveNote(botId: string, name: string, content: string, previousName?: string): Promise<Note> {
+    const note = await this.session.request<Note>("PUT", `/api/bots/${botId}/notes/${encodeURIComponent(name)}`, { content, onlyNew: name !== previousName });
+    if (previousName !== undefined && previousName !== name) await this.deleteNote(botId, previousName);
+    return note;
+  }
+
+  deleteNote(botId: string, name: string): Promise<Ok> {
+    return this.session.request("DELETE", `/api/bots/${botId}/notes/${encodeURIComponent(name)}`);
+  }
+
+  async providers(): Promise<Provider[]> {
+    return (await this.session.request<ProviderList>("GET", "/api/providers")).providers;
+  }
+
+  saveApiKey(providerId: string, key: string): Promise<Ok> {
+    return this.session.request("PUT", `/api/providers/${providerId}/key`, { key });
+  }
+
+  disconnectProvider(providerId: string): Promise<Ok> {
+    return this.session.request("DELETE", `/api/providers/${providerId}`);
+  }
+
+  // Starts a browser sign-in on the server. Its steps then arrive on the server stream.
+  async startLogin(providerId: string): Promise<ProviderLogin> {
+    return this.#keepLogin(await this.session.request<ProviderLogin>("POST", `/api/providers/${providerId}/login`));
+  }
+
+  // Later steps arrive on the server stream, which can be ahead of these answers, so they don't replace what it sent.
+  answerLogin(loginId: string, promptId: string, value: string): Promise<ProviderLogin> {
+    return this.session.request<ProviderLogin>("POST", `/api/provider-logins/${loginId}/answer`, { promptId, value });
+  }
+
+  cancelLogin(loginId: string): Promise<ProviderLogin> {
+    return this.session.request<ProviderLogin>("POST", `/api/provider-logins/${loginId}/cancel`);
+  }
+
+  // Keeps a sign-in's first copy, unless the stream already brought a newer one.
+  #keepLogin(login: ProviderLogin): ProviderLogin {
+    this.server.update((state) => (state.logins[login.id] === undefined ? withLogin(state, login) : state));
+    return login;
+  }
+
+  // Models from every connected provider.
+  async models(): Promise<ModelInfo[]> {
+    return (await this.session.request<ModelList>("GET", "/api/models")).models;
+  }
+
+  // Free space on the disk that would hold a folder, and whether the server accepts that folder. No path means the default.
+  freeSpace(path: string): Promise<FreeSpace> {
+    const query = path.trim() === "" ? "" : `?path=${encodeURIComponent(path.trim())}`;
+    return this.session.request("GET", `/api/server/free-space${query}`);
+  }
+
+  async sessions(): Promise<DeviceSession[]> {
+    return (await this.session.request<DeviceSessionList>("GET", "/api/auth/sessions")).sessions;
+  }
+
+  // Signs another device out. It loses its access within a minute.
+  revokeSession(sessionId: string): Promise<Ok> {
+    return this.session.request("DELETE", `/api/auth/sessions/${sessionId}`);
+  }
+
+  // Spending over the last `days` days, by day and by bot, with days on this device's clock.
+  usage(days: number): Promise<UsageReport> {
+    return this.session.request("GET", `/api/usage?days=${days}&tzOffset=${new Date().getTimezoneOffset()}`);
+  }
+
+  // Follows the alerts stream while the app is open, for apps that notify from the page itself.
+  followAlerts(onAlert: (alert: Alert) => void): () => void {
+    const alerts = new AlertsConnection({
+      url: `${this.#api.baseUrl.replace(/^http/, "ws")}/api/alerts`,
+      createSocket: this.#createSocket,
+      token: () => this.session.socketToken(),
+      onAlert,
+    });
+    alerts.start();
+    return () => alerts.stop();
+  }
+
+  // Turns alert kinds on or off for every device. The server stream brings the result to every open app.
+  updateAlertSettings(change: AlertSettingsUpdate): Promise<AlertSettings> {
+    return this.session.request("PATCH", "/api/settings/alerts", change);
+  }
+
+  // The connection runs while the owner is signed in, and stops when they sign out.
+  #followSession(): void {
+    if (this.session.state.get().status === "signed_in") return this.#goOnline();
+    this.#stopServerStream?.();
+    this.#stopServerStream = undefined;
+    this.connection.stop();
+    this.server.set(emptyServerState);
+    this.#cache?.writer.cancelAll();
+    void this.#cache?.store.clear().catch(() => undefined);
+  }
+
+  // Fills a store from the device's cache while it is still loading, then saves it again after each change.
+  #keepCached<T extends { status: string }>(name: string, store: Store<T>, restore: (state: T, text: string | undefined) => T, save: (state: T) => string): void {
+    const cache = this.#cache;
+    if (cache === undefined) return;
+    const key = cache.prefix + name;
+    void cache.store.get(key).then((text) => store.update((state) => restore(state, text)), () => undefined);
+    store.subscribe(() => store.get().status === "ready" && cache.writer.saveLater(key, () => save(store.get())));
+  }
+
+  #goOnline(): void {
+    if (this.#stopServerStream === undefined) this.#keepCached("server", this.server, serverFromCache, serverToCache);
+    this.#stopServerStream ??= this.connection.subscribe(SERVER_STREAM, (message) => this.#receive(message));
+    this.connection.start();
+  }
+
+  #receive(message: StreamMessage): void {
+    if (message.type === "snapshot") return this.server.update((state) => applyServerSnapshot(state, message.snapshot as ServerSnapshot));
+    const events = message.type === "catchup" ? message.events.map((item) => item.event) : [message.event];
+    this.server.update((state) => events.reduce((next, event) => applyServerEvent(next, event as ServerEvent), state));
+  }
+}
+
+// A request id only has to differ from the app's other recent sends, so a runtime without `crypto.randomUUID`,
+// such as React Native's, makes one from the time and a random number.
+function randomId(): string {
+  const crypto = globalThis.crypto as { randomUUID?: () => string } | undefined;
+  return crypto?.randomUUID?.() ?? `${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}`;
+}

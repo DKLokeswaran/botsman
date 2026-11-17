@@ -1,0 +1,87 @@
+@import "tailwindcss";
+@import "@botsman/tokens/theme.css";
+
+/* The three Zoetrik faces ship with the app, so it draws the same offline and asks no outside host for fonts. */
+@import "@fontsource/orbitron/400.css";
+@import "@fontsource/orbitron/700.css";
+@import "@fontsource/orbitron/900.css";
+@import "@fontsource/inter/400.css";
+@import "@fontsource/inter/500.css";
+@import "@fontsource/inter/600.css";
+@import "@fontsource/fragment-mono/400.css";
+
+/* Tailwind scans this package's screens, wherever the app that imports it lives. */
+@source "./";
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-destructive-foreground: var(--destructive-foreground);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+  --color-green: var(--green);
+  --color-cyan: var(--cyan);
+  --color-blue: var(--blue);
+  --color-mint: var(--mint);
+  --color-magenta: var(--magenta);
+  --font-display: var(--font-display);
+  --font-sans: var(--font-body);
+  --font-mono: var(--font-mono);
+  --radius-sm: 0px;
+  --radius-md: 2px;
+  --radius-lg: var(--radius);
+  --radius-xl: var(--radius-large);
+}
+
+body {
+  margin: 0;
+  background: var(--background);
+  color: var(--foreground);
+  font-family: var(--font-body);
+  font-size: 16px;
+  line-height: 1.6;
+  letter-spacing: 0.01em;
+}
+
+/* Markdown in replies. Paragraph text stays the body colour, and code uses the mono face. */
+.markdown {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  overflow-wrap: anywhere;
+}
+.markdown :is(h1, h2, h3, h4) {
+  font-family: var(--font-display);
+  font-weight: 700;
+  text-transform: uppercase;
+  line-height: 1.4;
+}
+.markdown h1 { font-size: 22px; }
+.markdown h2 { font-size: 16px; }
+.markdown :is(h3, h4) { font-size: 14px; }
+.markdown :is(ul, ol) { padding-left: 24px; }
+.markdown ul { list-style: disc; }
+.markdown ol { list-style: decimal; }
+.markdown a { color: var(--primary); text-decoration: underline; }
+.markdown blockquote { border-left: 2px solid var(--border); padding-left: 12px; color: var(--muted-foreground); }
+.markdown code { font-family: var(--font-mono); font-size: 13px; background: var(--muted); border-radius: var(--radius); padding: 1px 4px; }
+.markdown pre { background: var(--card); border: 1px solid var(--border); border-radius: var(--radius); padding: 12px; overflow-x: auto; }
+.markdown pre code { background: none; padding: 0; }
+.markdown table { border-collapse: collapse; display: block; overflow-x: auto; }
+.markdown :is(th, td) { border: 1px solid var(--border); padding: 6px 10px; text-align: left; }
+.markdown th { background: var(--card); font-weight: 600; }
+.markdown hr { border: 0; border-top: 1px solid var(--border); }

@@ -1,4 +1,4 @@
-import { int, lit, obj, oneOf, type Static, str, union } from "@earendil-works/pi-schema";
+import { bool, int, lit, obj, oneOf, opt, type Static, str, union } from "@earendil-works/pi-schema";
 
 // Alert kinds from the PRD. The alert names the bot and the event; apps fetch any content from the server.
 // Memory edits are approvals, so they alert as `approval`.
@@ -11,6 +11,31 @@ export const AlertKinds = [
   "routine_created",
   "skill_created",
 ] as const;
+
+export type AlertKind = (typeof AlertKinds)[number];
+
+// Which alert kinds the owner wants, for every device. A kind that is off never reaches the alerts stream.
+export const AlertSettings = obj({
+  approval: bool(),
+  question: bool(),
+  routine_result: bool(),
+  failure: bool(),
+  channel_mention: bool(),
+  routine_created: bool(),
+  skill_created: bool(),
+});
+export type AlertSettings = Static<typeof AlertSettings>;
+
+export const AlertSettingsUpdate = obj({
+  approval: opt(bool()),
+  question: opt(bool()),
+  routine_result: opt(bool()),
+  failure: opt(bool()),
+  channel_mention: opt(bool()),
+  routine_created: opt(bool()),
+  skill_created: opt(bool()),
+});
+export type AlertSettingsUpdate = Static<typeof AlertSettingsUpdate>;
 
 export const Alert = obj({
   id: str(),
@@ -31,6 +56,7 @@ export type AlertsClientMessage = Static<typeof AlertsClientMessage>;
 export const AlertsServerMessage = union([
   obj({ type: lit("alert"), epoch: str(), seq: int(), alert: Alert }),
   obj({ type: lit("reset"), epoch: str(), seq: int() }),
+  obj({ type: lit("ready") }),
   obj({ type: lit("pong") }),
   obj({ type: lit("error"), error: str(), message: str() }),
 ]);

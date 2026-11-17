@@ -12,7 +12,11 @@ export type Config = {
   readonly backupHour: number;
   readonly backupKeep: number;
   readonly scriptModel: boolean;
+  readonly dashboardDir: string;
 };
+
+// Where `pnpm --filter @botsman/web build` writes the dashboard, next to the server in the repo.
+const BUILT_DASHBOARD = path.join(import.meta.dirname, "..", "..", "apps", "web", "dist");
 
 // Paths inside the data folder, as laid out in docs/decisions/overview.md.
 export function dataPaths(dataDir: string) {
@@ -43,6 +47,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
     backupHour: integerSetting(env, "BOTSMAN_BACKUP_HOUR", 3, 0, 23),
     backupKeep: integerSetting(env, "BOTSMAN_BACKUP_KEEP", 7, 1, 365),
     scriptModel: env.BOTSMAN_SCRIPT_MODEL === "1",
+    dashboardDir: path.resolve(env.BOTSMAN_DASHBOARD_DIR ?? BUILT_DASHBOARD),
   };
 }
 

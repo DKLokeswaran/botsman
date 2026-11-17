@@ -14,12 +14,27 @@ The script:
 1. Checks for Node 24. If pnpm 12.18.0 is not on the `PATH`, installs it under `~/.local`, which works when Node is installed system-wide.
 2. Installs bubblewrap through `apt-get`, after refreshing the package lists, if it is missing. This needs `sudo`.
 3. On hosts that restrict user namespaces, such as Ubuntu 24.04 and later, installs `deploy/apparmor-bwrap` as `/etc/apparmor.d/bwrap` and loads it, unless `bwrap` can already create a sandbox. This needs `sudo`. Because the check tries `bwrap` itself, running the script again loads a profile that was copied but failed to load. If `bwrap` still fails after loading, the script prints a warning and carries on.
-4. Runs `pnpm install --frozen-lockfile`.
-5. Installs `deploy/botsman.service` as a systemd user unit, starts it, and turns on lingering so it keeps running after the owner logs out. Lingering uses `sudo` when logind refuses it without. If that fails too, the script prints the command to run by hand and carries on.
+4. Runs `pnpm install --frozen-lockfile` for the server and the web dashboard, leaving out the Windows and Android apps.
+5. Builds the web dashboard into `apps/web/dist`, which the server serves under `/app`.
+6. Installs `deploy/botsman.service` as a systemd user unit, starts it, and turns on lingering so it keeps running after the owner logs out. Lingering uses `sudo` when logind refuses it without. If that fails too, the script prints the command to run by hand and carries on.
 
-Nothing else needs root. Ubuntu adds `~/.local/bin` to the `PATH` at the next login, so `pnpm` is on hand for commands such as the backup. The server runs its TypeScript sources directly on Node 24, with no build step.
+Nothing else needs root. Ubuntu adds `~/.local/bin` to the `PATH` at the next login, so `pnpm` is on hand for commands such as the backup. The server runs its TypeScript sources directly on Node 24, with no build step. The dashboard is the only part the install builds.
 
 If sandboxes don't work, the server still starts, explains why in `/api/health`, and refuses to run bots.
+
+## Web dashboard
+
+The dashboard is at `/app/` on the server's address, and the bare address sends a browser there. If the dashboard's files are missing, `/app/` answers 503 with `dashboard_missing`. Running `deploy/install.sh` again builds them.
+
+## Updating
+
+```bash
+git pull
+deploy/install.sh
+systemctl --user restart botsman
+```
+
+The install script rebuilds the dashboard, so the server and the dashboard always come from the same commit. The restart is needed because the script leaves a running service alone.
 
 ## TLS
 
@@ -45,6 +60,7 @@ The systemd unit sets these as `Environment=` lines.
 | `BOTSMAN_BACKUP_DIR` | `~/.botsman-backups` | Where nightly backups go |
 | `BOTSMAN_BACKUP_HOUR` | `3` | Local hour of the nightly backup, 0 to 23 |
 | `BOTSMAN_BACKUP_KEEP` | `7` | Backups kept, 1 to 365; older ones are removed |
+| `BOTSMAN_DASHBOARD_DIR` | `apps/web/dist` in the repo | The built web dashboard's files |
 | `BOTSMAN_SCRIPT_MODEL` | unset | `1` adds the scripted test model. Tests only. |
 
 A number setting outside its range, or not a whole number, stops the server at startup with the reason.

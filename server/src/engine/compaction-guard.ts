@@ -30,9 +30,24 @@ export class CompactionGuard {
     if (this.#saving || compacting(view)) return;
     const work = this.#nextStep(bot, view);
     if (work === undefined) return;
+    this.#runWhileSaving(work, "save before compaction failed");
+  }
+
+  // The owner asked to compact: a save turn tied to the newest reply, then compaction, or compaction at once in a chat
+  // with no reply. Returns false while a save turn or compaction is already under way.
+  compactNow(bot: Bot, view: ChatView): boolean {
+    if (this.#saving || compacting(view)) return false;
+    const last = newestAnswerAfter(view, -1);
+    const work = last === undefined ? () => this.#compact() : () => this.#settleSave(bot, `owner-compaction:${last.id}`, "owner");
+    this.#runWhileSaving(work, "compaction the owner asked for failed");
+    return true;
+  }
+
+  // Runs a save turn or compaction, marking the guard busy until it settles and logging a failure.
+  #runWhileSaving(work: () => Promise<unknown>, failure: string): void {
     this.#saving = true;
     work()
-      .catch((error) => this.#services.log(`bot ${this.#botId}: save before compaction failed: ${String(error)}`))
+      .catch((error) => this.#services.log(`bot ${this.#botId}: ${failure}: ${String(error)}`))
       .finally(() => (this.#saving = false));
   }
 
@@ -59,9 +74,9 @@ export class CompactionGuard {
 
   // Submits the save turn, or finds the one already submitted under this request id, waits for it, and compacts
   // when it finished. Returns whether it compacted.
-  async #settleSave(bot: Bot, requestId: string): Promise<boolean> {
+  async #settleSave(bot: Bot, requestId: string, reason: SaveReason = "limit"): Promise<boolean> {
     const submission = await this.#root.submit(
-      { type: "input", content: savePrompt(bot), entry: { kind: PRE_COMPACTION_KIND, data: { requestId } }, whenBusy: "followUp", requestId },
+      { type: "input", content: savePrompt(bot, reason), entry: { kind: PRE_COMPACTION_KIND, data: { requestId } }, whenBusy: "followUp", requestId },
       context,
     );
     const settled = await submission.wait(context);
@@ -83,11 +98,18 @@ export class CompactionGuard {
   }
 }
 
-function savePrompt(bot: Bot): string {
+type SaveReason = "limit" | "owner";
+
+const SAVE_OPENINGS: Record<SaveReason, string> = {
+  limit: "This chat is close to its context limit and will be compacted after this turn.",
+  owner: "The owner asked to compact this chat, and it will be compacted after this turn.",
+};
+
+function savePrompt(bot: Bot, reason: SaveReason): string {
   const userMemory = bot.isMain ? ", and USER_MEMORY.md for lasting facts about the owner" : "";
   return [
-    "This chat is close to its context limit and will be compacted after this turn.",
-    `Save anything worth keeping now with the memory tool: notes for longer records, BOT_MEMORY.md for facts that belong in every prompt${userMemory}. Memory file edits wait for the owner's approval.`,
+    SAVE_OPENINGS[reason],
+    `Save anything worth keeping now: longer records with the notes tool, and facts that belong in every prompt in BOT_MEMORY.md${userMemory} with the memory tool. Memory file edits wait for the owner's approval.`,
     "Reply with one short line when you are done.",
   ].join(" ");
 }

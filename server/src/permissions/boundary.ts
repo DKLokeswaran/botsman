@@ -6,8 +6,9 @@ export type BoundaryCheck =
   | { readonly leaves: false }
   | { readonly leaves: true; readonly reason: string; readonly description: string; readonly command: string };
 
-// Tools that always stay inside the boundary: shell commands run in the sandbox, and the memory tool reaches only the bot's notes and memory files. Memory edits ask before this check.
-const CONTAINED_TOOLS = new Set(["bash", "memory"]);
+// Tools that always stay inside the boundary: shell commands run in the sandbox, and the memory and notes tools reach
+// only the bot's memory files and notes. Memory edits ask before this check.
+const CONTAINED_TOOLS = new Set(["bash", "memory", "notes"]);
 const FILE_TOOLS = new Set(["read", "write", "edit"]);
 
 // Decides whether a tool call leaves the bot's folder. Commands are never judged: the sandbox limits what they reach.

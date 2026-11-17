@@ -42,7 +42,7 @@ Memory files and notes sit outside the bot's folder, so its sandbox hides them, 
 
 ### Bot folders
 
-The owner chooses a bot's folder when creating it, so a bot that clones large repos can sit on a disk with room for them. The path is on the server, so the form shows the server's free space. Left empty, the folder is `~/.botsman/workspaces/<id>`.
+The owner chooses a bot's folder when creating it, so a bot that clones large repos can sit on a disk with room for them. The path is on the server, so the form shows the server's free space. Left empty, the folder is `~/.botsman/workspaces/<id>`. A path may start with `~/`, which the server reads as the owner's home folder. The form checks the folder and shows the free space as the owner types, and a new bot's default model is the main bot's default.
 
 A bot gets read-write access to its whole folder, so the server refuses any path that would expose something else:
 
@@ -100,14 +100,34 @@ Each bot's SQLite file holds its chat with the owner, routine runs, its side of 
 Our own schema, in the `protocol` package, defines every HTTP body and WebSocket message. Apps never see Pi's internal formats, so a Pi upgrade changes only the `engine` and `events` modules.
 
 - **Live updates.** The WebSocket sends events with a per-conversation sequence number. A client signs in with its first message, since browsers can't set headers on a WebSocket.
+- **Streamed text.** A chat's live state carries the whole reply so far, so the server sends more streamed text, thinking, or tool output at most every 100 ms, while a change in what the bot is doing, such as a tool starting or the reply ending, goes out at once. Clients gather live updates before redrawing, for 50 ms plus 1 ms for every 100 characters streamed so far, up to a second, since each redraw lays out the whole reply again. Updates that pile up while a slow device is still drawing become one redraw. A reply's Markdown redraws only when its own text changes. On Android, streamed text fades in only while the reply is under 4,000 characters, since each fade redraws the whole reply every frame.
 - **Reconnect.** The client sends the server's epoch and the last sequence it saw, and the server replies with what it missed or a fresh snapshot. The server keeps the last 1,000 events per stream in memory, and its epoch changes on every start, so a client returning after a restart gets a snapshot.
+- **Working.** Each bot's line also says whether it is replying or running tools right now, and both bot lists show "Working" with a pulsing dot while it is.
+- **Bot list order.** The main bot is pinned first. The rest follow by their latest message, newest first, so the order changes as chats move. Bots with no messages yet come last, newest bot first.
+- **Bot list activity.** The `server` stream carries each bot's last message time, a one-line preview of its newest message, and its count of unread replies. One read marker per bot lives in `server.db`, so every device shows the same count. A chat open on any screen moves the marker to its newest message, and the marker only moves forward. Bots that existed before markers were added start as read. The count covers the messages the chat currently holds, up to its last compaction.
+- **Usage history.** The server writes one row per bot reply to `server.db`, with its tokens and cost, when the reply first appears. `/api/usage` totals them by day and by bot over a number of days, with days on the app's clock from the timezone offset it sends. History starts when the server first records it.
 - **Alerts stream.** A second, small stream carries only alert events, for the background connections.
+- **Protocol version.** The package holds one whole number that goes up on a breaking change. The server reports the range it accepts, and an app outside that range stops with a screen that says which side to update. Adding a field or an event leaves the number alone: apps ignore what they don't know, and treat a field a newer server added as possibly missing. See [versions and releases](stack.md#versions-and-releases).
 
 Rust and Kotlin message types for the alerts stream are generated from the same JSON Schema.
 
 ## Apps
 
-The `client-core` package holds login, reconnect, catch-up, state, approvals, sending, and retries, in plain TypeScript with no DOM dependency. React hooks wrap it, so a screen on either app gets the same data and actions. The `pc-ui` package holds the Windows and web screens, and Android builds its own on the same hooks.
+The `client-core` package holds login, reconnect, catch-up, state, approvals, sending, and retries, in plain TypeScript with no DOM dependency. React hooks wrap it, so a screen on either app gets the same data and actions.
+
+Its main parts:
+
+| Part | Job |
+| --- | --- |
+| `AppController` | Takes an app from launch to a signed-in connection: the server address, the protocol check, first-run setup or sign-in, and back to sign-in when the session ends. Each step is one screen. |
+| `Session` | Signs in, renews tokens before they run out, and repeats a request once after a renewal. Parallel requests share one renewal, because a refresh token works once. A renewal keeps the same session, so screens following the sign-in don't start over. |
+| `StreamConnection` | The live socket. It reconnects with a growing delay, pings to notice a silent drop, and asks each stream for what it missed. |
+| `ChatController` | One bot's chat. A sent message shows at once as pending, and a failed one stays with Retry and Discard. A pending message clears once the server has accepted it and the chat shows its text, so an earlier message with the same text can't hide a send that then fails. A retry reuses the request id, so the server can't run it twice. |
+| `chatItems` | Turns a chat's state into the list both apps draw: replies with their tool calls and results inside them, then what is live, queued, and pending. |
+| `offeredSendModes` | The send rule: Send while idle, Queue or Steer while busy. |
+| Screen hooks | Each screen's state and actions, such as the message box, the memory and note editors, the new-bot form, signed-in devices, and the background status. Both apps call the same hook and pass in only what differs, such as how to move to another screen. |
+
+The `pc-ui` package holds the Windows and web screens, and Android builds its own on the same hooks.
 
 Android's screens are separate, because the best Android chat needs native views. Between Android and the other two apps, roughly 40% of client code is shared, by estimate: nearly all logic and none of the screens.
 
@@ -120,14 +140,58 @@ Android's screens are separate, because the best Android chat needs native views
 | Token storage | Credential Manager | `HttpOnly`, `Secure`, `SameSite` cookie | Keystore |
 | Local cache | IndexedDB | IndexedDB | SQLite |
 | Auto-start | Tauri | None | Boot receiver |
+| HTTP requests | Tauri's HTTP plugin, sent from Rust | The browser's `fetch` | React Native's `fetch` |
+| Updates | Tauri's updater, from GitHub Releases | Comes with the server | Its own download and install, from GitHub Releases |
 
 The alerts connection runs when the UI does not, so it can't live in `client-core`. Its logic stays small: connect, catch up, show a notification.
+
+`client-core` takes `fetch` and token storage as inputs, and each shell supplies its own. `pc-ui` reaches the tray, notifications, and updates through one small platform interface. `apps/windows` implements it with Tauri calls. `apps/web` implements it with browser features, and marks the rest as absent so the screen hides them.
+
+Android draws Markdown to match the PC: a quote is a thin rule with muted text and no fill, inline code sits on the muted colour with no border, and tables and code blocks sit on the card colour with a border. On every app, a web or mail link in a reply opens in the default browser or mail app, and other links do nothing, so a link a bot copied from a web page can't take over the app's window.
+
+Settings has a Mode choice of System, Light, or Dark, kept on each device: local storage on Windows and the web, and the phone's secure storage on Android. System follows the device's setting as it changes. Dark is Zoetrik, and Light is its Drafting Table scheme.
+
+Bot faces are one of eight built-in line marks, kept as path data in the `tokens` package and drawn with SVG on both apps, or a photo. A picked photo is cropped square and shrunk to a 256-pixel JPEG on the device before upload: a canvas in `pc-ui`, and Expo's image picker and image manipulator on Android. A bot without a face shows its initial.
+
+Bot settings offers approval waits of 15 minutes, 1 hour, 8 hours, 1 day, and 7 days. The server accepts one minute to seven days, so "until answered" is not offered, and a wait set to another value shows as its own choice. The Smart mode's note says it currently runs like Off. The connections and skills sections stay hidden until M4.
+
+First-run setup has two steps: the owner password and the main bot's name, which create the owner and the main bot together, then "Add a model provider" with the same list as Settings. Continue needs a connected provider, and Skip for now leaves it for later. On Continue the main bot gets the first connected model as its default when it has none.
+
+Model providers list every provider with its status, and connect it with an API key or the server-run sign-in. A sign-in's steps arrive on the `server` stream. The app keeps the first reply to starting one and takes everything after from the stream, since the stream can be ahead of an HTTP reply. A sign-in link opens in the system browser. A chat whose model is missing, or whose provider isn't connected, shows why above the message box with a link to the providers. The message box has a toolbar under the text: attach and image buttons, shown disabled until attachments arrive in M4, the model chip showing the chat's model and the effort it runs at, and a Send arrow. While the bot works the Send arrow gives way to Queue, Steer, and a red Stop, and the box asks to queue a message. On a phone those three sit on their own row under the toolbar, so they never crowd the chip. The picker closes when the owner taps outside it or taps the chip again. The model chip opens the model and reasoning picker, a panel above the box on the PC and a sheet from the bottom on Android, which changes either the open chat or the bot's default. Bot info's Model default row opens the same picker for the default alone. The chat header's line is plain text. The picker offers each model's own reasoning levels, from Pi's catalog for the pinned version, out of Off, Minimal, Low, Medium, High, Extra high, and Max. When a chat's saved level isn't one its model has, the picker and the chat header show the level Pi will really use: the next one up the model has, or else the next one down.
+
+A chat draws each run, everything the bot does for one owner message, as one reply. The bot's text replies stay in view in order. The thinking and tool calls between two of them fold into one line, such as "Thought · ran 3 tools", or what is running while it is live. An approval stays in view outside its fold. An attempt that failed and was retried, such as a reply cut off when the provider's connection dropped, is left out. A run that ends in an error shows it. Tokens and cost appear once, for the whole run, when it ends, with Copy beside them, which copies everything the bot said in the run without its thinking or tool calls. From the moment the bot starts until the first words arrive, the run shows "Working…". The chat header shows how full the context is, as the newest reply's token count against the model's context window, such as "2.4k/1M context". The message box grows with what is typed, wrapped lines included, up to 40% of the window, then scrolls.
+
+Slash commands cover compact, clear, memory, notes, and usage, and `/skills` follows with M4. Typing `/` already lists them, so there is no `/help`. A message that is one word starting with `/` shows the matching commands, and sending an exact command runs it instead of sending it to the bot. Usage shows the last 14 days by day and by bot, with deleted bots added together. Settings holds the alert switches for the kinds that can happen so far, approvals and failures, the signed-in devices with a way to sign another one out, model providers, the app's update, and the server. The PC footer and the phone's bot list link to Usage and Settings.
+
+The local cache keeps the last server state and each opened chat's newest 50 messages on the device, under the server's address, so the bot list and a chat show at once at launch. They show as cached until the live snapshot replaces them, and live state such as a running reply is never cached. Writes wait a second after the last change. Signing out clears the cache.
+
+The server serves the dashboard from its own origin, so the dashboard needs no CORS rules. The server builds the dashboard's files during install and has no build step of its own.
+
+### Dashboard sign-in
+
+The dashboard asks for its session in cookies by sending `cookie: true` at setup and sign-in. The server then sets two cookies and answers with only the session's id and expiry times, so no page script ever holds a token.
+
+| Cookie | Sent to | Holds |
+| --- | --- | --- |
+| `botsman_access` | `/api` | The access token |
+| `botsman_refresh` | `/api/auth` | The refresh token |
+
+Both are `HttpOnly`, `Secure`, and `SameSite=Strict`. A browser attaches cookies to requests that another site starts, so the server also checks the `Origin` header against its own address:
+
+- before starting or renewing a cookie session
+- on every cookie-authenticated request that is not a `GET` or `HEAD`
+- before a WebSocket may sign in with the cookie, which the dashboard asks for by sending an empty token in `hello`
+
+The apps keep sending a bearer token, and none of these checks apply to them.
+
+The dashboard's page carries a content security policy that allows only its own files and connections to its own server. Files under `assets/` have a content hash in their names and are cached for a year. The page itself is never cached.
 
 ## Parity
 
 - Screens get everything through shared hooks and hold no logic.
-- One recorded set of events (a streaming reply, an approval, a reconnect) runs through both chat screens, for side-by-side comparison.
+- One recorded set of events runs through the chat state and `chatItems`, which is all either chat screen draws. It is a real stream from the server with the scripted model: a reply, a tool call that waits for approval, a failed reply and its retry, and a clear. It lives in `packages/client-core/test/fixtures/chat-recording.json`, and `RECORD_CHAT=1` records it again after a change to the stream. Reconnects are covered by the live client tests.
 - `DESIGN.md` and a shared token file define the look.
+- The PC screens are tested on the web dashboard in a browser, and the Android screens on a real phone. The owner checks the Windows-only parts by hand: the tray, auto-start, Credential Manager, and the installer.
 
 ## Deleting a bot
 

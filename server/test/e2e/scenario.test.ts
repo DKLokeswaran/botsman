@@ -1,5 +1,6 @@
 import { chatStream, type ChatMessage } from "@botsman/protocol";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { STREAM_INTERVAL_MS } from "../../src/events/chat-feed.ts";
 import { setUpServer, startTestServer, type TestServer } from "../helpers.ts";
 import type { StreamClient } from "./client.ts";
 
@@ -32,6 +33,17 @@ describe("M1 scenario", () => {
     expect(reply.type === "assistant" && reply.usage?.totalTokens).toBeGreaterThan(0);
     const user = stream.messages.get(chat)!.find((message) => message.type === "user");
     expect(user).toMatchObject({ text: "hello there" });
+  });
+
+  it("sends streamed text at most once per interval, since each update carries the whole reply so far", async () => {
+    const from = stream.received.length;
+    const started = Date.now();
+    await server.client.send(botId, "slow 400");
+    await stream.waitForMessage(chat, (message) => message.type === "assistant" && message.text.endsWith("word399"));
+    const elapsed = Date.now() - started;
+    const streamed = stream.received.slice(from).filter((message) => message.type === "event" && message.stream === chat && message.event.type === "live" && message.event.live.streamingText !== "");
+    expect(streamed.length).toBeGreaterThan(0);
+    expect(streamed.length).toBeLessThanOrEqual(elapsed / STREAM_INTERVAL_MS + 2);
   });
 
   it("stops a reply", async () => {
@@ -100,7 +112,7 @@ describe("M1 scenario", () => {
   });
 
   it("writes and searches notes", async () => {
-    await server.client.send(botId, 'tool memory {"action":"write_note","name":"projects.md","content":"Botsman server milestone one is underway"}');
+    await server.client.send(botId, 'tool notes {"action":"write_note","name":"projects.md","content":"Botsman server milestone one is underway"}');
     await stream.waitForMessage(chat, (message) => message.type === "tool_result" && message.output.includes("Saved projects.md"));
     const { hits } = await server.client.searchNotes(botId, "milestone");
     expect(hits[0]).toMatchObject({ name: "projects.md" });

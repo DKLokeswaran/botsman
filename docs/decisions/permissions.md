@@ -45,8 +45,8 @@ The server runs as the owner's user, and starts one `bwrap` sandbox per bot. Pi'
 | The `pi-env` daemon program, at `/run/botsman/pi-env` | Read-only, so the bot doesn't see where Botsman is installed |
 | `~/.agents` and Botsman's shared `skills/` | Read-only |
 | The bot's folder, wherever the owner put it | Read-write |
-| `/proc`, `/dev`, `/tmp` | The sandbox's own private copies |
-| Everything else, including the rest of `/home`, `/sys`, `/opt`, `/var`, and `/root` | Doesn't exist |
+| `/proc`, `/dev`, `/tmp` | The sandbox's own private copies. `/tmp` is writable scratch space in memory, emptied when the sandbox stops. |
+| Everything else, including the rest of `/home`, `/sys`, `/opt`, `/var`, and `/root` | Doesn't exist. The sandbox's root is read-only, so creating anything there fails with "Read-only file system". |
 
 Toolchains installed in the owner's home, such as nvm, pyenv, or cargo, are hidden. A bot that needs one installs it in its own folder.
 
@@ -54,6 +54,8 @@ Paths are added only when a common command such as `git`, `npm`, or `pip` needs 
 
 - **Namespaces.** Each sandbox has its own user, process, IPC, UTS, and cgroup namespaces. Bots can't see or signal each other's processes, the server's, or the owner's.
 - **Privileges.** All capabilities are dropped and new privileges are blocked, so `sudo` and `su` can't work. `--disable-userns` stops a bot creating namespaces of its own.
+- **Read-only root.** `bwrap` builds the sandbox on an empty filesystem in memory, and creates the folders on the way to each mounted path there. Once the mounts are in place, that root is made read-only. Without this, a write outside the folder and `/tmp` would succeed, look real to the bot, and vanish when the sandbox stops.
+- **The prompt.** A bot is told that it works in a sandbox, that its current folder, `~`, is the only place it can write and the only one whose files are kept, and that `/tmp` is cleared. The folder's real path is not in the prompt; `pwd` still shows it.
 - **Environment.** The server's environment is cleared. A bot gets only `PATH`, `HOME`, and `TMPDIR`.
 - **Skills.** `~/.agents` is mounted at its real full path, and only if it exists. Inside the sandbox `HOME` is the bot's folder, so `~/.agents` means the bot's own `.agents` folder, and that's where its own skills live. Anything the owner later puts in the real `~/.agents` becomes readable by every bot.
 - **Network.** The network toggle decides whether the sandbox shares the host's network. With it off, only the sandbox's own loopback exists.

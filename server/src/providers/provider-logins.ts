@@ -53,9 +53,12 @@ export class ProviderLogins {
     return running.view;
   }
 
+  // Ends the sign-in at once, so the answer already says it was cancelled.
   cancel(loginId: string): ProviderLogin {
     const running = this.#running(loginId);
+    if (running.view.status !== "running") return running.view;
     running.controller.abort(new Error("Sign-in cancelled"));
+    this.#finish(running, "cancelled", "Sign-in cancelled");
     return running.view;
   }
 
@@ -102,7 +105,9 @@ export class ProviderLogins {
     this.#onChange(running.view);
   }
 
+  // Records how the sign-in ended. A sign-in already ended, such as one cancelled, keeps its first outcome.
   #finish(running: Running, status: ProviderLogin["status"], error: string | null): void {
+    if (running.view.status !== "running") return;
     running.answer = undefined;
     running.view = { ...running.view, status, error, pendingPrompt: null };
     this.#onChange(running.view);
