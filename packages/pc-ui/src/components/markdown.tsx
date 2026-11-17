@@ -17,15 +17,15 @@ export const Markdown = memo(function Markdown({ text }: { text: string }) {
   );
 });
 
-// A web or mail link opens in the browser or mail app. Any other link does nothing, so the app never leaves its page.
+// A web or mail link opens in the browser or mail app. Any other link does nothing. The link has no address of its
+// own, so no click, middle-click, or menu can take the app's window away; hovering shows where it goes.
 function Link({ href, children }: AnchorHTMLAttributes<HTMLAnchorElement>) {
   const openLink = useOpenLink();
-  const open = (event: { preventDefault(): void }) => {
-    event.preventDefault();
+  const open = () => {
     if (href !== undefined && opensOutside(href)) openLink(href);
   };
   return (
-    <a href={href} onClick={open}>
+    <a role="link" tabIndex={0} title={href} className="cursor-pointer" onClick={open} onKeyDown={(event) => event.key === "Enter" && open()}>
       {children}
     </a>
   );

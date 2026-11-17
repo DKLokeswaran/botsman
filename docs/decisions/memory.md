@@ -91,7 +91,7 @@ This has two costs. A bot can't run shell scripts over its notes, and folder sna
 
 `BOT_MEMORY.md` can point to them, for example "project status lives in notes".
 
-In the apps, memory files and notes open read-only, rendered as Markdown. Edit turns one into a text box with Save and Cancel, so a stray tap can't change what a bot relies on. The owner reads, writes, renames, and deletes notes. A rename saves the note under its new name and then removes the old file, since the server has no rename of its own. A rename or a new note never takes the name of another note: saving says that note already exists. A new note starts as `untitled.md`, or the next free `untitled-<n>.md`. The memory screen shows the bot's pending memory edits above the files, and loads the files again when one is answered.
+In the apps, memory files and notes open read-only, rendered as Markdown. Edit turns one into a text box with Save and Cancel, so a stray tap can't change what a bot relies on. The owner reads, writes, renames, and deletes notes. A rename saves the note under its new name and then removes the old file, since the server has no rename of its own. A rename or a new note never takes the name of another note: the server writes it only when no note has that name, even when two devices save at once, and saving says that note already exists. A new note starts as `untitled.md`, or the next free `untitled-<n>.md`. The memory screen shows the bot's pending memory edits above the files, and loads the files again when one is answered.
 
 SQLite holds only the search index, an FTS5 table that can be rebuilt from the files at any time. Before each search, the server re-indexes any file that changed, so no file watcher is needed.
 

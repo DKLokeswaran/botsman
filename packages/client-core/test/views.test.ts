@@ -29,19 +29,24 @@ describe("usage view", () => {
     bots: [{ botId: "a", usage: cost(4) }, { botId: "gone1", usage: cost(1) }, { botId: "gone2", usage: cost(1) }],
   };
 
+  // Runs a check with the device in a given timezone.
+  const inZone = (zone: string, check: () => void) => {
+    const before = process.env.TZ;
+    process.env.TZ = zone;
+    try {
+      check();
+    } finally {
+      process.env.TZ = before;
+    }
+  };
+
   it("fills days without replies, and scales bars against the costliest day", () => {
-    expect(usageDays(report, 3).map((day) => [day.day, day.share])).toEqual([["2026-11-14", 0], ["2026-11-15", 1], ["2026-11-16", 0.5]]);
+    inZone("UTC", () => expect(usageDays(report, 3).map((day) => [day.day, day.share])).toEqual([["2026-11-14", 0], ["2026-11-15", 1], ["2026-11-16", 0.5]]));
   });
 
   it("names each column by the device's own date, even 13 hours ahead of UTC", () => {
-    const zone = process.env.TZ;
-    process.env.TZ = "Pacific/Auckland";
-    try {
-      const auckland = { ...report, since: Date.UTC(2026, 10, 13, 11) };
-      expect(usageDays(auckland, 3).map((day) => [day.day, day.cost])).toEqual([["2026-11-14", 0], ["2026-11-15", 4], ["2026-11-16", 2]]);
-    } finally {
-      process.env.TZ = zone;
-    }
+    const auckland = { ...report, since: Date.UTC(2026, 10, 13, 11) };
+    inZone("Pacific/Auckland", () => expect(usageDays(auckland, 3).map((day) => [day.day, day.cost])).toEqual([["2026-11-14", 0], ["2026-11-15", 4], ["2026-11-16", 2]]));
   });
 
   it("adds deleted bots together", () => {

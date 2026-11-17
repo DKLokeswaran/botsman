@@ -53,7 +53,11 @@ fn load<R: Runtime>(app: &AppHandle<R>) -> Saved {
 fn store<R: Runtime>(app: &AppHandle<R>, saved: &Saved) {
     if let Some(path) = saved_path(app) {
         let _ = std::fs::create_dir_all(path.parent().unwrap());
-        let _ = std::fs::write(path, serde_json::to_string(saved).unwrap_or_default());
+        // Written beside the file and then renamed over it, so a read never sees a half-written file.
+        let temporary = path.with_extension("json.tmp");
+        if std::fs::write(&temporary, serde_json::to_string(saved).unwrap_or_default()).is_ok() {
+            let _ = std::fs::rename(temporary, path);
+        }
     }
 }
 

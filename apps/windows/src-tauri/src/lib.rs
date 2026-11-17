@@ -84,7 +84,8 @@ fn build_tray(app: &AppHandle) -> tauri::Result<()> {
 // Opens a web or mail link from a reply in the default browser or mail app, never in the app's own window.
 #[tauri::command]
 fn open_link(app: AppHandle, url: String) {
-    if url.starts_with("https://") || url.starts_with("http://") || url.starts_with("mailto:") {
+    let lower = url.to_ascii_lowercase();
+    if lower.starts_with("https://") || lower.starts_with("http://") || lower.starts_with("mailto:") {
         let _ = app.opener().open_url(url, None::<&str>);
     }
 }

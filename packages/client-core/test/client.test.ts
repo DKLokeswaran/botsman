@@ -124,6 +124,8 @@ describe("memory and notes", () => {
     await expect(rig.client.saveNote(mainId, "b.md", "new")).rejects.toThrow("already exists");
     expect((await rig.client.note(mainId, "b.md")).content).toBe("second");
     expect((await rig.client.note(mainId, "a.md")).content).toBe("first");
+    await rig.client.saveNote(mainId, "a.md", "first, edited", "a.md");
+    expect((await rig.client.note(mainId, "a.md")).content).toBe("first, edited");
     await rig.client.deleteNote(mainId, "a.md");
     await rig.client.deleteNote(mainId, "b.md");
   });

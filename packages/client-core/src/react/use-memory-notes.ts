@@ -80,19 +80,22 @@ export function useNoteEditor(botId: string, name: string, content: string, isNe
   const client = useBotsmanClient();
   const [editing, setEditing] = useState(isNew);
   const [saved, setSaved] = useState(content);
+  // The name the note has on the server, or undefined while a new note isn't saved yet.
+  const [savedName, setSavedName] = useState(isNew ? undefined : name);
   const [fileName, setFileName] = useState(name);
   const [text, setText] = useState(content);
   const [asking, setAsking] = useState(false);
   const save = useAction(async () => {
-    await client.saveNote(botId, fileName, text, isNew ? undefined : name);
+    await client.saveNote(botId, fileName, text, savedName);
     setSaved(text);
+    setSavedName(fileName);
     setEditing(false);
     onSaved(fileName);
   });
   const remove = useAction(async () => {
-    await client.deleteNote(botId, name);
+    await client.deleteNote(botId, savedName ?? name);
     onDeleted();
   });
-  const cancel = () => (setText(saved), setFileName(name), setEditing(false));
+  const cancel = () => (setText(saved), setFileName(savedName ?? name), setEditing(false));
   return { editing, startEditing: () => setEditing(true), saved, fileName, setFileName, text, setText, problem: noteNameProblem(fileName), save, cancel, asking, setAsking, remove };
 }

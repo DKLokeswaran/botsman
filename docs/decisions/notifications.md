@@ -46,7 +46,7 @@ If Play rejects it, the Play build ships with UnifiedPush only, and other builds
 
 The alerts socket runs in Tauri's Rust side, and the tray shows notifications. Tauri's `backgroundThrottling` setting doesn't work on Windows, and reports disagree on whether a hidden WebView2 window gets throttled. Rust avoids the question.
 
-It works like the Android service: the same alerts-only token, the wording and bot names the app hands it, and its place in the stream, kept in `alerts.json` in the app's config folder, which the window and the connection change one at a time. It notifies only while the window is hidden or not focused. Closing the window hides it to the tray, and the tray's Quit ends the app. Only one copy runs: starting Botsman again, for example from the Start menu, shows the running window. Settings has Keep connected and Start with Windows, which opens the app hidden in the tray. A notification's click doesn't open the chat yet; the tray's Open Botsman does.
+It works like the Android service: the same alerts-only token, the wording and bot names the app hands it, and its place in the stream, kept in `alerts.json` in the app's config folder, which the window and the connection change one at a time, and which is replaced whole on each change so a read never sees half of one. It notifies only while the window is hidden or not focused. Closing the window hides it to the tray, and the tray's Quit ends the app. Only one copy runs: starting Botsman again, for example from the Start menu, shows the running window. Settings has Keep connected and Start with Windows, which opens the app hidden in the tray. A notification's click doesn't open the chat yet; the tray's Open Botsman does.
 
 ## Web dashboard
 

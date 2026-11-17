@@ -30,7 +30,7 @@ import {
   type ServerSnapshot,
   type UsageReport,
 } from "@botsman/protocol";
-import { ApiClient, ApiError, type Fetch } from "./api-client.ts";
+import { ApiClient, type Fetch } from "./api-client.ts";
 import { ChatController } from "./chat-controller.ts";
 import { AlertsConnection } from "./alerts-connection.ts";
 import { CacheWriter, chatFromCache, chatToCache, type LocalCache, serverFromCache, serverToCache } from "./local-cache.ts";
@@ -134,20 +134,9 @@ export class BotsmanClient {
   // Saves a note, and removes the old file when the owner renamed it. A new note or a new name never replaces
   // another note.
   async saveNote(botId: string, name: string, content: string, previousName?: string): Promise<Note> {
-    if (name !== previousName && (await this.#noteExists(botId, name))) throw new Error(`A note named ${name} already exists`);
-    const note = await this.session.request<Note>("PUT", `/api/bots/${botId}/notes/${encodeURIComponent(name)}`, { content });
+    const note = await this.session.request<Note>("PUT", `/api/bots/${botId}/notes/${encodeURIComponent(name)}`, { content, onlyNew: name !== previousName });
     if (previousName !== undefined && previousName !== name) await this.deleteNote(botId, previousName);
     return note;
-  }
-
-  async #noteExists(botId: string, name: string): Promise<boolean> {
-    try {
-      await this.note(botId, name);
-      return true;
-    } catch (error) {
-      if (error instanceof ApiError && error.status === 404) return false;
-      throw error;
-    }
   }
 
   deleteNote(botId: string, name: string): Promise<Ok> {

@@ -120,9 +120,9 @@ Its main parts:
 | Part | Job |
 | --- | --- |
 | `AppController` | Takes an app from launch to a signed-in connection: the server address, the protocol check, first-run setup or sign-in, and back to sign-in when the session ends. Each step is one screen. |
-| `Session` | Signs in, renews tokens before they run out, and repeats a request once after a renewal. Parallel requests share one renewal, because a refresh token works once. |
+| `Session` | Signs in, renews tokens before they run out, and repeats a request once after a renewal. Parallel requests share one renewal, because a refresh token works once. A renewal keeps the same session, so screens following the sign-in don't start over. |
 | `StreamConnection` | The live socket. It reconnects with a growing delay, pings to notice a silent drop, and asks each stream for what it missed. |
-| `ChatController` | One bot's chat. A sent message shows at once as pending, and a failed one stays with Retry and Discard. A retry reuses the request id, so the server can't run it twice. |
+| `ChatController` | One bot's chat. A sent message shows at once as pending, and a failed one stays with Retry and Discard. A pending message clears once the server has accepted it and the chat shows its text, so an earlier message with the same text can't hide a send that then fails. A retry reuses the request id, so the server can't run it twice. |
 | `chatItems` | Turns a chat's state into the list both apps draw: replies with their tool calls and results inside them, then what is live, queued, and pending. |
 | `offeredSendModes` | The send rule: Send while idle, Queue or Steer while busy. |
 | Screen hooks | Each screen's state and actions, such as the message box, the memory and note editors, the new-bot form, signed-in devices, and the background status. Both apps call the same hook and pass in only what differs, such as how to move to another screen. |
