@@ -41,6 +41,8 @@ export function registerAlertsSocket(app: FastifyInstance, services: Services): 
       const missed = alerts.since(ALERTS_STREAM, message.epoch, message.seq);
       if (missed === undefined) send({ type: "reset", epoch: alerts.epoch, seq: alerts.currentSeq(ALERTS_STREAM) });
       for (const item of missed ?? []) send({ type: "alert", epoch: alerts.epoch, seq: item.seq, alert: item.event });
+      // Tells the app it is connected and caught up, which a stream with nothing missed would otherwise never say.
+      send({ type: "ready" });
       unsubscribe = alerts.subscribe(ALERTS_STREAM, (item) => send({ type: "alert", epoch: alerts.epoch, seq: item.seq, alert: item.event }));
     });
   });

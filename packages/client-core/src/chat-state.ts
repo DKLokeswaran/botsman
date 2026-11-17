@@ -1,8 +1,9 @@
 import type { ChatEvent, ChatHistoryPage, ChatMessage, ChatSettings, ChatSnapshot, ChatTotals, LiveState } from "@botsman/protocol";
 import type { SendMode } from "./send-rule.ts";
 
-// A message the owner sent that the chat has not shown yet, or that failed to send.
-export type PendingSend = { requestId: string; text: string; mode: SendMode; failed: string | undefined };
+// A message the owner sent that the chat has not shown yet, or that failed to send. `sent` turns true once the server
+// accepted it.
+export type PendingSend = { requestId: string; text: string; mode: SendMode; sent: boolean; failed: string | undefined };
 
 export type ChatState = {
   // `cached` shows the messages this device saved last time, until the live snapshot arrives.
@@ -59,6 +60,11 @@ export function addPending(state: ChatState, send: PendingSend): ChatState {
   return { ...state, pending: [...state.pending.filter((other) => other.requestId !== send.requestId), send] };
 }
 
+// The server accepted the send, so the chat showing its text now settles it.
+export function markSent(state: ChatState, requestId: string): ChatState {
+  return settlePending({ ...state, pending: state.pending.map((send) => (send.requestId === requestId ? { ...send, sent: true } : send)) });
+}
+
 export function failPending(state: ChatState, requestId: string, reason: string): ChatState {
   return { ...state, pending: state.pending.map((send) => (send.requestId === requestId ? { ...send, failed: reason } : send)) };
 }
@@ -74,11 +80,13 @@ function withMessage(messages: ChatMessage[], message: ChatMessage): ChatMessage
   return messages.map((other, index) => (index === at ? message : other));
 }
 
-// A pending send is done once the server shows it, as a message in the chat or as one waiting in the queue.
+// A pending send is done once the server accepted it and shows it, as a message in the chat or as one waiting in the
+// queue. Until the server accepts it, an earlier message with the same text can't settle it, so a send that then
+// fails still shows with Retry.
 function settlePending(state: ChatState): ChatState {
   if (state.pending.length === 0) return state;
   const shown = shownTexts(state);
-  const pending = state.pending.filter((send) => send.failed !== undefined || !takeOne(shown, send.text));
+  const pending = state.pending.filter((send) => !send.sent || send.failed !== undefined || !takeOne(shown, send.text));
   return pending.length === state.pending.length ? state : { ...state, pending };
 }
 

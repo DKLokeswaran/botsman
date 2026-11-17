@@ -53,6 +53,7 @@ export class AlertsConnection {
   }
 
   #receive(message: AlertsServerMessage): void {
+    if (message.type === "ready") this.#retryMs = FIRST_RETRY_MS;
     if (message.type === "alert" || message.type === "reset") {
       this.#retryMs = FIRST_RETRY_MS;
       this.#position = { epoch: message.epoch, seq: message.seq };

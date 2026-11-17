@@ -63,6 +63,7 @@ export default function ChatScreen() {
           style={styles.list}
           contentContainerStyle={styles.listContent}
           ListHeaderComponent={state.hasEarlier ? <Button label="Show earlier messages" variant="text" onPress={() => void chat.loadEarlier()} /> : null}
+          ListFooterComponent={state.live.compacting ? <Text style={[styles.compacting, { color: colors.mutedForeground }]}>Compacting the chat…</Text> : null}
           ListEmptyComponent={<Text style={[styles.empty, { color: colors.mutedForeground }]}>{state.status === "loading" ? "Loading…" : `Say hello to ${bot.name}.`}</Text>}
         />
         {problem === undefined ? null : (
@@ -92,6 +93,7 @@ const styles = StyleSheet.create({
   listContent: { paddingHorizontal: space[4], paddingVertical: space[4] },
   item: { paddingVertical: space[2] },
   empty: { fontFamily: fontFamilies.body, fontSize: 14, textAlign: "center", padding: space[5] },
+  compacting: { fontFamily: fontFamilies.body, fontSize: 12, textAlign: "center", paddingVertical: space[2] },
   composer: { paddingHorizontal: space[3], paddingBottom: space[3] },
   missing: { flex: 1, textAlign: "center", textAlignVertical: "center", fontFamily: fontFamilies.body, fontSize: 14 },
 });

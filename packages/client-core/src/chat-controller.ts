@@ -1,5 +1,5 @@
 import { type ChatEvent, type ChatHistoryPage, type ChatSettings, type ChatSettingsUpdate, type ChatSnapshot, chatStream, type LiveState, type Ok, type SendMessageResponse } from "@botsman/protocol";
-import { addPending, applyChatEvent, applyChatSnapshot, applyHistoryPage, type ChatState, dropPending, emptyChat, failPending } from "./chat-state.ts";
+import { addPending, applyChatEvent, applyChatSnapshot, applyHistoryPage, type ChatState, dropPending, emptyChat, failPending, markSent } from "./chat-state.ts";
 import { defaultSendMode, type SendMode } from "./send-rule.ts";
 import type { Session } from "./session.ts";
 import { Store } from "./store.ts";
@@ -49,7 +49,7 @@ export class ChatController {
   // Sends a message. Without a mode it uses the one that fits the bot's state. The text shows at once as pending.
   async send(text: string, mode: SendMode = defaultSendMode(this.state.get().live)): Promise<void> {
     const requestId = this.#newRequestId();
-    this.state.update((state) => addPending(state, { requestId, text, mode, failed: undefined }));
+    this.state.update((state) => addPending(state, { requestId, text, mode, sent: false, failed: undefined }));
     await this.#post(requestId, text, mode);
   }
 
@@ -57,7 +57,7 @@ export class ChatController {
   async retry(requestId: string): Promise<void> {
     const send = this.state.get().pending.find((other) => other.requestId === requestId);
     if (send === undefined) return;
-    this.state.update((state) => addPending(state, { ...send, failed: undefined }));
+    this.state.update((state) => addPending(state, { ...send, sent: false, failed: undefined }));
     await this.#post(send.requestId, send.text, send.mode);
   }
 
@@ -106,6 +106,7 @@ export class ChatController {
   async #post(requestId: string, text: string, mode: SendMode): Promise<void> {
     try {
       await this.#session.request<SendMessageResponse>("POST", `/api/bots/${this.botId}/chat/messages`, { text, mode, requestId });
+      this.state.update((state) => markSent(state, requestId));
     } catch (error) {
       this.state.update((state) => failPending(state, requestId, error instanceof Error ? error.message : "Couldn't send"));
     }

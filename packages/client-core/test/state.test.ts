@@ -1,6 +1,6 @@
 import type { Approval, Bot, ChatMessage } from "@botsman/protocol";
 import { expect, test } from "vitest";
-import { addPending, chatItems, chatSubtitle, contextTokens, formatCost, formatCountdown, formatMessageTime, formatTokens, toolSummary, applyChatEvent, applyHistoryPage, applyServerEvent, defaultSendMode, emptyChat, emptyServerState, offeredSendModes, sortBots } from "../src/index.ts";
+import { addPending, markSent, chatItems, chatSubtitle, contextTokens, formatCost, formatCountdown, formatMessageTime, formatTokens, toolSummary, applyChatEvent, applyHistoryPage, applyServerEvent, defaultSendMode, emptyChat, emptyServerState, offeredSendModes, sortBots } from "../src/index.ts";
 
 const user = (id: string, text: string): ChatMessage => ({ type: "user", id, at: null, text });
 const bot = (id: string, name: string, isMain = false) => ({ id, name, isMain }) as Bot;
@@ -20,7 +20,7 @@ test("a message that arrives twice is kept once", () => {
 });
 
 test("two pending sends with the same text settle one at a time", () => {
-  const pending = { text: "again", mode: "send" as const, failed: undefined };
+  const pending = { text: "again", mode: "send" as const, sent: true, failed: undefined };
   let state = addPending(addPending(emptyChat, { requestId: "a", ...pending }), { requestId: "b", ...pending });
   state = applyChatEvent(state, { type: "message", message: user("1", "again") });
   expect(state.pending.map((send) => send.requestId)).toEqual(["b"]);
@@ -29,8 +29,17 @@ test("two pending sends with the same text settle one at a time", () => {
 });
 
 test("a failed send stays until the owner retries or discards it", () => {
-  const state = addPending(emptyChat, { requestId: "a", text: "hi", mode: "send", failed: "Couldn't send" });
+  const state = addPending(emptyChat, { requestId: "a", text: "hi", mode: "send", sent: false, failed: "Couldn't send" });
   expect(applyChatEvent(state, { type: "message", message: user("1", "hi") }).pending).toHaveLength(1);
+});
+
+test("an earlier message with the same text doesn't settle a send the server hasn't accepted yet", () => {
+  const shown = applyChatEvent(emptyChat, { type: "message", message: user("1", "yes") });
+  let state = addPending(shown, { requestId: "a", text: "yes", mode: "send", sent: false, failed: undefined });
+  state = applyChatEvent(state, { type: "live", live: { ...emptyChat.live, running: true } });
+  expect(state.pending).toHaveLength(1);
+  state = markSent(applyChatEvent(state, { type: "message", message: user("2", "yes") }), "a");
+  expect(state.pending).toEqual([]);
 });
 
 test("an older page goes in front, without repeating a message already shown", () => {
@@ -79,7 +88,7 @@ test("the reply being written comes after the settled messages, with a call that
 
 test("queued and pending messages come last", () => {
   const live = { ...emptyChat.live, running: true, streamingText: "…", queued: [{ id: "q1", text: "later", mode: "queue" as const }] };
-  const state = addPending({ ...emptyChat, live }, { requestId: "r1", text: "sending", mode: "queue", failed: undefined });
+  const state = addPending({ ...emptyChat, live }, { requestId: "r1", text: "sending", mode: "queue", sent: false, failed: undefined });
   expect(chatItems(state).map((item) => item.kind)).toEqual(["run", "queued", "pending"]);
 });
 

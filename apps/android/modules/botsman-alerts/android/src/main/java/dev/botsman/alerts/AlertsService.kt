@@ -92,6 +92,7 @@ class AlertsService : Service() {
     override fun onMessage(webSocket: WebSocket, text: String) {
       val message = JSONObject(text)
       when (message.optString("type")) {
+        "ready" -> onReady()
         "alert" -> onAlert(message)
         "reset" -> onPosition(message)
         "error" -> onRefused(message)
@@ -105,6 +106,12 @@ class AlertsService : Service() {
     override fun onFailure(webSocket: WebSocket, t: Throwable, response: Response?) {
       handler.post { retry() }
     }
+  }
+
+  // The server took the token and the connection is caught up.
+  private fun onReady() {
+    connected = true
+    retryMs = FIRST_RETRY_MS
   }
 
   private fun onPosition(message: JSONObject) {

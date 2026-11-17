@@ -147,7 +147,7 @@ The alerts connection runs when the UI does not, so it can't live in `client-cor
 
 `client-core` takes `fetch` and token storage as inputs, and each shell supplies its own. `pc-ui` reaches the tray, notifications, and updates through one small platform interface. `apps/windows` implements it with Tauri calls. `apps/web` implements it with browser features, and marks the rest as absent so the screen hides them.
 
-Android draws Markdown to match the PC: a quote is a thin rule with muted text and no fill, inline code sits on the muted colour with no border, and tables and code blocks sit on the card colour with a border.
+Android draws Markdown to match the PC: a quote is a thin rule with muted text and no fill, inline code sits on the muted colour with no border, and tables and code blocks sit on the card colour with a border. On every app, a web or mail link in a reply opens in the default browser or mail app, and other links do nothing, so a link a bot copied from a web page can't take over the app's window.
 
 Settings has a Mode choice of System, Light, or Dark, kept on each device: local storage on Windows and the web, and the phone's secure storage on Android. System follows the device's setting as it changes. Dark is Zoetrik, and Light is its Drafting Table scheme.
 

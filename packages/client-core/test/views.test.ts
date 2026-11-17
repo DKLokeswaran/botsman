@@ -1,6 +1,6 @@
 import type { Bot, DeviceSession, UsageReport } from "@botsman/protocol";
-import { describe, expect, it } from "vitest";
-import { isThemeMode, resolveTheme, memoryDiff, chatFromCache, chatToCache, emptyChat, emptyServerState, serverFromCache, serverToCache, backgroundLine, backgroundSteps, exactCommand, liveSessions, slashMatches, usageBots, usageDays } from "../src/index.ts";
+import { describe, expect, it, test } from "vitest";
+import { isThemeMode, resolveTheme, memoryDiff, chatFromCache, chatToCache, emptyChat, emptyServerState, serverFromCache, serverToCache, backgroundLine, backgroundSteps, exactCommand, liveSessions, slashMatches, usageBots, usageDays, opensOutside } from "../src/index.ts";
 
 const zero = { inputTokens: 0, outputTokens: 0, cacheReadTokens: 0, cacheWriteTokens: 0, totalTokens: 0, cost: 0 };
 const cost = (value: number) => ({ ...zero, cost: value });
@@ -16,6 +16,11 @@ describe("slash commands", () => {
   });
 });
 
+test("only web and mail links open outside the app", () => {
+  expect(["https://example.com", "http://example.com", "mailto:a@b.c"].every(opensOutside)).toBe(true);
+  expect(["javascript:alert(1)", "file:///etc/passwd", "/app/settings", "#top"].some(opensOutside)).toBe(false);
+});
+
 describe("usage view", () => {
   const report: UsageReport = {
     since: Date.UTC(2026, 10, 14),
@@ -26,6 +31,17 @@ describe("usage view", () => {
 
   it("fills days without replies, and scales bars against the costliest day", () => {
     expect(usageDays(report, 3).map((day) => [day.day, day.share])).toEqual([["2026-11-14", 0], ["2026-11-15", 1], ["2026-11-16", 0.5]]);
+  });
+
+  it("names each column by the device's own date, even 13 hours ahead of UTC", () => {
+    const zone = process.env.TZ;
+    process.env.TZ = "Pacific/Auckland";
+    try {
+      const auckland = { ...report, since: Date.UTC(2026, 10, 13, 11) };
+      expect(usageDays(auckland, 3).map((day) => [day.day, day.cost])).toEqual([["2026-11-14", 0], ["2026-11-15", 4], ["2026-11-16", 2]]);
+    } finally {
+      process.env.TZ = zone;
+    }
   });
 
   it("adds deleted bots together", () => {

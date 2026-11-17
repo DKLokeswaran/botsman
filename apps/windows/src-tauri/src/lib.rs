@@ -6,13 +6,17 @@ use tauri::menu::{Menu, MenuItem};
 use tauri::tray::TrayIconBuilder;
 use tauri::{AppHandle, Manager, WindowEvent};
 use tauri_plugin_autostart::MacosLauncher;
+use tauri_plugin_opener::OpenerExt;
 
 pub const MAIN_WINDOW: &str = "main";
 
-// Starts the app: HTTP from Rust, the updater, token storage, the tray icon, notifications, auto-start, and the
-// alerts connection.
+// Starts the app: one copy only, HTTP from Rust, the updater, token storage, the tray icon, notifications,
+// auto-start, links opened in the browser, and the alerts connection.
 pub fn run() {
     tauri::Builder::default()
+        // Starting Botsman again, for example from the Start menu while it sits in the tray, shows the running copy.
+        .plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| show_main_window(app)))
+        .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_http::init())
         .plugin(tauri_plugin_updater::Builder::new().build())
         .plugin(tauri_plugin_notification::init())
@@ -29,7 +33,8 @@ pub fn run() {
             alerts::alerts_set_bot_names,
             alerts::alerts_status,
             autostart::autostart_is_enabled,
-            autostart::autostart_set
+            autostart::autostart_set,
+            open_link
         ])
         .on_window_event(|window, event| {
             // Closing the window keeps Botsman in the tray, so alerts keep arriving. Quit is in the tray menu.
@@ -74,6 +79,14 @@ fn build_tray(app: &AppHandle) -> tauri::Result<()> {
     })
     .build(app)?;
     Ok(())
+}
+
+// Opens a web or mail link from a reply in the default browser or mail app, never in the app's own window.
+#[tauri::command]
+fn open_link(app: AppHandle, url: String) {
+    if url.starts_with("https://") || url.starts_with("http://") || url.starts_with("mailto:") {
+        let _ = app.opener().open_url(url, None::<&str>);
+    }
 }
 
 // Brings the main window back from the tray.

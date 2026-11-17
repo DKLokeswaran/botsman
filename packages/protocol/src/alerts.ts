@@ -56,6 +56,7 @@ export type AlertsClientMessage = Static<typeof AlertsClientMessage>;
 export const AlertsServerMessage = union([
   obj({ type: lit("alert"), epoch: str(), seq: int(), alert: Alert }),
   obj({ type: lit("reset"), epoch: str(), seq: int() }),
+  obj({ type: lit("ready") }),
   obj({ type: lit("pong") }),
   obj({ type: lit("error"), error: str(), message: str() }),
 ]);

@@ -31,6 +31,9 @@ pub struct Saved {
 pub struct Alerts {
     task: Mutex<Option<JoinHandle<()>>>,
     connected: AtomicBool,
+    // Held while the saved file is read and written back, so a change from the window and one from the connection
+    // can't overwrite each other.
+    saving: Mutex<()>,
 }
 
 #[derive(Serialize)]
@@ -55,6 +58,8 @@ fn store<R: Runtime>(app: &AppHandle<R>, saved: &Saved) {
 }
 
 fn update<R: Runtime>(app: &AppHandle<R>, change: impl FnOnce(&mut Saved)) -> Saved {
+    let state = app.state::<Alerts>();
+    let _saving = state.saving.lock().unwrap();
     let mut saved = load(app);
     change(&mut saved);
     store(app, &saved);
@@ -133,6 +138,11 @@ async fn follow<R: Runtime>(app: &AppHandle<R>) -> Result<Ending, Box<dyn std::e
 fn receive<R: Runtime>(app: &AppHandle<R>, text: &str) -> bool {
     let Ok(message) = serde_json::from_str::<Value>(text) else { return false };
     match message["type"].as_str() {
+        // The server took the token and the connection is caught up.
+        Some("ready") => {
+            app.state::<Alerts>().connected.store(true, Ordering::Relaxed);
+            false
+        }
         Some("alert") | Some("reset") => {
             app.state::<Alerts>().connected.store(true, Ordering::Relaxed);
             let epoch = message["epoch"].as_str().unwrap_or_default().to_string();

@@ -1,5 +1,6 @@
 import { App, indexedDbCache, type Platform } from "@botsman/pc-ui";
 import "@botsman/pc-ui/styles.css";
+import { invoke } from "@tauri-apps/api/core";
 import { fetch as rustFetch } from "@tauri-apps/plugin-http";
 import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
@@ -14,6 +15,7 @@ const platform: Platform = {
   fetch: (url, init) => rustFetch(url, init),
   createSocket: (url) => new WebSocket(url),
   deviceName: "Windows app",
+  openLink: (url) => void invoke("open_link", { url }),
   tokenStore,
   savedServer,
   updater,

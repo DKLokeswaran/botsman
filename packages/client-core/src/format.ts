@@ -110,3 +110,8 @@ export function formatBytes(bytes: number): string {
   }
   return `${unit === 0 ? value : value.toFixed(1)} ${units[unit]}`;
 }
+
+// Whether a link in a reply may open outside the app: web and mail links only.
+export function opensOutside(url: string): boolean {
+  return /^(https?:\/\/|mailto:)/i.test(url);
+}

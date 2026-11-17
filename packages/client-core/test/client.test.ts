@@ -36,6 +36,12 @@ describe("session", () => {
     expect(rig.tokenStore.tokens!.refreshToken).not.toBe(before.refreshToken);
   });
 
+  it("keeps the signed-in state when a renewal keeps the same session", async () => {
+    const before = rig.client.session.state.get();
+    await rig.client.session.renew();
+    expect(rig.client.session.state.get()).toBe(before);
+  });
+
   it("shares one renewal between parallel requests", async () => {
     rig.tokenStore.tokens = { ...rig.tokenStore.tokens!, accessToken: "stale" };
     await rig.client.session.restore();
@@ -109,6 +115,17 @@ describe("memory and notes", () => {
     expect(await rig.client.notes(mainId)).toEqual([]);
     expect(newNoteName(["untitled.md"])).toBe("untitled-2.md");
     expect(noteNameProblem("../x.md")).toBeTruthy();
+  });
+
+  it("won't rename a note or save a new one over another note", async () => {
+    await rig.client.saveNote(mainId, "a.md", "first");
+    await rig.client.saveNote(mainId, "b.md", "second");
+    await expect(rig.client.saveNote(mainId, "b.md", "first", "a.md")).rejects.toThrow("A note named b.md already exists");
+    await expect(rig.client.saveNote(mainId, "b.md", "new")).rejects.toThrow("already exists");
+    expect((await rig.client.note(mainId, "b.md")).content).toBe("second");
+    expect((await rig.client.note(mainId, "a.md")).content).toBe("first");
+    await rig.client.deleteNote(mainId, "a.md");
+    await rig.client.deleteNote(mainId, "b.md");
   });
 });
 

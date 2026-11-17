@@ -1,4 +1,5 @@
 import { BotsmanProvider, useApp } from "@botsman/client-core/react";
+import { OpenLinkContext } from "./open-link.tsx";
 import type { Platform } from "./platform.ts";
 import { useThemeMode } from "./use-theme-mode.ts";
 import { AddProviderScreen } from "./screens/add-provider.tsx";
@@ -25,7 +26,9 @@ export function App({ platform }: { platform: Platform }) {
     );
   return (
     <BotsmanProvider client={state.client}>
-      <Shell app={app} client={state.client} notifications={platform.notifications} autostart={platform.autostart} theme={theme} />
+      <OpenLinkContext.Provider value={platform.openLink}>
+        <Shell app={app} client={state.client} notifications={platform.notifications} autostart={platform.autostart} theme={theme} />
+      </OpenLinkContext.Provider>
     </BotsmanProvider>
   );
 }

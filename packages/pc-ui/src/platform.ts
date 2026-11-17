@@ -14,4 +14,5 @@ export type PageNotifications = {
 export type Autostart = { isEnabled(): Promise<boolean>; set(enabled: boolean): Promise<void> };
 
 // What a shell gives the screens. `apps/windows` fills it with Tauri calls and `apps/web` with browser features.
-export type Platform = AppEnvironment & { kind: "windows" | "web"; notifications?: PageNotifications; autostart?: Autostart };
+// `openLink` opens a link from a reply outside the app's own window.
+export type Platform = AppEnvironment & { kind: "windows" | "web"; openLink(url: string): void; notifications?: PageNotifications; autostart?: Autostart };

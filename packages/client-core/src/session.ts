@@ -126,8 +126,11 @@ export class Session {
     this.#hold(reply);
   }
 
+  // Renewing tokens keeps the same session, so it leaves the state alone and screens following it don't start over.
   #hold(held: Held): void {
     this.#held = held;
+    const current = this.state.get();
+    if (current.status === "signed_in" && current.sessionId === held.sessionId) return;
     this.state.set({ status: "signed_in", sessionId: held.sessionId });
   }
 

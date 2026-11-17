@@ -437,7 +437,16 @@ describe("alerts stream", () => {
     again.send(JSON.stringify({ type: "hello", token: server.client.tokens!.accessToken, epoch: alert.epoch, seq: alert.seq! - 1 }));
     await new Promise((resolve) => setTimeout(resolve, 300));
     expect(replayed[0]).toMatchObject({ type: "alert", seq: alert.seq });
+    expect(replayed[1]).toMatchObject({ type: "ready" });
     again.close();
+
+    // A connection that missed nothing still hears that it is connected.
+    const caughtUp = new WebSocket(`${server.baseUrl.replace("http", "ws")}/api/alerts`, { headers: { "x-forwarded-proto": "https" } } as unknown as string[]);
+    const first = new Promise<{ type: string }>((resolve) => (caughtUp.onmessage = (event) => resolve(JSON.parse(String(event.data)))));
+    await new Promise((resolve) => (caughtUp.onopen = resolve));
+    caughtUp.send(JSON.stringify({ type: "hello", token: server.client.tokens!.accessToken, epoch: alert.epoch, seq: alert.seq }));
+    expect(await first).toMatchObject({ type: "ready" });
+    caughtUp.close();
     await server.client.stop(bot.id);
   });
 

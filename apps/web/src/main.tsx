@@ -10,6 +10,7 @@ const platform: Platform = {
   createSocket: (url) => new WebSocket(url),
   deviceName: "Web dashboard",
   fixedServer: window.location.origin,
+  openLink: (url) => void window.open(url, "_blank", "noopener,noreferrer"),
   notifications: browserNotifications,
   cache: indexedDbCache(),
 };
