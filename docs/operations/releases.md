@@ -4,6 +4,8 @@ Each part has its own version and tag. [Versions and releases](../decisions/stac
 
 ## An app
 
+Each app's first release is 0.1.0. Builds made while M2 was tested were removed with their tags, so no installed app is offered one.
+
 1. Set the new version in the app's config file.
    - Android: `version` and `android.versionCode` in `apps/android/app.json`. The version code is `major * 10000 + minor * 100 + patch`, so 0.2.3 is 203.
    - Windows: `version` in `apps/windows/src-tauri/tauri.conf.json`.

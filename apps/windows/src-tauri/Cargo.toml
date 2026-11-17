@@ -1,6 +1,6 @@
 [package]
 name = "botsman"
-version = "0.1.7"
+version = "0.1.0"
 description = "Botsman for Windows"
 edition = "2021"
 
