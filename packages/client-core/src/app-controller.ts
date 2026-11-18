@@ -1,4 +1,4 @@
-import { PROTOCOL_VERSION, protocolFit } from "@botsman/protocol";
+import { type Health, PROTOCOL_VERSION, protocolFit } from "@botsman/protocol";
 import type { Fetch } from "./api-client.ts";
 import { BotsmanClient } from "./botsman-client.ts";
 import type { TokenStore } from "./session.ts";
@@ -39,6 +39,8 @@ export type AppState =
 // or sign-in, and back to sign-in whenever the session ends.
 export class AppController {
   readonly state = new Store<AppState>({ step: "starting" });
+  // What the connected server said about itself when the app connected, for its version and update notice.
+  readonly serverHealth = new Store<Health | undefined>(undefined);
   // Present on the apps that update themselves. The web dashboard has none.
   readonly updates: UpdateChecker | undefined;
   // Present on the apps that keep alerts coming while closed.
@@ -70,6 +72,7 @@ export class AppController {
     const client = this.#clientFor(address);
     try {
       const health = await client.health();
+      this.serverHealth.set(health);
       await this.#environment.savedServer?.save(client.baseUrl);
       void this.updates?.check(health.protocol);
       const fit = protocolFit(PROTOCOL_VERSION, health.protocol);

@@ -1,0 +1,39 @@
+name: Preview apps
+
+# Builds the preview apps from the branch picked in "Use workflow from" and publishes them to the `preview` release,
+# which only the preview apps read. Only someone with write access to the repo can start it.
+on:
+  workflow_dispatch:
+    inputs:
+      apps:
+        description: Apps to build
+        type: choice
+        options: [both, android, windows]
+        default: both
+
+# Runs one at a time, so the last run started is the build the preview feed offers.
+concurrency:
+  group: preview
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  android:
+    if: inputs.apps != 'windows'
+    uses: ./.github/workflows/android.yml
+    with:
+      preview: true
+    secrets: inherit
+    permissions:
+      contents: write
+
+  windows:
+    if: inputs.apps != 'android'
+    uses: ./.github/workflows/windows.yml
+    with:
+      preview: true
+    secrets: inherit
+    permissions:
+      contents: write

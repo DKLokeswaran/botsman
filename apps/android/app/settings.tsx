@@ -9,8 +9,9 @@ import { Button } from "../src/ui/button";
 import { ErrorText, LinkRow, Note, Page, pageStyles, SectionTitle, Segmented, ToggleRow } from "../src/ui/page";
 import { BackgroundSection } from "../src/ui/background-section";
 import { AppVersion } from "../src/ui/app-version";
+import { ServerVersion } from "../src/ui/server-version";
 
-// Alerts, signed-in devices, providers, the app's version, and the server this app uses.
+// Alerts, signed-in devices, providers, the theme, the server's and the app's versions, and the server this app uses.
 export default function SettingsScreen() {
   const app = useAppController();
   const client = useBotsmanClient();
@@ -30,6 +31,8 @@ export default function SettingsScreen() {
       <Devices />
       <SectionTitle>Mode</SectionTitle>
       <Segmented label="Mode" options={THEME_MODES.map((option) => ({ value: option.mode, label: option.label }))} value={themeMode[0]} onChange={themeMode[1]} />
+      <SectionTitle>Server</SectionTitle>
+      <ServerVersion app={app} />
       <SectionTitle>This app</SectionTitle>
       <AppVersion updates={app.updates} />
       <View style={styles.row}>

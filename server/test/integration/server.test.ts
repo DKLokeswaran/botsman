@@ -6,6 +6,7 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { scriptModelProvider } from "../../src/testing/script-model.ts";
 import { BotsmanClient, HttpError, type StreamClient } from "../e2e/client.ts";
 import { PASSWORD, SCRIPT_MODEL_REF, setUpServer, startTestServer, type TestServer } from "../helpers.ts";
+import { SERVER_VERSION } from "../../src/release/server-version.ts";
 
 let server: TestServer;
 let mainId: string;
@@ -40,6 +41,11 @@ describe("auth and exposure", () => {
     const response = await server.client.raw("GET", "/api/health", undefined, { "x-forwarded-proto": "http" });
     expect(response.status).toBe(403);
     expect(await response.json()).toMatchObject({ error: "https_required" });
+  });
+
+  it("reports its version from server/package.json", async () => {
+    const response = await server.client.raw("GET", "/api/health");
+    expect(await response.json()).toMatchObject({ version: SERVER_VERSION, preview: false });
   });
 
   it("says so when the dashboard is not built", async () => {

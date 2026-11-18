@@ -174,7 +174,8 @@ fn notify<R: Runtime>(app: &AppHandle<R>, saved: &Saved, alert: &Value) {
     let bot_id = alert["botId"].as_str().unwrap_or_default();
     let name = saved.names.get(bot_id).map(String::as_str).unwrap_or("A bot");
     let template = saved.templates.get(kind).map(String::as_str).unwrap_or("{bot} needs you");
-    let _ = app.notification().builder().title("Botsman").body(template.replace("{bot}", name)).show();
+    // The product name, so a preview app's notifications say Botsman Preview.
+    let _ = app.notification().builder().title(&app.package_info().name).body(template.replace("{bot}", name)).show();
 }
 
 fn window_in_front<R: Runtime>(app: &AppHandle<R>) -> bool {

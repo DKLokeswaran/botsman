@@ -13,6 +13,11 @@ test("compares versions by their numbers, not as text", () => {
   expect(compareVersions("0.2.0", "0.2.1")).toBeLessThan(0);
 });
 
+test("offers the next preview build over the installed one", () => {
+  expect(isOffered({ version: "0.2.0-preview.10+abc1234", protocol: 2 }, "0.2.0-preview.9+def5678", server)).toBe(true);
+  expect(isOffered({ version: "0.2.0-preview.9+abc1234", protocol: 2 }, "0.2.0-preview.9+def5678", server)).toBe(false);
+});
+
 test("offers a newer build only when the server speaks its protocol", () => {
   expect(isOffered({ version: "0.3.0", protocol: 2 }, "0.2.0", server)).toBe(true);
   expect(isOffered({ version: "0.3.0", protocol: 3 }, "0.2.0", server)).toBe(false);

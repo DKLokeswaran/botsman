@@ -1,12 +1,28 @@
 import { type AlertSettings, AlertSettingsUpdate, type Health, OLDEST_ACCEPTED_PROTOCOL, PROTOCOL_VERSION, type ProtocolRange, UsageQuery, type UsageReport } from "@botsman/protocol";
 import type { FastifyInstance } from "fastify";
+import { SERVER_VERSION } from "../release/server-version.ts";
 import type { Services } from "../services.ts";
 
-const VERSION = "0.1.0";
 const PROTOCOL: ProtocolRange = { oldest: OLDEST_ACCEPTED_PROTOCOL, current: PROTOCOL_VERSION };
 
+// The server's state, version, and protocol range. Fields the server doesn't know are left out.
+function health(services: Services): Health {
+  const { commit, branch, preview } = services.config;
+  const latestVersion = services.latestRelease.version;
+  return {
+    ok: services.sandbox.status.ok,
+    version: SERVER_VERSION,
+    ...(commit === undefined ? {} : { commit }),
+    ...(branch === undefined ? {} : { branch }),
+    preview,
+    ...(latestVersion === undefined ? {} : { latestVersion }),
+    protocol: PROTOCOL,
+    sandbox: services.sandbox.status,
+  };
+}
+
 export function registerSystemRoutes(app: FastifyInstance, services: Services): void {
-  app.get("/api/health", { config: { public: true } }, async (): Promise<Health> => ({ ok: services.sandbox.status.ok, version: VERSION, protocol: PROTOCOL, sandbox: services.sandbox.status }));
+  app.get("/api/health", { config: { public: true } }, async (): Promise<Health> => health(services));
 
   // Spending by day and by bot, for the usage screen.
   app.get<{ Querystring: UsageQuery }>("/api/usage", { schema: { querystring: UsageQuery } }, async (request): Promise<UsageReport> =>

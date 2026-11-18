@@ -59,7 +59,7 @@ class AlertsService : Service() {
   private fun showOngoing() {
     val notification = Notification.Builder(this, CONNECTION_CHANNEL)
       .setSmallIcon(android.R.drawable.stat_notify_sync_noanim)
-      .setContentTitle("Botsman")
+      .setContentTitle(appName())
       .setContentText("Connected for alerts")
       .setContentIntent(openApp(this, null))
       .setOngoing(true)
@@ -135,10 +135,13 @@ class AlertsService : Service() {
     stopSelf()
   }
 
+  // The app's own name, so a preview app's notifications say Botsman Preview.
+  private fun appName(): String = applicationInfo.loadLabel(packageManager).toString()
+
   private fun notifyAlert(id: String, kind: String, botId: String) {
     val notification = Notification.Builder(this, ALERTS_CHANNEL)
       .setSmallIcon(android.R.drawable.stat_notify_chat)
-      .setContentTitle("Botsman")
+      .setContentTitle(appName())
       .setContentText(prefs.alertBody(kind, botId))
       .setContentIntent(openApp(this, botId))
       .setAutoCancel(true)

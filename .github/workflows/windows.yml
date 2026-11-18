@@ -4,6 +4,12 @@ on:
   push:
     tags: ["windows-v*"]
   workflow_dispatch:
+  # preview.yml calls this to build the preview app.
+  workflow_call:
+    inputs:
+      preview:
+        type: boolean
+        default: false
   pull_request:
     paths:
       - apps/windows/**
@@ -16,7 +22,7 @@ on:
       - .github/actions/setup/**
 
 concurrency:
-  group: windows-${{ github.ref }}
+  group: windows-${{ github.ref }}-${{ inputs.preview && 'preview' || 'build' }}
   cancel-in-progress: true
 
 permissions:
@@ -25,10 +31,12 @@ permissions:
 jobs:
   installer:
     name: Build the installer
+    # A pull request from a fork runs the checks in ci.yml, but not this build.
+    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
     runs-on: windows-latest
     timeout-minutes: 60
     permissions:
-      # A tag publishes a release and the update manifest.
+      # A tag publishes a release and the update manifest, and a preview publishes to the `preview` release.
       contents: write
     env:
       TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
@@ -50,7 +58,14 @@ jobs:
             apps/windows/src-tauri/target
           key: cargo-${{ hashFiles('apps/windows/src-tauri/Cargo.toml', 'apps/windows/src-tauri/Cargo.lock') }}
           restore-keys: cargo-
-      # A pull request from a fork has no signing key, so it builds the installer without update files.
+      # The preview app has its own app id, name, version, and update feed, set on this machine only.
+      - name: Make this the preview app
+        if: inputs.preview
+        shell: bash
+        run: |
+          version="$(node scripts/release.ts preview windows)"
+          echo "Windows preview $version" >> "$GITHUB_STEP_SUMMARY"
+      # Without the signing key, for example in a fork, it builds the installer without update files.
       - name: Build the installer
         shell: bash
         run: |
@@ -80,3 +95,19 @@ jobs:
           node scripts/release.ts manifest windows "$GITHUB_REF_NAME" "$installer" "$installer.sig" > "$RUNNER_TEMP/windows.json"
           gh release view updates > /dev/null 2>&1 || gh release create updates --title "Update manifests" --notes "The files installed apps read to find newer builds. Nothing here is meant to be downloaded by hand." --latest=false
           gh release upload updates "$RUNNER_TEMP/windows.json" --clobber
+      # Preview apps read windows.json from the `preview` release. Without the signing key, the installer stays a
+      # workflow artifact to install by hand.
+      - name: Publish the preview and its update manifest
+        if: inputs.preview && env.TAURI_SIGNING_PRIVATE_KEY != ''
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          # The newest installer is this build's; the cached target folder can hold older ones.
+          built="$(ls -t apps/windows/src-tauri/target/release/bundle/nsis/*-setup.exe | head -n 1)"
+          installer="$RUNNER_TEMP/botsman-preview-setup.exe"
+          cp "$built" "$installer"
+          cp "$built.sig" "$installer.sig"
+          node scripts/release.ts manifest windows preview "$installer" "$installer.sig" > "$RUNNER_TEMP/windows.json"
+          gh release view preview > /dev/null 2>&1 || gh release create preview --prerelease --latest=false --title "Preview builds" --notes "Test builds from the preview workflow. Only the Botsman Preview apps read these files." || gh release view preview > /dev/null
+          gh release upload preview "$installer" "$installer.sig" "$RUNNER_TEMP/windows.json" --clobber

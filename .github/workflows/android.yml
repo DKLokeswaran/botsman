@@ -4,6 +4,12 @@ on:
   push:
     tags: ["android-v*"]
   workflow_dispatch:
+  # preview.yml calls this to build the preview app.
+  workflow_call:
+    inputs:
+      preview:
+        type: boolean
+        default: false
   pull_request:
     paths:
       - apps/android/**
@@ -15,7 +21,7 @@ on:
       - .github/actions/setup/**
 
 concurrency:
-  group: android-${{ github.ref }}
+  group: android-${{ github.ref }}-${{ inputs.preview && 'preview' || 'build' }}
   cancel-in-progress: true
 
 permissions:
@@ -24,10 +30,12 @@ permissions:
 jobs:
   apk:
     name: Build the APK
+    # A pull request from a fork runs the checks in ci.yml, but not this build.
+    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
     runs-on: ubuntu-latest
     timeout-minutes: 60
     permissions:
-      # A tag publishes a release and the update manifest.
+      # A tag publishes a release and the update manifest, and a preview publishes to the `preview` release.
       contents: write
     env:
       KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
@@ -52,6 +60,12 @@ jobs:
             ~/.gradle/wrapper
           key: gradle-${{ hashFiles('pnpm-lock.yaml') }}
           restore-keys: gradle-
+      # The preview app has its own app id, name, version, and update feed, set on this machine only.
+      - name: Make this the preview app
+        if: inputs.preview
+        run: |
+          version="$(node scripts/release.ts preview android)"
+          echo "Android preview $version" >> "$GITHUB_STEP_SUMMARY"
       - name: Generate the Android project
         run: pnpm --filter @botsman/android prebuild
       # A pull request from a fork has no keystore, so its APK keeps the debug signature.
@@ -88,3 +102,15 @@ jobs:
           node scripts/release.ts manifest android "$GITHUB_REF_NAME" "$apk" > "$RUNNER_TEMP/android.json"
           gh release view updates > /dev/null 2>&1 || gh release create updates --title "Update manifests" --notes "The files installed apps read to find newer builds. Nothing here is meant to be downloaded by hand." --latest=false
           gh release upload updates "$RUNNER_TEMP/android.json" --clobber
+      # Preview apps read android.json from the `preview` release. Without the keystore, the APK stays a workflow
+      # artifact to install by hand.
+      - name: Publish the preview and its update manifest
+        if: inputs.preview && env.KEYSTORE_BASE64 != ''
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          apk="$RUNNER_TEMP/botsman-preview.apk"
+          cp apps/android/android/app/build/outputs/apk/release/app-release.apk "$apk"
+          node scripts/release.ts manifest android preview "$apk" > "$RUNNER_TEMP/android.json"
+          gh release view preview > /dev/null 2>&1 || gh release create preview --prerelease --latest=false --title "Preview builds" --notes "Test builds from the preview workflow. Only the Botsman Preview apps read these files." || gh release view preview > /dev/null
+          gh release upload preview "$apk" "$RUNNER_TEMP/android.json" --clobber

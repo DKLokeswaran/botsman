@@ -30,6 +30,10 @@ export function testConfig(home: string, dataDir: string, root: string): Config 
     backupKeep: 3,
     scriptModel: true,
     dashboardDir: path.join(root, "dashboard"),
+    commit: undefined,
+    branch: undefined,
+    preview: false,
+    releaseCheck: false,
   };
 }
 

@@ -1,4 +1,6 @@
-import { type ProtocolRange, protocolFit } from "@botsman/protocol";
+import { compareVersions, type ProtocolRange, protocolFit } from "@botsman/protocol";
+
+export { compareVersions } from "@botsman/protocol";
 import { Store } from "./store.ts";
 
 // What a release says about its newest build. Each app reads it from the repo's `updates` release.
@@ -19,16 +21,6 @@ export type UpdateState =
   | { status: "available"; version: string }
   | { status: "installing"; version: string }
   | { status: "failed"; version: string; error: string };
-
-// Compares two `major.minor.patch` versions: negative when the first is older.
-export function compareVersions(first: string, second: string): number {
-  const [a, b] = [first, second].map((version) => version.split(".").map((part) => Number.parseInt(part, 10) || 0));
-  for (let index = 0; index < 3; index += 1) {
-    const difference = (a![index] ?? 0) - (b![index] ?? 0);
-    if (difference !== 0) return difference;
-  }
-  return 0;
-}
 
 // A build is worth offering when it is newer than the installed one and the connected server speaks its protocol.
 // With no server yet, any newer build is offered.

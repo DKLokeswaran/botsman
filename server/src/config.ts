@@ -13,6 +13,12 @@ export type Config = {
   readonly backupKeep: number;
   readonly scriptModel: boolean;
   readonly dashboardDir: string;
+  // The commit and branch the install script set up, for /api/health.
+  readonly commit: string | undefined;
+  readonly branch: string | undefined;
+  // A preview server runs a branch under test next to the real server, and never looks for releases.
+  readonly preview: boolean;
+  readonly releaseCheck: boolean;
 };
 
 // Where `pnpm --filter @botsman/web build` writes the dashboard, next to the server in the repo.
@@ -48,6 +54,10 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
     backupKeep: integerSetting(env, "BOTSMAN_BACKUP_KEEP", 7, 1, 365),
     scriptModel: env.BOTSMAN_SCRIPT_MODEL === "1",
     dashboardDir: path.resolve(env.BOTSMAN_DASHBOARD_DIR ?? BUILT_DASHBOARD),
+    commit: env.BOTSMAN_COMMIT || undefined,
+    branch: env.BOTSMAN_BRANCH || undefined,
+    preview: env.BOTSMAN_PREVIEW === "1",
+    releaseCheck: env.BOTSMAN_PREVIEW !== "1",
   };
 }
 

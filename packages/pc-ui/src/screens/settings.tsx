@@ -4,6 +4,7 @@ import type { DeviceSession } from "@botsman/protocol";
 import { ErrorText, LinkRow, Page, Segmented, ToggleRow } from "../components/page.tsx";
 import { Button } from "../components/ui/button.tsx";
 import { AppVersion } from "../components/app-version.tsx";
+import { ServerVersion } from "../components/server-version.tsx";
 import type { Autostart, NotificationPermission } from "../platform.ts";
 import { BackgroundSection } from "../components/background-section.tsx";
 
@@ -13,7 +14,7 @@ export type NotificationChoice = { permission: NotificationPermission; ask: (() 
 // This device's theme choice and the way to change it.
 export type ThemeChoice = [ThemeMode, (mode: ThemeMode) => void];
 
-// Alerts, signed-in devices, providers, the theme, the app's version, and the server this app uses.
+// Alerts, signed-in devices, providers, the theme, the server's and the app's versions, and the server this app uses.
 export function SettingsScreen({ app, client, notifications, autostart, theme }: { app: AppController; client: BotsmanClient; notifications: NotificationChoice; autostart: Autostart | undefined; theme: ThemeChoice }) {
   const { alertSettings, save } = useAlertSettings();
   return (
@@ -31,6 +32,8 @@ export function SettingsScreen({ app, client, notifications, autostart, theme }:
       <Devices />
       <h2 className="font-display text-sm font-bold uppercase">Mode</h2>
       <Segmented label="Mode" options={THEME_MODES.map((option) => ({ value: option.mode, label: option.label }))} value={theme[0]} onChange={theme[1]} />
+      <h2 className="font-display text-sm font-bold uppercase">Server</h2>
+      <ServerVersion app={app} />
       <h2 className="font-display text-sm font-bold uppercase">This app</h2>
       <AppVersion updates={app.updates} />
       <div className="flex gap-2">

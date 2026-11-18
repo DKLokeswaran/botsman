@@ -23,6 +23,7 @@ The server core (milestone M1) is in `server/`, with its message schema in `pack
 | [docs/risks.md](docs/risks.md) | Known risks and how we handle them |
 | [docs/operations/server.md](docs/operations/server.md) | Installing and running the server, backups, and restore |
 | [docs/operations/releases.md](docs/operations/releases.md) | Releasing the apps and the server |
+| [docs/operations/testing.md](docs/operations/testing.md) | Trying a change with preview apps and a preview server, from the repo or a fork |
 | [server/](server) | The Botsman server |
 | [packages/protocol/](packages/protocol) | Every HTTP body and WebSocket message |
 | [deploy/](deploy) | Install script, systemd unit, and AppArmor profile |
@@ -37,7 +38,7 @@ pnpm -r typecheck
 pnpm -r test
 ```
 
-To install the server on a VPS, see [running the server](docs/operations/server.md).
+To install the server on a VPS, see [running the server](docs/operations/server.md). To try a change on your own devices, from this repo or a fork, see [testing changes](docs/operations/testing.md).
 
 ## View the mockups
 

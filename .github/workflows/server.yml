@@ -1,0 +1,20 @@
+name: Server release
+
+# A `server-v*` tag is the server's release. Installs check out the newest one, so the tag must name the version in
+# server/package.json.
+on:
+  push:
+    tags: ["server-v*"]
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    name: Check the tag names the server's version
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v7
+      - uses: ./.github/actions/setup
+      - run: node scripts/release.ts check server "$GITHUB_REF_NAME"
