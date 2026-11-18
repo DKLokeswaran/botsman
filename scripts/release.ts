@@ -65,10 +65,11 @@ function requiredEnv(name: string): string {
   return value;
 }
 
-// A preview's version: the config file's version, the workflow's run number, which grows with every run, and the
-// commit, such as 0.2.0-preview.42+abc1234. Semver ignores the commit when it orders versions.
+// A preview's version, such as 0.0.42-preview+0.2.0.abc1234. The workflow's run number, which grows with every run,
+// leads, so a newer preview is always the newer version, whatever the branch's own version. After the `+`, which semver
+// ignores when it orders versions, come the config file's version and the commit, to name the code.
 export function previewVersion(baseVersion: string, runNumber: string, commit: string): string {
-  return `${baseVersion}-preview.${runNumber}+${commit.slice(0, 7)}`;
+  return `0.0.${runNumber}-preview+${baseVersion}.${commit.slice(0, 7)}`;
 }
 
 // Where a repo's preview apps find their newest build, so a fork's previews read the fork's own `preview` release.

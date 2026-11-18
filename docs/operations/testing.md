@@ -22,7 +22,7 @@ In the repo, or in a fork with Actions turned on:
 2. In GitHub Actions, open `Preview apps`, press Run workflow, pick the branch under "Use workflow from", and choose Android, Windows, or both.
 3. When the run finishes, install the build from the `preview` release, or from the run's artifacts when nothing was published.
 
-Preview apps are named Botsman Preview, in their alerts and, on Windows, the tray icon too, and have their own app id, data, and sign-in. Their version, such as `0.2.0-preview.42+abc1234`, names the run and the commit, and Settings shows it. [Releasing](releases.md#preview-apps) explains the version and the feed.
+Preview apps are named Botsman Preview, in their alerts and, on Windows, the tray icon too, and have their own app id, data, and sign-in. Their version, such as `0.0.42-preview+0.2.0.abc1234`, names the run, the branch's own version, and the commit, and Settings shows it. [Releasing](releases.md#preview-apps) explains the version and the feed.
 
 Publishing to the `preview` release needs the signing secrets listed in [releasing](releases.md#signing-keys). A fork sets up its own:
 

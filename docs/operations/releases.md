@@ -47,11 +47,11 @@ To publish one, open the `Preview apps` workflow in GitHub Actions, press Run wo
 | --- | --- | --- |
 | Name | Botsman | Botsman Preview |
 | App id | `dev.botsman.app` | `dev.botsman.app.preview` |
-| Version | The config file's version, such as `0.2.0` | `<config version>-preview.<run number>+<commit>`, such as `0.2.0-preview.42+abc1234` |
+| Version | The config file's version, such as `0.2.0` | `0.0.<run number>-preview+<config version>.<commit>`, such as `0.0.42-preview+0.2.0.abc1234` |
 | Android version code | `major * 10000 + minor * 100 + patch` | The run number |
 | Update feed | The `updates` release | The `preview` release |
 
-The run number is the preview workflow's run counter. It grows with every run in the repo and never resets, so each preview is newer than the one before, whichever branch it came from. Semver ignores the commit after `+` when it compares versions, so the commit only names the code. The base version is the one on the branch, and nothing guesses the next release's version.
+The run number is the preview workflow's run counter. It grows with every run in the repo and never resets. It leads the version, so each preview is newer than the one before, whichever branch it came from and whatever version that branch's config file states. Semver ignores everything after `+` when it compares versions, so the config version and the commit there only name the code. Nothing guesses the next release's version.
 
 The `preview` release holds the newest preview of each app and its manifest, `android.json` or `windows.json`, with the same fields as the ones in `updates`. Each run replaces them, so every preview app is offered the build from the last run, whichever branch that was. Runs wait for each other, so the last run started is the one the feed ends on. The preview build's manifest address names the repo the workflow runs in, so a fork's preview apps read the fork's own `preview` release without any file being edited.
 
