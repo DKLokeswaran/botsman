@@ -27,4 +27,10 @@ describe("server version", () => {
     expect(serverUpdateSteps(health({ preview: true, branch: "fix-login", latestVersion: "0.3.0" })).command).toBe("deploy/install.sh --preview fix-login");
     expect(serverUpdateSteps(health({ preview: true })).command).toBe("deploy/install.sh --preview <branch>");
   });
+
+  it("quotes a branch name that the shell would split or run", () => {
+    expect(serverUpdateSteps(health({ preview: true, branch: "feature/a.b-c_d" })).command).toBe("deploy/install.sh --preview feature/a.b-c_d");
+    expect(serverUpdateSteps(health({ preview: true, branch: "x; id" })).command).toBe("deploy/install.sh --preview 'x; id'");
+    expect(serverUpdateSteps(health({ preview: true, branch: "it's$(id)" })).command).toBe("deploy/install.sh --preview 'it'\\''s$(id)'");
+  });
 });

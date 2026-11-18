@@ -23,9 +23,16 @@ export function serverUpdate(health: Health): string | undefined {
 // server to its newest release. With no health yet, it gives the release command.
 export function serverUpdateSteps(health: Health | undefined): ServerUpdateSteps {
   if (health?.preview === true) {
-    return { text: "To update this preview server, run this in the real server's Botsman folder:", command: `deploy/install.sh --preview ${health.branch ?? "<branch>"}` };
+    const branch = health.branch === undefined ? "<branch>" : shellWord(health.branch);
+    return { text: "To update this preview server, run this in the real server's Botsman folder:", command: `deploy/install.sh --preview ${branch}` };
   }
   const latest = health === undefined ? undefined : serverUpdate(health);
   const lead = latest === undefined ? "" : `Server ${latest} is available. `;
   return { text: `${lead}To update, run this in the Botsman folder on the server:`, command: "deploy/install.sh" };
+}
+
+// A branch name as one shell word. The owner pastes the command into a shell, and a branch name can hold spaces, `;`,
+// `$`, or quotes, so anything beyond plain name characters is single-quoted.
+function shellWord(text: string): string {
+  return /^[\w./-]+$/.test(text) ? text : `'${text.replaceAll("'", `'\\''`)}'`;
 }
