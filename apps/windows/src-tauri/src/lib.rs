@@ -63,7 +63,8 @@ fn build_tray(app: &AppHandle) -> tauri::Result<()> {
     let quit = MenuItem::with_id(app, "quit", "Quit", true, None::<&str>)?;
     let menu = Menu::with_items(app, &[&open, &quit])?;
 
-    let mut tray = TrayIconBuilder::new().tooltip("Botsman").menu(&menu);
+    // The product name tells the preview app's tray icon apart from the real app's.
+    let mut tray = TrayIconBuilder::new().tooltip(&app.package_info().name).menu(&menu);
     if let Some(icon) = app.default_window_icon() {
         tray = tray.icon(icon.clone());
     }

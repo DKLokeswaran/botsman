@@ -21,6 +21,7 @@ import { ProviderCatalog } from "./providers/provider-catalog.ts";
 import { ProviderLogins } from "./providers/provider-logins.ts";
 import { SandboxManager } from "./sandbox/sandbox-manager.ts";
 import { UsageLog } from "./usage/usage-log.ts";
+import { LatestRelease } from "./release/latest-release.ts";
 import { openDatabase, readSetting, writeSetting, type Database } from "./store/database.ts";
 import { AlertSettingsStore } from "./store/alert-settings.ts";
 import { SecretBox } from "./store/secret-box.ts";
@@ -60,6 +61,9 @@ export async function createServices(config: Config, options: ServiceOptions = {
   const credentials = new SealedCredentialStore(db, box, () => publish({ type: "providers_changed" }));
   const catalog = new ProviderCatalog(credentials, options.extraProviders);
   const auth = new AuthService(db, box.deriveKey("access-tokens"));
+
+  const latestRelease = new LatestRelease();
+  if (config.releaseCheck) latestRelease.start();
 
   const usage = new UsageLog(db);
   // Each new reply's usage is logged once, when it first appears; replies already there at startup are not counted again.
@@ -138,6 +142,7 @@ export async function createServices(config: Config, options: ServiceOptions = {
   }
 
   async function close(): Promise<void> {
+    latestRelease.stop();
     policy.shutDown();
     await engine.closeAll();
     feed.close();
@@ -145,7 +150,7 @@ export async function createServices(config: Config, options: ServiceOptions = {
     db.close();
   }
 
-  return { config, paths, db, hub, alerts, auth, registry, bots, memoryFiles, notes, approvalStore, policy, sandbox, catalog, logins, engine, feed, activity, alertSettings, usage, publish, resumeBots, close };
+  return { config, paths, db, hub, alerts, auth, registry, bots, memoryFiles, notes, approvalStore, policy, sandbox, catalog, logins, engine, feed, activity, alertSettings, usage, latestRelease, publish, resumeBots, close };
 }
 
 // A stable id for this server, which some sign-ins send as the device id.

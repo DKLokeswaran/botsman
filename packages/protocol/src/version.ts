@@ -19,3 +19,45 @@ export function protocolFit(appProtocol: number, server: ProtocolRange): Protoco
   if (appProtocol > server.current) return "update_server";
   return "fits";
 }
+
+// Compares two versions such as `0.2.0` or `0.2.0-preview.7+abc1234` in semver order: negative when the first is
+// older. A pre-release comes before its release, and anything after `+` is ignored.
+export function compareVersions(first: string, second: string): number {
+  const [a, b] = [parseVersion(first), parseVersion(second)];
+  for (let index = 0; index < 3; index += 1) {
+    const difference = (a.core[index] ?? 0) - (b.core[index] ?? 0);
+    if (difference !== 0) return difference;
+  }
+  return comparePreReleases(a.preRelease, b.preRelease);
+}
+
+function parseVersion(version: string): { core: number[]; preRelease: string[] } {
+  const withoutBuild = version.split("+")[0] ?? "";
+  const dash = withoutBuild.indexOf("-");
+  const core = dash === -1 ? withoutBuild : withoutBuild.slice(0, dash);
+  return { core: core.split(".").map((part) => Number.parseInt(part, 10) || 0), preRelease: dash === -1 ? [] : withoutBuild.slice(dash + 1).split(".") };
+}
+
+// A version with no pre-release ranks above one with any. Otherwise the parts compare in turn, and a shorter
+// pre-release that matches so far comes first.
+function comparePreReleases(a: string[], b: string[]): number {
+  if (a.length === 0 || b.length === 0) return b.length - a.length;
+  for (let index = 0; index < Math.min(a.length, b.length); index += 1) {
+    const difference = comparePreReleasePart(a[index]!, b[index]!);
+    if (difference !== 0) return difference;
+  }
+  return a.length - b.length;
+}
+
+// Numbers compare as numbers and come before words, so `preview.10` is newer than `preview.9`.
+function comparePreReleasePart(a: string, b: string): number {
+  const [aIsNumber, bIsNumber] = [/^\d+$/.test(a), /^\d+$/.test(b)];
+  if (aIsNumber && bIsNumber) return Number(a) - Number(b);
+  if (aIsNumber !== bIsNumber) return aIsNumber ? -1 : 1;
+  return compareText(a, b);
+}
+
+function compareText(a: string, b: string): number {
+  if (a === b) return 0;
+  return a < b ? -1 : 1;
+}

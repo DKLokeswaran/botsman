@@ -7,6 +7,7 @@ export * from "./chat-state.ts";
 export * from "./format.ts";
 export * from "./send-rule.ts";
 export * from "./server-state.ts";
+export * from "./server-version.ts";
 export * from "./session.ts";
 export * from "./store.ts";
 export * from "./stream-connection.ts";

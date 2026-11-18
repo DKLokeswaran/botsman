@@ -98,4 +98,5 @@ it("stops with the side to update when the protocols don't fit", async () => {
   const tooNew = new AppController(withProtocol({ oldest: 0, current: 0 }));
   await tooNew.connect(server.baseUrl);
   expect(tooNew.state.get().step).toBe("update_server");
+  expect(tooNew.serverHealth.get()?.protocol).toEqual({ oldest: 0, current: 0 });
 });

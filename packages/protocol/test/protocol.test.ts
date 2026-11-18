@@ -22,6 +22,24 @@ describe("protocol schemas", () => {
   });
 });
 
+describe("versions", () => {
+  it("compare by their numbers, not as text", () => {
+    expect(protocol.compareVersions("0.10.0", "0.9.9")).toBeGreaterThan(0);
+    expect(protocol.compareVersions("1.0.0", "1.0.0")).toBe(0);
+  });
+
+  it("put a pre-release before its release and order previews by their number", () => {
+    expect(protocol.compareVersions("0.2.0-preview.3", "0.2.0")).toBeLessThan(0);
+    expect(protocol.compareVersions("0.2.0-preview.10", "0.2.0-preview.9")).toBeGreaterThan(0);
+    expect(protocol.compareVersions("0.2.0-preview", "0.2.0-preview.1")).toBeLessThan(0);
+    expect(protocol.compareVersions("0.2.0-1", "0.2.0-preview")).toBeLessThan(0);
+  });
+
+  it("ignore the build after +", () => {
+    expect(protocol.compareVersions("0.2.0-preview.4+abc1234", "0.2.0-preview.4+def5678")).toBe(0);
+  });
+});
+
 describe("protocol version", () => {
   it("fits inside the range a server accepts", () => {
     expect(protocol.protocolFit(2, { oldest: 1, current: 3 })).toBe("fits");

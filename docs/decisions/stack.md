@@ -57,11 +57,26 @@ Three parts have their own version and their own tag.
 
 | Part | Tag | How it reaches the owner |
 | --- | --- | --- |
-| Server and web dashboard | `server-v<version>` | `git pull` and `deploy/install.sh`, which also builds the dashboard with Vite |
+| Server and web dashboard | `server-v<version>` | `deploy/install.sh` checks out the newest `server-v*` tag and builds the dashboard with Vite |
 | Windows app | `windows-v<version>` | GitHub Actions builds the installer, and the server hands it to the app |
 | Android app | `android-v<version>` | GitHub Actions builds the APK, and the server hands it to the app |
 
 The dashboard shares the server's version because the server builds and serves it from its own checkout. It can't be released alone, and it can't fall out of step with the server. The Windows app runs the same `pc-ui` screens and still has its own version, because it holds Windows-only code and sits on a device that can lag behind. The shared packages have no version of their own. A change to one of them means a new release of each part it affects.
+
+Each part's version lives in one file, and its release workflow refuses a tag that disagrees with it: `apps/android/app.json`, `apps/windows/src-tauri/tauri.conf.json`, and `server/package.json`. The server reads its version from `server/package.json` at startup. The `version` fields in the other `package.json` files and in `Cargo.toml` mean nothing.
+
+Updating a server takes a release, never whatever is newest on `main`. The server looks for a newer `server-v*` tag on its git remote once a day and reports it in `/api/health`. The apps and the dashboard show the update command in Settings, because an app can't update the server. Updating from an app is left for later.
+
+### Preview builds
+
+Testing a change never takes a real version number, never replaces an installed app, and never runs on the real server.
+
+- **Preview apps** have their own app id, `dev.botsman.app.preview`, and name, Botsman Preview, so they install next to the real apps with their own data and sign-in. Their version is `0.0.<run number>-preview+<config version>.<commit>`. The run number leads, so previews are ordered by run whatever version each branch states, and no guess at the next release's version is needed. The config version and the commit after `+` name the code; semver ignores them when it orders versions. They update from their own feed, so the real apps only ever see real releases. Only someone with write access starts a preview build, by hand.
+- **A preview server** runs a branch from a second checkout under its own systemd unit, port, and data folder, started by `deploy/install.sh --preview <branch>`. It reports its version, branch, and commit. It is never offered a release; the apps tell its owner to run `deploy/install.sh --preview <branch>` again, with the branch quoted for the shell, to move it to the branch's newest commit.
+
+All preview apps share one feed, and the last build published is the one they are offered. One maintainer publishes previews, so that is the build wanted. With several maintainers, a feed per branch would stop one person's preview replacing another's on their devices.
+
+[Releasing](../operations/releases.md#preview-apps), [running the server](../operations/server.md#preview-server), and [testing changes](../operations/testing.md) have the details.
 
 A fix to one app needs only that app's tag. A fix to the server needs only the server's tag, and the apps offer no update.
 
@@ -85,6 +100,8 @@ GitHub marks only one release in a repo as the latest, and Botsman has three lin
 
 Someone who forks Botsman sets their own repo address and signing keys at build time.
 
+Preview apps read the same kind of manifests from a second fixed release, `preview`. Their manifest address names the repo they were built in, so a fork's previews read the fork's feed.
+
 The Tauri updater key and the Android keystore are GitHub Actions secrets. Losing either key means installed apps can't take another update, so the owner keeps a copy of both outside GitHub.
 
 [Client versioning and updates](../research/client-versioning-and-updates.md) surveys how 18 other projects handle this.
@@ -93,8 +110,10 @@ The Tauri updater key and the Android keystore are GitHub Actions secrets. Losin
 
 The repo is public, so standard GitHub-hosted runners are free.
 
-- Type checks and tests run on every pull request, on Linux.
-- The Windows installer and the Android APK build on their tag, when started by hand, and on a pull request that changes that app or the packages it uses.
+- Type checks and tests run on every pull request, on Linux, including pull requests from forks.
+- The Windows installer and the Android APK build on their tag, when started by hand, and on a pull request that has the `build-apps` label and changes that app or the packages it uses. Adding the label builds the pull request, and each push after that builds again until the label is removed. Most pushes don't need a native build, so a maintainer asks for one with the label. A pull request from a fork never builds them, label or not, because they take the slowest runners and would run anyone's code. A push whose commit message contains `[skip ci]` runs no workflows at all.
+- The `Preview apps` workflow builds and publishes preview apps from a chosen branch. It runs only when started by hand, which needs write access.
+- A `server-v*` tag runs a check that the tag names the version in `server/package.json`.
 - Build artifacts are kept for a short time.
 
 ## Why pnpm
