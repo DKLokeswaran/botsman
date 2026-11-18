@@ -1,10 +1,11 @@
 import { type UpdateChecker, versionLine } from "@botsman/client-core";
-import { useUpdateInfo, useUpdateState } from "@botsman/client-core/react";
+import { useAppName, useUpdateInfo, useUpdateState } from "@botsman/client-core/react";
 import { UpdateNotice } from "./update-notice.tsx";
 import { Button } from "./ui/button.tsx";
 
 // This app's version, whether it is up to date, and a way to check now. The web dashboard updates with the server.
-export function AppVersion({ appName, updates }: { appName: string; updates: UpdateChecker | undefined }) {
+export function AppVersion({ updates }: { updates: UpdateChecker | undefined }) {
+  const appName = useAppName();
   const info = useUpdateInfo(updates);
   const state = useUpdateState(updates);
   if (updates === undefined) return <p className="text-sm text-muted-foreground">The dashboard updates with the server.</p>;

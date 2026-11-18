@@ -1,6 +1,6 @@
 import { startTestServer, type TestServer } from "@botsman/server/test/helpers.ts";
 import { afterAll, beforeAll, expect, it } from "vitest";
-import { AppController, type AppEnvironment, type SocketLike } from "../src/index.ts";
+import { APP_NAME, AppController, type AppEnvironment, PREVIEW_APP_NAME, type SocketLike } from "../src/index.ts";
 import { PASSWORD, memoryTokenStore, proxiedFetch, until } from "./real-server.ts";
 
 let server: TestServer;
@@ -100,4 +100,26 @@ it("stops with the side to update when the protocols don't fit", async () => {
   await tooNew.connect(server.baseUrl);
   expect(tooNew.state.get().step).toBe("update_server");
   expect(tooNew.serverHealth.get()?.protocol).toEqual({ oldest: 0, current: 0 });
+});
+
+it("names an app from its own config, and the dashboard after the server that served it", async () => {
+  const fromServer = (preview: boolean, appName: string | undefined): AppEnvironment => ({
+    ...environment(),
+    appName,
+    fetch: async (url, init) => {
+      const response = await proxiedFetch(url, init);
+      if (!url.endsWith("/api/health")) return response;
+      const health = JSON.parse(await response.text()) as Record<string, unknown>;
+      return { ok: true, status: 200, text: async () => JSON.stringify({ ...health, preview, protocol: { oldest: 0, current: 0 } }) };
+    },
+  });
+  const named = async (preview: boolean, appName: string | undefined) => {
+    const app = new AppController(fromServer(preview, appName));
+    await app.connect(server.baseUrl);
+    return app.appName.get();
+  };
+  expect(await named(true, undefined)).toBe(PREVIEW_APP_NAME);
+  expect(await named(false, undefined)).toBe(APP_NAME);
+  expect(await named(true, "Botsman")).toBe("Botsman");
+  expect(await named(false, "Botsman Preview")).toBe("Botsman Preview");
 });

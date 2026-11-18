@@ -1,5 +1,5 @@
 import { botRowText, formatCountdown } from "@botsman/client-core";
-import { useBotActivity, useBots, useConnectionStatus, useNeedsYou, useNow, useServerState } from "@botsman/client-core/react";
+import { useAppName, useBotActivity, useBots, useConnectionStatus, useNeedsYou, useNow, useServerState } from "@botsman/client-core/react";
 import type { Approval, Bot } from "@botsman/protocol";
 import { router } from "expo-router";
 import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
@@ -11,6 +11,7 @@ const CONNECTION_LABELS = { offline: "Offline", connecting: "Connecting…", onl
 
 // The phone's home screen: what needs the owner, then the bots, with the main bot first.
 export default function BotListScreen() {
+  const appName = useAppName();
   const { colors } = useTheme();
   const { status } = useServerState();
   const bots = useBots();
@@ -20,7 +21,7 @@ export default function BotListScreen() {
   return (
     <SafeAreaView style={styles.screen}>
       <View style={styles.top}>
-        <Text style={[styles.wordmark, { color: colors.foreground }]}>BOTSMAN</Text>
+        <Text style={[styles.wordmark, { color: colors.foreground }]}>{appName.toUpperCase()}</Text>
         <Pressable accessibilityRole="button" onPress={() => router.push("/usage")} hitSlop={8}>
           <Text style={[styles.link, { color: colors.foreground }]}>Usage</Text>
         </Pressable>

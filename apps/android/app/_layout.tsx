@@ -1,4 +1,5 @@
-import { BotsmanProvider, useApp } from "@botsman/client-core/react";
+import type { AppController, AppState } from "@botsman/client-core";
+import { AppNameProvider, BotsmanProvider, useApp } from "@botsman/client-core/react";
 import { Stack } from "expo-router";
 import { StatusBar } from "expo-status-bar";
 import { StyleSheet, Text, View } from "react-native";
@@ -38,9 +39,19 @@ function Themed() {
   );
 }
 
+// Gives every screen the app's name.
 function CurrentStep() {
-  const { colors } = useTheme();
   const { app, state } = useApp(environment);
+  return (
+    <AppNameProvider app={app}>
+      <StepScreen app={app} state={state} />
+    </AppNameProvider>
+  );
+}
+
+// The screen for the step the app is on.
+function StepScreen({ app, state }: { app: AppController; state: AppState }) {
+  const { colors } = useTheme();
   if (state.step === "starting") return <Text style={[styles.starting, { color: colors.mutedForeground }]}>Connecting…</Text>;
   if (state.step === "choose_server") return <ChooseServerScreen key={state.error} app={app} address={state.address} error={state.error} />;
   if (state.step === "update_app" || state.step === "update_server") return <UpdateNeededScreen app={app} side={state.step} address={state.client.baseUrl} />;

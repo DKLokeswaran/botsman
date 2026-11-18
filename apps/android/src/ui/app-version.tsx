@@ -1,5 +1,5 @@
 import { type UpdateChecker, versionLine } from "@botsman/client-core";
-import { useUpdateInfo, useUpdateState } from "@botsman/client-core/react";
+import { useAppName, useUpdateInfo, useUpdateState } from "@botsman/client-core/react";
 import { StyleSheet, Text, View } from "react-native";
 import { space, useTheme } from "../theme";
 import { Button } from "./button";
@@ -7,7 +7,8 @@ import { pageStyles } from "./page";
 import { UpdateNotice } from "./update-notice";
 
 // This app's version, whether it is up to date, and a way to check now.
-export function AppVersion({ appName, updates }: { appName: string; updates: UpdateChecker | undefined }) {
+export function AppVersion({ updates }: { updates: UpdateChecker | undefined }) {
+  const appName = useAppName();
   const { colors } = useTheme();
   const info = useUpdateInfo(updates);
   const state = useUpdateState(updates);

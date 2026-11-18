@@ -6,7 +6,6 @@ import { createRoot } from "react-dom/client";
 // The dashboard talks to the server that served it, and its session lives in cookies the page can't read.
 const platform: Platform = {
   kind: "web",
-  appName: "Botsman",
   fetch: (url, init) => fetch(url, init),
   createSocket: (url) => new WebSocket(url),
   deviceName: "Web dashboard",

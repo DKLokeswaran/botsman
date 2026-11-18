@@ -1,10 +1,12 @@
+import { useAppName } from "@botsman/client-core/react";
 import { alertText, type BotsmanClient } from "@botsman/client-core";
 import { useEffect } from "react";
 import type { PageNotifications } from "./platform.ts";
 import { chatHref } from "./use-route.ts";
 
 // Shows a notification for each alert while the page is open but not in front. A click brings up that bot's chat.
-export function useAlertNotifications(appName: string, client: BotsmanClient, notifications: PageNotifications | undefined, allowed: boolean): void {
+export function useAlertNotifications(client: BotsmanClient, notifications: PageNotifications | undefined, allowed: boolean): void {
+  const appName = useAppName();
   useEffect(() => {
     if (notifications === undefined || !allowed) return;
     return client.followAlerts((alert) => {

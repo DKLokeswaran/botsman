@@ -5,6 +5,7 @@
 import { createHash } from "node:crypto";
 import { readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
+import { PREVIEW_APP_NAME } from "../packages/client-core/src/app-name.ts";
 import { PROTOCOL_VERSION } from "../packages/protocol/src/version.ts";
 
 type Part = "android" | "windows" | "server";
@@ -17,7 +18,6 @@ const VERSION_FILES: Record<Part, string> = {
   windows: "apps/windows/src-tauri/tauri.conf.json",
   server: "server/package.json",
 };
-const PREVIEW_NAME = "Botsman Preview";
 const PREVIEW_RELEASE = "preview";
 
 function readConfig(part: Part): Config {
@@ -92,7 +92,7 @@ function preview(app: App): string {
 // The preview app's version code is the run number, which only has to grow among preview builds.
 function previewAndroid(config: Config, version: string, runNumber: number): void {
   const expo = config.expo;
-  expo.name = PREVIEW_NAME;
+  expo.name = PREVIEW_APP_NAME;
   expo.version = version;
   expo.android.package = `${expo.android.package}.preview`;
   expo.android.versionCode = runNumber;
@@ -100,10 +100,10 @@ function previewAndroid(config: Config, version: string, runNumber: number): voi
 }
 
 function previewWindows(config: Config, version: string): void {
-  config.productName = PREVIEW_NAME;
+  config.productName = PREVIEW_APP_NAME;
   config.version = version;
   config.identifier = `${config.identifier}.preview`;
-  config.app.windows[0].title = PREVIEW_NAME;
+  config.app.windows[0].title = PREVIEW_APP_NAME;
   config.plugins.updater.endpoints = [previewManifestUrl("windows")];
 }
 

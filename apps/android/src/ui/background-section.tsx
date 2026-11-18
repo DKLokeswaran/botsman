@@ -1,5 +1,5 @@
 import { type BackgroundAlerts, backgroundLine, backgroundSteps, makerGuide } from "@botsman/client-core";
-import { useBackgroundStatus } from "@botsman/client-core/react";
+import { useAppName, useBackgroundStatus } from "@botsman/client-core/react";
 import * as Linking from "expo-linking";
 import { AppState, StyleSheet, Text, View } from "react-native";
 import { phoneSettings } from "../background-alerts";
@@ -8,7 +8,8 @@ import { Button } from "./button";
 import { Note, pageStyles, SectionTitle, ToggleRow } from "./page";
 
 // The background connection: whether it runs, and the phone settings that keep it alive.
-export function BackgroundSection({ appName, background }: { appName: string; background: BackgroundAlerts }) {
+export function BackgroundSection({ background }: { background: BackgroundAlerts }) {
+  const appName = useAppName();
   const { enabled, status } = useBackgroundStatus(background, onReturnToApp);
   return (
     <>

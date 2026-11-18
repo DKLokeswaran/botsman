@@ -8,12 +8,14 @@ import { suggestedModel } from "./bot-settings.ts";
 import { BackgroundAlerts, type BackgroundAlertsService } from "./background-alerts.ts";
 import type { LocalCache } from "./local-cache.ts";
 import { type AppUpdater, UpdateChecker } from "./updates.ts";
+import { APP_NAME, dashboardName } from "./app-name.ts";
 
 // What each app supplies from its platform. The web dashboard has a fixed server, the one that served it,
 // and no token store, because its session lives in cookies.
 export type AppEnvironment = {
-  // The name the app shows, from its own config, so a preview build says Botsman Preview.
-  appName: string;
+  // The name the app shows, from its own config, so a preview build says Botsman Preview. The web dashboard leaves it
+  // out and takes the name of the server that served it.
+  appName?: string;
   fetch: Fetch;
   createSocket: (url: string) => SocketLike;
   deviceName: string;
@@ -47,13 +49,13 @@ export class AppController {
   readonly updates: UpdateChecker | undefined;
   // Present on the apps that keep alerts coming while closed.
   readonly background: BackgroundAlerts | undefined;
-  readonly appName: string;
+  readonly appName: Store<string>;
   readonly #environment: AppEnvironment;
   #unfollow: (() => void) | undefined;
 
   constructor(environment: AppEnvironment) {
     this.#environment = environment;
-    this.appName = environment.appName;
+    this.appName = new Store(environment.appName ?? APP_NAME);
     this.updates = environment.updater === undefined ? undefined : new UpdateChecker(environment.updater);
     this.background = environment.backgroundAlerts === undefined ? undefined : new BackgroundAlerts(environment.backgroundAlerts);
   }
@@ -77,6 +79,7 @@ export class AppController {
     try {
       const health = await client.health();
       this.serverHealth.set(health);
+      if (this.#environment.appName === undefined) this.appName.set(dashboardName(health));
       await this.#environment.savedServer?.save(client.baseUrl);
       void this.updates?.check(health.protocol);
       const fit = protocolFit(PROTOCOL_VERSION, health.protocol);

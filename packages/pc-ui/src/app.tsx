@@ -1,4 +1,6 @@
-import { BotsmanProvider, useApp } from "@botsman/client-core/react";
+import type { AppController, AppState } from "@botsman/client-core";
+import { AppNameProvider, BotsmanProvider, useApp, useAppName } from "@botsman/client-core/react";
+import { useEffect } from "react";
 import { OpenLinkContext } from "./open-link.tsx";
 import type { Platform } from "./platform.ts";
 import { useThemeMode } from "./use-theme-mode.ts";
@@ -9,10 +11,22 @@ import { Shell } from "./screens/shell.tsx";
 import { SignInScreen } from "./screens/sign-in.tsx";
 import { UpdateNeededScreen } from "./screens/update-needed.tsx";
 
-// The root of the Windows app and the web dashboard. It shows the screen for the step the app is on.
+// The root of the Windows app and the web dashboard. It gives every screen the app's name and shows the screen for
+// the step the app is on.
 export function App({ platform }: { platform: Platform }) {
   const { app, state } = useApp(platform);
+  return (
+    <AppNameProvider app={app}>
+      <CurrentStep app={app} state={state} platform={platform} />
+    </AppNameProvider>
+  );
+}
+
+function CurrentStep({ app, state, platform }: { app: AppController; state: AppState; platform: Platform }) {
   const theme = useThemeMode();
+  const appName = useAppName();
+  // The page title names the app, so a preview's window or browser tab says Botsman Preview.
+  useEffect(() => void (document.title = appName), [appName]);
   if (state.step === "starting") return <p className="p-6 text-muted-foreground">Connecting…</p>;
   if (state.step === "choose_server") return <ChooseServerScreen key={state.error} app={app} address={state.address} error={state.error} />;
   if (state.step === "update_app" || state.step === "update_server") return <UpdateNeededScreen app={app} side={state.step} address={state.client.baseUrl} />;

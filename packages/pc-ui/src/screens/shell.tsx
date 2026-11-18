@@ -1,5 +1,5 @@
 import { type AppController, type BotsmanClient, botRowText, formatCountdown } from "@botsman/client-core";
-import { useBotActivity, useBots, useConnectionStatus, useNeedsYou, useNow, useServerState } from "@botsman/client-core/react";
+import { useAppName, useBotActivity, useBots, useConnectionStatus, useNeedsYou, useNow, useServerState } from "@botsman/client-core/react";
 import type { Approval, Bot } from "@botsman/protocol";
 import { Avatar } from "../components/avatar.tsx";
 import { UpdateDialog } from "../components/update-dialog.tsx";
@@ -21,7 +21,7 @@ import { UsageScreen } from "./usage.tsx";
 export function Shell({ app, client, notifications, autostart, theme }: { app: AppController; client: BotsmanClient; notifications: PageNotifications | undefined; autostart: Autostart | undefined; theme: ThemeChoice }) {
   const route = useRoute();
   const [permission, setPermission] = useState(() => notifications?.permission() ?? "unsupported");
-  useAlertNotifications(app.appName, client, notifications, permission === "granted");
+  useAlertNotifications(client, notifications, permission === "granted");
   const askForNotifications = notifications === undefined ? undefined : async () => setPermission(await notifications.ask());
   const { status, bots } = useServerState();
   const openBotId = "botId" in route ? route.botId : route.name === "home" ? bots[0]?.id : undefined;
@@ -50,12 +50,13 @@ function MainPane({ app, client, route, loading, botId, notifications, autostart
 }
 
 function Sidebar({ app, client, openBotId }: { app: AppController; client: BotsmanClient; openBotId: string | undefined }) {
+  const appName = useAppName();
   const bots = useBots();
   const needsYou = useNeedsYou();
   const waitingBots = new Set(needsYou.map((approval) => approval.botId));
   return (
     <aside className="flex w-[300px] shrink-0 flex-col border-r border-border">
-      <div className="px-4 py-4 font-display text-lg tracking-[0.3em] uppercase">Botsman</div>
+      <div className="px-4 py-4 font-display text-lg tracking-[0.3em] uppercase">{appName}</div>
       <nav className="flex-1 overflow-y-auto px-2">
         {needsYou.length === 0 ? null : (
           <>

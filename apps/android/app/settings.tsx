@@ -26,7 +26,7 @@ export default function SettingsScreen() {
         ? null
         : ALERT_CHOICES.map((choice) => <ToggleRow key={choice.kind} title={choice.label} detail={choice.detail} on={alertSettings[choice.kind]} onChange={(on) => void save.run(choice.kind, on)} />)}
       <ErrorText>{save.error}</ErrorText>
-      {app.background === undefined ? null : <BackgroundSection appName={app.appName} background={app.background} />}
+      {app.background === undefined ? null : <BackgroundSection background={app.background} />}
       <LinkRow title="Model providers" detail="Keys and sign-ins for the models your bots use" onPress={() => router.push("/providers")} />
       <Devices />
       <SectionTitle>Mode</SectionTitle>
@@ -34,7 +34,7 @@ export default function SettingsScreen() {
       <SectionTitle>Server</SectionTitle>
       <ServerVersion app={app} />
       <SectionTitle>This app</SectionTitle>
-      <AppVersion appName={app.appName} updates={app.updates} />
+      <AppVersion updates={app.updates} />
       <View style={styles.row}>
         <Button label="Sign out" onPress={() => void client.session.signOut()} />
         <Button label="Change server" onPress={() => void app.changeServer()} />

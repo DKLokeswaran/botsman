@@ -1,11 +1,12 @@
 import { type BackgroundAlerts, backgroundLine } from "@botsman/client-core";
-import { useAction, useBackgroundStatus } from "@botsman/client-core/react";
+import { useAppName, useAction, useBackgroundStatus } from "@botsman/client-core/react";
 import { useEffect, useState } from "react";
 import type { Autostart } from "../platform.ts";
 import { ErrorText, ToggleRow } from "./page.tsx";
 
 // The alerts connection that runs while the window is hidden, and starting with the computer.
-export function BackgroundSection({ appName, background, autostart }: { appName: string; background: BackgroundAlerts; autostart: Autostart | undefined }) {
+export function BackgroundSection({ background, autostart }: { background: BackgroundAlerts; autostart: Autostart | undefined }) {
+  const appName = useAppName();
   const { enabled, status } = useBackgroundStatus(background);
   return (
     <>

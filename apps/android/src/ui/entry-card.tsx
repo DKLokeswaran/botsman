@@ -1,3 +1,4 @@
+import { useAppName } from "@botsman/client-core/react";
 import type { ReactNode } from "react";
 import { ScrollView, StyleSheet, Text, View } from "react-native";
 import { KeyboardAvoidingView } from "react-native-keyboard-controller";
@@ -6,13 +7,14 @@ import { fontFamilies, radius, space, useTheme } from "../theme";
 
 // The card the screens before the main app share: server address, setup, sign-in, and update notices.
 export function EntryCard({ title, lede, error, children }: { title: string; lede: string; error?: string | undefined; children: ReactNode }) {
+  const appName = useAppName();
   const { colors } = useTheme();
   return (
     <SafeAreaView style={[styles.screen, { backgroundColor: colors.background }]}>
       <KeyboardAvoidingView behavior="padding" style={styles.screen}>
         <ScrollView contentContainerStyle={styles.scroll} keyboardShouldPersistTaps="handled">
           <View style={[styles.card, { backgroundColor: colors.card, borderColor: colors.border }]}>
-            <Text style={[styles.wordmark, { color: colors.foreground }]}>BOTSMAN</Text>
+            <Text style={[styles.wordmark, { color: colors.foreground }]}>{appName.toUpperCase()}</Text>
             <Text style={[styles.title, { color: colors.foreground }]}>{title.toUpperCase()}</Text>
             <Text style={[styles.lede, { color: colors.mutedForeground }]}>{lede}</Text>
             {children}
