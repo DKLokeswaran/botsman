@@ -10,7 +10,9 @@ on:
       preview:
         type: boolean
         default: false
+  # A pull request builds only with the `build-apps` label, on the push or label that changes it.
   pull_request:
+    types: [opened, synchronize, reopened, labeled]
     paths:
       - apps/windows/**
       - packages/pc-ui/**
@@ -21,8 +23,10 @@ on:
       - .github/workflows/windows.yml
       - .github/actions/setup/**
 
+# A newer push cancels an older build of the same branch. Adding a label other than `build-apps` gets its own group,
+# so it never cancels a build.
 concurrency:
-  group: windows-${{ github.ref }}-${{ inputs.preview && 'preview' || 'build' }}
+  group: windows-${{ github.ref }}-${{ inputs.preview && 'preview' || 'build' }}${{ github.event.action == 'labeled' && github.event.label.name != 'build-apps' && format('-{0}', github.run_id) || '' }}
   cancel-in-progress: true
 
 permissions:
@@ -31,8 +35,13 @@ permissions:
 jobs:
   installer:
     name: Build the installer
-    # A pull request from a fork runs the checks in ci.yml, but not this build.
-    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
+    # A pull request builds only from a branch of this repo with the `build-apps` label, and adding another label
+    # builds nothing. A pull request from a fork runs the checks in ci.yml, but never this build.
+    if: >-
+      github.event_name != 'pull_request' || (
+        github.event.pull_request.head.repo.full_name == github.repository &&
+        contains(github.event.pull_request.labels.*.name, 'build-apps') &&
+        (github.event.action != 'labeled' || github.event.label.name == 'build-apps'))
     runs-on: windows-latest
     timeout-minutes: 60
     permissions:

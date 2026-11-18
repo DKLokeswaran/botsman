@@ -111,7 +111,7 @@ The Tauri updater key and the Android keystore are GitHub Actions secrets. Losin
 The repo is public, so standard GitHub-hosted runners are free.
 
 - Type checks and tests run on every pull request, on Linux, including pull requests from forks.
-- The Windows installer and the Android APK build on their tag, when started by hand, and on a pull request from a branch of this repo that changes that app or the packages it uses. A pull request from a fork doesn't build them, because they take the slowest runners and would run anyone's code.
+- The Windows installer and the Android APK build on their tag, when started by hand, and on a pull request that has the `build-apps` label and changes that app or the packages it uses. Adding the label builds the pull request, and each push after that builds again until the label is removed. Most pushes don't need a native build, so a maintainer asks for one with the label. A pull request from a fork never builds them, label or not, because they take the slowest runners and would run anyone's code. A push whose commit message contains `[skip ci]` runs no workflows at all.
 - The `Preview apps` workflow builds and publishes preview apps from a chosen branch. It runs only when started by hand, which needs write access.
 - A `server-v*` tag runs a check that the tag names the version in `server/package.json`.
 - Build artifacts are kept for a short time.

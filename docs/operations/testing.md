@@ -12,7 +12,7 @@ pnpm -r typecheck
 pnpm -r test
 ```
 
-A pull request runs these in GitHub Actions. A pull request from a fork doesn't build the Windows and Android apps; build them in the fork as below.
+A pull request runs these in GitHub Actions on every push. It builds the Windows and Android apps only when a maintainer adds the `build-apps` label, and a pull request from a fork never builds them. A fork builds them in the fork as below.
 
 ## Preview apps
 
