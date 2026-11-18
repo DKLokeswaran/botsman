@@ -2,9 +2,11 @@ import { execSync } from "node:child_process";
 import { mkdirSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { BACKGROUND_CONTEXT as context } from "@earendil-works/chord/context";
-import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import { SandboxManager } from "../../src/sandbox/sandbox-manager.ts";
 import { tempRoot } from "../helpers.ts";
+
+const sleepPids = () => execSync("pgrep -f '^sleep 3071' || true", { encoding: "utf8" }).trim();
 
 const root = tempRoot();
 const folder = path.join(root.root, "bot folder");
@@ -78,10 +80,10 @@ describe.skipIf(!sandbox.status.ok)("bot sandbox", () => {
 
   it("stop ends every process the bot started, even one that left its group", async () => {
     await run("setsid sleep 3071 > /dev/null 2>&1 < /dev/null & echo started");
-    expect(execSync("pgrep -f '^sleep 3071' || true", { encoding: "utf8" }).trim()).not.toBe("");
+    // The command returns before the background process has finished starting, so wait for it to show up.
+    await vi.waitFor(() => expect(sleepPids()).not.toBe(""));
     sandbox.stop("bot");
-    await new Promise((resolve) => setTimeout(resolve, 500));
-    expect(execSync("pgrep -f '^sleep 3071' || true", { encoding: "utf8" }).trim()).toBe("");
+    await vi.waitFor(() => expect(sleepPids()).toBe(""));
     const after = await run("echo fresh sandbox; ls /tmp | wc -l");
     expect(after.output).toContain("fresh sandbox");
   });
