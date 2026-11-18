@@ -2,6 +2,7 @@ import type { AppEnvironment, TokenStore } from "@botsman/client-core";
 import type { Tokens } from "@botsman/protocol";
 import * as SecureStore from "expo-secure-store";
 import { BotsmanAlerts } from "../modules/botsman-alerts";
+import { APP_NAME } from "./app-name";
 import { backgroundAlerts } from "./background-alerts";
 import { localCache } from "./local-cache";
 import { updater } from "./updater";
@@ -27,6 +28,7 @@ const savedServer: NonNullable<AppEnvironment["savedServer"]> = {
 
 // What the Android app gives the shared logic: React Native's network calls and the phone's own storage.
 export const environment: AppEnvironment = {
+  appName: APP_NAME,
   fetch: (url, init) => fetch(url, init),
   createSocket: (url) => new WebSocket(url),
   deviceName: BotsmanAlerts.deviceSummary(),

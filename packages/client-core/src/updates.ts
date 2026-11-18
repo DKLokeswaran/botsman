@@ -91,8 +91,8 @@ export class UpdateChecker {
 }
 
 // The version line in settings, such as "Botsman 0.1.6 · Up to date".
-export function versionLine(info: UpdateInfo, state: UpdateState): string {
-  const name = info.installed === undefined ? "Botsman" : `Botsman ${info.installed}`;
+export function versionLine(appName: string, info: UpdateInfo, state: UpdateState): string {
+  const name = info.installed === undefined ? appName : `${appName} ${info.installed}`;
   if (info.checking) return `${name} · Checking for updates…`;
   if (info.error !== undefined) return `${name} · Couldn't check: ${info.error}`;
   if (state.status !== "none") return `${name} · Version ${state.version} is available`;

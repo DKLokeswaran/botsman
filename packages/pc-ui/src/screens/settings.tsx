@@ -27,7 +27,7 @@ export function SettingsScreen({ app, client, notifications, autostart, theme }:
         : ALERT_CHOICES.map((choice) => <ToggleRow key={choice.kind} title={choice.label} detail={choice.detail} on={alertSettings[choice.kind]} onChange={(on) => void save.run(choice.kind, on)} />)}
       <ErrorText>{save.error}</ErrorText>
       <BrowserNotifications choice={notifications} />
-      {app.background === undefined ? null : <BackgroundSection background={app.background} autostart={autostart} />}
+      {app.background === undefined ? null : <BackgroundSection appName={app.appName} background={app.background} autostart={autostart} />}
       <LinkRow href="#/providers" title="Model providers" detail="Keys and sign-ins for the models your bots use" />
       <Devices />
       <h2 className="font-display text-sm font-bold uppercase">Mode</h2>
@@ -35,7 +35,7 @@ export function SettingsScreen({ app, client, notifications, autostart, theme }:
       <h2 className="font-display text-sm font-bold uppercase">Server</h2>
       <ServerVersion app={app} />
       <h2 className="font-display text-sm font-bold uppercase">This app</h2>
-      <AppVersion updates={app.updates} />
+      <AppVersion appName={app.appName} updates={app.updates} />
       <div className="flex gap-2">
         <Button onClick={() => void client.session.signOut()}>Sign out</Button>
         {app.canChangeServer ? <Button onClick={() => void app.changeServer()}>Change server</Button> : null}

@@ -1,6 +1,7 @@
 import type { AppUpdater, UpdateManifest } from "@botsman/client-core";
 import Constants from "expo-constants";
 import { BotsmanUpdates } from "../modules/botsman-updates";
+import { APP_NAME } from "./app-name";
 
 type AndroidManifest = UpdateManifest & { url: string; sha256: string };
 
@@ -26,7 +27,7 @@ async function readManifest(): Promise<AndroidManifest | undefined> {
 async function install(manifest: AndroidManifest): Promise<void> {
   if (!BotsmanUpdates.canInstall()) {
     BotsmanUpdates.openInstallSettings();
-    throw new Error("Allow Botsman to install apps, then press Install again.");
+    throw new Error(`Allow ${APP_NAME} to install apps, then press Install again.`);
   }
   await BotsmanUpdates.downloadAndInstall(manifest.url, manifest.sha256);
 }

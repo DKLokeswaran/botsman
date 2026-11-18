@@ -12,6 +12,8 @@ import { type AppUpdater, UpdateChecker } from "./updates.ts";
 // What each app supplies from its platform. The web dashboard has a fixed server, the one that served it,
 // and no token store, because its session lives in cookies.
 export type AppEnvironment = {
+  // The name the app shows, from its own config, so a preview build says Botsman Preview.
+  appName: string;
   fetch: Fetch;
   createSocket: (url: string) => SocketLike;
   deviceName: string;
@@ -45,11 +47,13 @@ export class AppController {
   readonly updates: UpdateChecker | undefined;
   // Present on the apps that keep alerts coming while closed.
   readonly background: BackgroundAlerts | undefined;
+  readonly appName: string;
   readonly #environment: AppEnvironment;
   #unfollow: (() => void) | undefined;
 
   constructor(environment: AppEnvironment) {
     this.#environment = environment;
+    this.appName = environment.appName;
     this.updates = environment.updater === undefined ? undefined : new UpdateChecker(environment.updater);
     this.background = environment.backgroundAlerts === undefined ? undefined : new BackgroundAlerts(environment.backgroundAlerts);
   }

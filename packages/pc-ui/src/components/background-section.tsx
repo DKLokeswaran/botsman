@@ -5,12 +5,12 @@ import type { Autostart } from "../platform.ts";
 import { ErrorText, ToggleRow } from "./page.tsx";
 
 // The alerts connection that runs while the window is hidden, and starting with the computer.
-export function BackgroundSection({ background, autostart }: { background: BackgroundAlerts; autostart: Autostart | undefined }) {
+export function BackgroundSection({ appName, background, autostart }: { appName: string; background: BackgroundAlerts; autostart: Autostart | undefined }) {
   const { enabled, status } = useBackgroundStatus(background);
   return (
     <>
       <h2 className="font-display text-sm font-bold uppercase">Alerts when the window is closed</h2>
-      <ToggleRow title="Keep connected" detail="Botsman stays in the tray, keeps its connection to your server, and posts its own notifications." on={enabled} onChange={(on) => void background.setKeepConnected(on)} />
+      <ToggleRow title="Keep connected" detail={`${appName} stays in the tray, keeps its connection to your server, and posts its own notifications.`} on={enabled} onChange={(on) => void background.setKeepConnected(on)} />
       {status === undefined ? null : <p className="text-xs text-muted-foreground">{backgroundLine(status, enabled)}</p>}
       {autostart === undefined ? null : <StartWithComputer autostart={autostart} />}
     </>

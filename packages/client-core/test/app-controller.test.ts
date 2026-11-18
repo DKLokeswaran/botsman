@@ -8,6 +8,7 @@ const saved = { address: undefined as string | undefined };
 const tokenStore = memoryTokenStore();
 
 const environment = (): AppEnvironment => ({
+  appName: "Botsman",
   fetch: proxiedFetch,
   createSocket: (url) => new WebSocket(url, { headers: { "x-forwarded-proto": "https" } } as unknown as string[]) as unknown as SocketLike,
   deviceName: "controller test",

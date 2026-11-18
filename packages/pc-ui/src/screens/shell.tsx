@@ -21,7 +21,7 @@ import { UsageScreen } from "./usage.tsx";
 export function Shell({ app, client, notifications, autostart, theme }: { app: AppController; client: BotsmanClient; notifications: PageNotifications | undefined; autostart: Autostart | undefined; theme: ThemeChoice }) {
   const route = useRoute();
   const [permission, setPermission] = useState(() => notifications?.permission() ?? "unsupported");
-  useAlertNotifications(client, notifications, permission === "granted");
+  useAlertNotifications(app.appName, client, notifications, permission === "granted");
   const askForNotifications = notifications === undefined ? undefined : async () => setPermission(await notifications.ask());
   const { status, bots } = useServerState();
   const openBotId = "botId" in route ? route.botId : route.name === "home" ? bots[0]?.id : undefined;
