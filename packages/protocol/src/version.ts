@@ -42,18 +42,22 @@ function parseVersion(version: string): { core: number[]; preRelease: string[] }
 // pre-release that matches so far comes first.
 function comparePreReleases(a: string[], b: string[]): number {
   if (a.length === 0 || b.length === 0) return b.length - a.length;
-  for (let index = 0; index < Math.max(a.length, b.length); index += 1) {
-    const difference = comparePreReleasePart(a[index], b[index]);
+  for (let index = 0; index < Math.min(a.length, b.length); index += 1) {
+    const difference = comparePreReleasePart(a[index]!, b[index]!);
     if (difference !== 0) return difference;
   }
-  return 0;
+  return a.length - b.length;
 }
 
 // Numbers compare as numbers and come before words, so `preview.10` is newer than `preview.9`.
-function comparePreReleasePart(a: string | undefined, b: string | undefined): number {
-  if (a === undefined || b === undefined) return a === b ? 0 : a === undefined ? -1 : 1;
+function comparePreReleasePart(a: string, b: string): number {
   const [aIsNumber, bIsNumber] = [/^\d+$/.test(a), /^\d+$/.test(b)];
   if (aIsNumber && bIsNumber) return Number(a) - Number(b);
   if (aIsNumber !== bIsNumber) return aIsNumber ? -1 : 1;
-  return a < b ? -1 : a > b ? 1 : 0;
+  return compareText(a, b);
+}
+
+function compareText(a: string, b: string): number {
+  if (a === b) return 0;
+  return a < b ? -1 : 1;
 }

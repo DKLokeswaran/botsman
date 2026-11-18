@@ -42,14 +42,22 @@ configure() {
   fi
 }
 
-# Checks out the newest server-v* tag, then hands over to that release's own copy of this script.
+# The newest server-v<major>.<minor>.<patch> tag on origin. Reading the remote, not the local tags, means a tag deleted
+# or moved on origin never comes back from an earlier fetch, and a tag never pushed is never installed.
+newest_release_tag() {
+  local refs
+  refs="$(git -C "$REPO" ls-remote --tags --refs origin 'server-v*')" || fail "Couldn't list the releases on origin."
+  printf '%s\n' "$refs" | sed -nE 's#.*refs/tags/(server-v[0-9]+\.[0-9]+\.[0-9]+)$#\1#p' | sort -V | awk 'END { print }'
+}
+
+# Checks out the newest server release, then hands over to that release's own copy of this script.
 checkout_release() {
   if [ "${BOTSMAN_RELEASE_CHECKED_OUT:-}" = "1" ]; then return; fi
   say "Checking out the newest server release"
-  git -C "$REPO" fetch --quiet --tags origin
   local tag
-  tag="$(git -C "$REPO" tag --list 'server-v*' --sort=-version:refname | awk 'NR == 1')"
-  [ -n "$tag" ] || fail "There is no server release yet: the repo has no server-v* tag."
+  tag="$(newest_release_tag)"
+  [ -n "$tag" ] || fail "There is no server release yet: origin has no server-v* tag."
+  git -C "$REPO" fetch --quiet --force origin "refs/tags/$tag:refs/tags/$tag"
   git -C "$REPO" checkout --quiet --detach "$tag" || fail "Couldn't check out $tag. Commit or discard the changes in $REPO, then run this again."
   BOTSMAN_RELEASE_CHECKED_OUT=1 exec "$REPO/deploy/install.sh"
 }

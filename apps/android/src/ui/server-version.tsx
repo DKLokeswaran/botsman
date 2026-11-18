@@ -1,5 +1,6 @@
-import { type AppController, SERVER_UPDATE_COMMAND, serverUpdate, serverUpdateText, serverVersionLine } from "@botsman/client-core";
+import { type AppController, serverUpdate, serverUpdateSteps, serverVersionLine } from "@botsman/client-core";
 import { useStore } from "@botsman/client-core/react";
+import type { Health } from "@botsman/protocol";
 import { StyleSheet, Text, View } from "react-native";
 import { fontFamilies, radius, space, useTheme } from "../theme";
 import { pageStyles } from "./page";
@@ -9,25 +10,25 @@ export function ServerVersion({ app }: { app: AppController }) {
   const { colors } = useTheme();
   const health = useStore(app.serverHealth);
   if (health === undefined) return null;
-  const update = serverUpdate(health);
   return (
     <View style={styles.group}>
       <View style={[pageStyles.row, { borderColor: colors.border }]}>
         <Text style={[pageStyles.small, { color: colors.foreground }]}>{serverVersionLine(health)}</Text>
       </View>
-      {update === undefined ? null : <ServerUpdateSteps version={update} />}
+      {serverUpdate(health) === undefined ? null : <ServerUpdateSteps health={health} />}
     </View>
   );
 }
 
 // The command that updates the server, which the owner runs on the server itself.
-export function ServerUpdateSteps({ version }: { version: string | undefined }) {
+export function ServerUpdateSteps({ health }: { health: Health | undefined }) {
   const { colors } = useTheme();
+  const steps = serverUpdateSteps(health);
   return (
     <View accessibilityRole="alert" style={[styles.notice, { borderColor: colors.primary }]}>
-      <Text style={[styles.text, { color: colors.foreground }]}>{serverUpdateText(version)}</Text>
+      <Text style={[styles.text, { color: colors.foreground }]}>{steps.text}</Text>
       <Text selectable style={[styles.command, { color: colors.foreground, backgroundColor: colors.muted }]}>
-        {SERVER_UPDATE_COMMAND}
+        {steps.command}
       </Text>
     </View>
   );

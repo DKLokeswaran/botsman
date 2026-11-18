@@ -1,4 +1,4 @@
-import { type AppController, serverUpdate } from "@botsman/client-core";
+import type { AppController } from "@botsman/client-core";
 import { useStore } from "@botsman/client-core/react";
 import { StyleSheet, View } from "react-native";
 import { space } from "../theme";
@@ -17,7 +17,7 @@ export function UpdateNeededScreen({ app, side, address }: { app: AppController;
   const health = useStore(app.serverHealth);
   return (
     <EntryCard title={COPY[side].title} lede={COPY[side].lede}>
-      {side === "update_app" ? <UpdateNotice updates={app.updates} /> : <ServerUpdateSteps version={health === undefined ? undefined : serverUpdate(health)} />}
+      {side === "update_app" ? <UpdateNotice updates={app.updates} /> : <ServerUpdateSteps health={health} />}
       <View style={styles.row}>
         <Button label="Try again" variant="primary" grow onPress={() => void app.connect(address)} />
         {app.canChangeServer ? <Button label="Change server" onPress={() => void app.changeServer()} /> : null}

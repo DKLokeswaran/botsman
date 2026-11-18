@@ -1,6 +1,6 @@
 import type { Health } from "@botsman/protocol";
 import { describe, expect, it } from "vitest";
-import { serverUpdate, serverUpdateText, serverVersionLine } from "../src/index.ts";
+import { serverUpdate, serverUpdateSteps, serverVersionLine } from "../src/index.ts";
 
 const health = (fields: Partial<Health>): Health => ({ ok: true, version: "0.2.0", protocol: { oldest: 1, current: 1 }, sandbox: { ok: true, reason: null }, ...fields });
 
@@ -18,8 +18,13 @@ describe("server version", () => {
     expect(serverUpdate(health({ latestVersion: "0.3.0", preview: true }))).toBeUndefined();
   });
 
-  it("says where to run the update", () => {
-    expect(serverUpdateText("0.3.0")).toBe("Server 0.3.0 is available. To update, run this in the Botsman folder on the server:");
-    expect(serverUpdateText(undefined)).toBe("To update, run this in the Botsman folder on the server:");
+  it("gives the command that updates the server", () => {
+    expect(serverUpdateSteps(health({ latestVersion: "0.3.0" }))).toEqual({ text: "Server 0.3.0 is available. To update, run this in the Botsman folder on the server:", command: "deploy/install.sh" });
+    expect(serverUpdateSteps(undefined)).toEqual({ text: "To update, run this in the Botsman folder on the server:", command: "deploy/install.sh" });
+  });
+
+  it("tells a preview server to move to its branch's newest commit, never to the real server's release", () => {
+    expect(serverUpdateSteps(health({ preview: true, branch: "fix-login", latestVersion: "0.3.0" })).command).toBe("deploy/install.sh --preview fix-login");
+    expect(serverUpdateSteps(health({ preview: true })).command).toBe("deploy/install.sh --preview <branch>");
   });
 });

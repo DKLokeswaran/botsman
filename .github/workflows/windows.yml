@@ -54,7 +54,7 @@ jobs:
       - uses: actions/checkout@v7
       - uses: ./.github/actions/setup
       - name: Check the tag names the app's version
-        if: startsWith(github.ref, 'refs/tags/windows-v')
+        if: startsWith(github.ref, 'refs/tags/windows-v') && !inputs.preview
         shell: bash
         run: |
           node scripts/release.ts check windows "$GITHUB_REF_NAME"
@@ -67,7 +67,8 @@ jobs:
             apps/windows/src-tauri/target
           key: cargo-${{ hashFiles('apps/windows/src-tauri/Cargo.toml', 'apps/windows/src-tauri/Cargo.lock') }}
           restore-keys: cargo-
-      # The preview app has its own app id, name, version, and update feed, set on this machine only.
+      # The preview app has its own app id, name, version, and update feed, set on this machine only. A preview started
+      # from a release tag never runs that tag's release steps.
       - name: Make this the preview app
         if: inputs.preview
         shell: bash
@@ -93,7 +94,7 @@ jobs:
           if-no-files-found: error
       # Installed apps read windows.json from the `updates` release to find this build.
       - name: Publish the release and its update manifest
-        if: startsWith(github.ref, 'refs/tags/windows-v')
+        if: startsWith(github.ref, 'refs/tags/windows-v') && !inputs.preview
         shell: bash
         env:
           GH_TOKEN: ${{ github.token }}

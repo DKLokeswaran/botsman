@@ -1,4 +1,4 @@
-import { type AppController, serverUpdate } from "@botsman/client-core";
+import type { AppController } from "@botsman/client-core";
 import { useStore } from "@botsman/client-core/react";
 import { EntryCard } from "../components/entry-card.tsx";
 import { Button } from "../components/ui/button.tsx";
@@ -15,7 +15,7 @@ export function UpdateNeededScreen({ app, side, address }: { app: AppController;
   const health = useStore(app.serverHealth);
   return (
     <EntryCard title={COPY[side].title} lede={COPY[side].lede}>
-      {side === "update_app" ? <UpdateNotice updates={app.updates} /> : <ServerUpdateSteps version={health === undefined ? undefined : serverUpdate(health)} />}
+      {side === "update_app" ? <UpdateNotice updates={app.updates} /> : <ServerUpdateSteps health={health} />}
       <div className="flex gap-2">
         <Button variant="primary" className="flex-1" onClick={() => void app.connect(address)}>
           Try again

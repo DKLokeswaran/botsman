@@ -54,7 +54,7 @@ jobs:
       - uses: actions/checkout@v7
       - uses: ./.github/actions/setup
       - name: Check the tag names the app's version
-        if: startsWith(github.ref, 'refs/tags/android-v')
+        if: startsWith(github.ref, 'refs/tags/android-v') && !inputs.preview
         run: |
           node scripts/release.ts check android "$GITHUB_REF_NAME"
           test -n "$KEYSTORE_BASE64" || { echo "A release needs the signing keystore"; exit 1; }
@@ -69,7 +69,8 @@ jobs:
             ~/.gradle/wrapper
           key: gradle-${{ hashFiles('pnpm-lock.yaml') }}
           restore-keys: gradle-
-      # The preview app has its own app id, name, version, and update feed, set on this machine only.
+      # The preview app has its own app id, name, version, and update feed, set on this machine only. A preview started
+      # from a release tag never runs that tag's release steps.
       - name: Make this the preview app
         if: inputs.preview
         run: |
@@ -100,7 +101,7 @@ jobs:
           if-no-files-found: error
       # Installed apps read android.json from the `updates` release to find this build.
       - name: Publish the release and its update manifest
-        if: startsWith(github.ref, 'refs/tags/android-v')
+        if: startsWith(github.ref, 'refs/tags/android-v') && !inputs.preview
         env:
           GH_TOKEN: ${{ github.token }}
         run: |

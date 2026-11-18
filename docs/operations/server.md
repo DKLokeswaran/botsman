@@ -11,7 +11,7 @@ deploy/install.sh
 
 The script:
 
-1. Fetches the tags and checks out the newest server release, the highest `server-v<version>` tag, then carries on with that release's own copy of the script. With no `server-v*` tag in the repo it stops. Local changes to tracked files stop it too, until they are committed or discarded.
+1. Checks out the newest server release, the highest `server-v<major>.<minor>.<patch>` tag on `origin`, then carries on with that release's own copy of the script. Tags with anything after the version, such as `-rc`, are ignored. With no such tag on `origin` it stops. Local changes to tracked files stop it too, until they are committed or discarded.
 2. Checks for Node 24. If pnpm 12.18.0 is not on the `PATH`, installs it under `~/.local`, which works when Node is installed system-wide.
 3. Installs bubblewrap through `apt-get`, after refreshing the package lists, if it is missing. This needs `sudo`.
 4. On hosts that restrict user namespaces, such as Ubuntu 24.04 and later, installs `deploy/apparmor-bwrap` as `/etc/apparmor.d/bwrap` and loads it, unless `bwrap` can already create a sandbox. This needs `sudo`. Because the check tries `bwrap` itself, running the script again loads a profile that was copied but failed to load. If `bwrap` still fails after loading, the script prints a warning and carries on.
@@ -33,9 +33,11 @@ The dashboard is at `/app/` on the server's address, and the bare address sends 
 deploy/install.sh
 ```
 
-Run it in the server's Botsman folder. It checks out the newest server release, never the newest commit on `main`, rebuilds the dashboard, and restarts the service. The server and the dashboard always come from the same release.
+Run it in the server's Botsman folder. It checks out the newest `server-v<major>.<minor>.<patch>` tag on `origin`, never the newest commit on `main`, rebuilds the dashboard, and restarts the service. The server and the dashboard always come from the same release. It reads the tags from `origin` each time, so a tag deleted or moved there is never installed from an earlier fetch, and a tag that was never pushed is ignored.
 
-The server looks for a newer release when it starts and once a day after, with `git ls-remote` on the checkout's `origin`, so a server installed from a fork sees the fork's releases. `/api/health` reports the newest release it found as `latestVersion`. When it is newer than the running version, the server section of Settings, in both apps and the dashboard, says so and shows the command above. The "Update the server" screen, shown when an app is too new for the server, shows the same command. The apps learn about a release when they connect, and can't update the server themselves.
+A server installed before server releases existed has an install script that doesn't check out releases. Update it once with `git pull` followed by `deploy/install.sh`; after that, `deploy/install.sh` alone updates it.
+
+The server looks for a newer release when it starts and once a day after, with `git ls-remote` on the checkout's `origin`, so a server installed from a fork sees the fork's releases. `/api/health` reports the newest release it found as `latestVersion`. When it is newer than the running version, the server section of Settings, in both apps and the dashboard, says so and shows the command above. The "Update the server" screen, shown when an app is too new for the server, shows the same command, or `deploy/install.sh --preview <branch>` when the server is a preview server. The apps learn about a release when they connect, and can't update the server themselves.
 
 ## Preview server
 
