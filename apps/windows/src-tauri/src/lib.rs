@@ -13,6 +13,9 @@ pub const MAIN_WINDOW: &str = "main";
 // Starts the app: one copy only, HTTP from Rust, the updater, token storage, the tray icon, notifications,
 // auto-start, links opened in the browser, and the alerts connection.
 pub fn run() {
+    let context = tauri::generate_context!();
+    // The product name, so a preview app that fails to start says Botsman Preview.
+    let name = context.package_info().name.clone();
     tauri::Builder::default()
         // Starting Botsman again, for example from the Start menu while it sits in the tray, shows the running copy.
         .plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| show_main_window(app)))
@@ -53,13 +56,13 @@ pub fn run() {
             alerts::resume(app.handle());
             Ok(())
         })
-        .run(tauri::generate_context!())
-        .expect("Botsman could not start");
+        .run(context)
+        .unwrap_or_else(|error| panic!("{name} could not start: {error}"));
 }
 
 // Adds the tray icon with its menu: open the window, or quit.
 fn build_tray(app: &AppHandle) -> tauri::Result<()> {
-    let open = MenuItem::with_id(app, "open", "Open Botsman", true, None::<&str>)?;
+    let open = MenuItem::with_id(app, "open", format!("Open {}", app.package_info().name), true, None::<&str>)?;
     let quit = MenuItem::with_id(app, "quit", "Quit", true, None::<&str>)?;
     let menu = Menu::with_items(app, &[&open, &quit])?;
 

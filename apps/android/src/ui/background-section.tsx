@@ -15,7 +15,7 @@ export function BackgroundSection({ appName, background }: { appName: string; ba
       <SectionTitle>Alerts when the app is closed</SectionTitle>
       <ToggleRow title="Keep connected" detail={`${appName} keeps its own connection to your server and posts alerts itself.`} on={enabled} onChange={(on) => void background.setKeepConnected(on)} />
       {status === undefined ? null : <Note>{backgroundLine(status, enabled)}</Note>}
-      {status === undefined || !enabled ? null : backgroundSteps(status).map((step) => <StepRow key={step.label} step={step} maker={status.maker} />)}
+      {status === undefined || !enabled ? null : backgroundSteps(appName, status).map((step) => <StepRow key={step.label} step={step} maker={status.maker} />)}
     </>
   );
 }

@@ -26,10 +26,10 @@ const STRICT_MAKERS: Record<string, string> = { samsung: "Samsung", xiaomi: "Xia
 
 // What keeps the background connection alive on this phone: notifications allowed, no battery limits, and the
 // maker's own steps where the maker is known to stop background apps.
-export function backgroundSteps(status: BackgroundStatus): BackgroundStep[] {
+export function backgroundSteps(appName: string, status: BackgroundStatus): BackgroundStep[] {
   const steps: BackgroundStep[] = [];
   if (status.notificationsAllowed !== null)
-    steps.push({ label: "Notifications", detail: status.notificationsAllowed ? "Allowed" : "Turned off for Botsman", action: status.notificationsAllowed ? undefined : "notifications" });
+    steps.push({ label: "Notifications", detail: status.notificationsAllowed ? "Allowed" : `Turned off for ${appName}`, action: status.notificationsAllowed ? undefined : "notifications" });
   if (status.batteryUnrestricted !== null)
     steps.push({ label: "Battery", detail: status.batteryUnrestricted ? "Unrestricted" : "Android may pause the connection to save battery", action: status.batteryUnrestricted ? undefined : "battery" });
   const maker = status.maker === null ? undefined : STRICT_MAKERS[status.maker];
