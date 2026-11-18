@@ -67,12 +67,12 @@ describe("background alerts checklist", () => {
   const status = { running: true, connected: true, notificationsAllowed: false, batteryUnrestricted: true, maker: "samsung" };
 
   it("asks for what's missing, and links a strict maker's guide", () => {
-    expect(backgroundSteps(status).map((step) => [step.label, step.action])).toEqual([
-      ["Notifications", "notifications"],
-      ["Battery", undefined],
-      ["Phone maker", "guide"],
+    expect(backgroundSteps("Botsman Preview", status).map((step) => [step.label, step.detail, step.action])).toEqual([
+      ["Notifications", "Turned off for Botsman Preview", "notifications"],
+      ["Battery", "Unrestricted", undefined],
+      ["Phone maker", "Samsung can stop background apps. Its steps are on dontkillmyapp.com.", "guide"],
     ]);
-    expect(backgroundSteps({ ...status, maker: "google" }).map((step) => step.label)).not.toContain("Phone maker");
+    expect(backgroundSteps("Botsman", { ...status, maker: "google" }).map((step) => step.label)).not.toContain("Phone maker");
   });
 
   it("says how the connection is doing", () => {

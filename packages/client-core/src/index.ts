@@ -1,5 +1,6 @@
 export * from "./api-client.ts";
 export * from "./app-controller.ts";
+export * from "./app-name.ts";
 export * from "./botsman-client.ts";
 export * from "./chat-controller.ts";
 export * from "./chat-items.ts";

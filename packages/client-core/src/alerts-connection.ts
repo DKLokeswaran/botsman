@@ -87,8 +87,8 @@ export const ALERT_TEMPLATES: Record<Alert["kind"], string> = {
   skill_created: "{bot} created a skill",
 };
 
-// How a notification words an alert.
-export function alertText(alert: Alert, bots: readonly Pick<Bot, "id" | "name">[]): { title: string; body: string } {
+// How a notification words an alert, titled with the app's name.
+export function alertText(appName: string, alert: Alert, bots: readonly Pick<Bot, "id" | "name">[]): { title: string; body: string } {
   const name = bots.find((bot) => bot.id === alert.botId)?.name ?? "A bot";
-  return { title: "Botsman", body: ALERT_TEMPLATES[alert.kind].replace("{bot}", name) };
+  return { title: appName, body: ALERT_TEMPLATES[alert.kind].replace("{bot}", name) };
 }

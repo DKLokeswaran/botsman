@@ -57,11 +57,11 @@ test("checks again on request, finds a build published since, and says when it l
   const updates = new UpdateChecker({ installedVersion: async () => "0.2.0", latest: async () => (latest === undefined ? undefined : { ...latest, install: async () => {} }) });
   await updates.check(server);
   expect(updates.state.get()).toEqual({ status: "none" });
-  expect(versionLine(updates.info.get(), updates.state.get())).toMatch(/^Botsman 0\.2\.0 · Up to date, checked at /);
+  expect(versionLine("Botsman", updates.info.get(), updates.state.get())).toMatch(/^Botsman 0\.2\.0 · Up to date, checked at /);
   latest = { version: "0.2.1", protocol: 2 };
   await updates.checkNow();
   expect(updates.state.get()).toEqual({ status: "available", version: "0.2.1" });
-  expect(versionLine(updates.info.get(), updates.state.get())).toBe("Botsman 0.2.0 · Version 0.2.1 is available");
+  expect(versionLine("Botsman", updates.info.get(), updates.state.get())).toBe("Botsman 0.2.0 · Version 0.2.1 is available");
 });
 
 test("a failed check says why and keeps any offer it had", async () => {
@@ -78,7 +78,7 @@ test("a failed check says why and keeps any offer it had", async () => {
   await updates.checkNow();
   expect(updates.state.get()).toEqual({ status: "available", version: "0.3.0" });
   expect(updates.info.get().error).toBe("offline");
-  expect(versionLine(updates.info.get(), updates.state.get())).toBe("Botsman 0.2.0 · Couldn't check: offline");
+  expect(versionLine("Botsman", updates.info.get(), updates.state.get())).toBe("Botsman 0.2.0 · Couldn't check: offline");
 });
 
 test("the dialog asks once per version: Not now hides it until a newer build", async () => {

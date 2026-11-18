@@ -345,7 +345,7 @@ describe("alerts", () => {
     stop();
     const alert = heard.find((item) => item.botId === bot.id)!;
     expect(alert.kind).toBe("approval");
-    expect(alertText(alert, rig.client.server.get().bots).body).toBe("Herald needs your approval");
+    expect(alertText("Botsman Preview", alert, rig.client.server.get().bots)).toEqual({ title: "Botsman Preview", body: "Herald needs your approval" });
     await rig.client.answerApproval(waiting.approvals.find((approval) => approval.botId === bot.id)!.id, "deny");
     await rig.client.deleteBot(bot.id);
   });

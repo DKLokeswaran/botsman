@@ -1,5 +1,5 @@
 import { type BackgroundAlerts, backgroundLine, backgroundSteps, makerGuide } from "@botsman/client-core";
-import { useBackgroundStatus } from "@botsman/client-core/react";
+import { useAppName, useBackgroundStatus } from "@botsman/client-core/react";
 import * as Linking from "expo-linking";
 import { AppState, StyleSheet, Text, View } from "react-native";
 import { phoneSettings } from "../background-alerts";
@@ -9,13 +9,14 @@ import { Note, pageStyles, SectionTitle, ToggleRow } from "./page";
 
 // The background connection: whether it runs, and the phone settings that keep it alive.
 export function BackgroundSection({ background }: { background: BackgroundAlerts }) {
+  const appName = useAppName();
   const { enabled, status } = useBackgroundStatus(background, onReturnToApp);
   return (
     <>
       <SectionTitle>Alerts when the app is closed</SectionTitle>
-      <ToggleRow title="Keep connected" detail="Botsman keeps its own connection to your server and posts alerts itself." on={enabled} onChange={(on) => void background.setKeepConnected(on)} />
+      <ToggleRow title="Keep connected" detail={`${appName} keeps its own connection to your server and posts alerts itself.`} on={enabled} onChange={(on) => void background.setKeepConnected(on)} />
       {status === undefined ? null : <Note>{backgroundLine(status, enabled)}</Note>}
-      {status === undefined || !enabled ? null : backgroundSteps(status).map((step) => <StepRow key={step.label} step={step} maker={status.maker} />)}
+      {status === undefined || !enabled ? null : backgroundSteps(appName, status).map((step) => <StepRow key={step.label} step={step} maker={status.maker} />)}
     </>
   );
 }
