@@ -81,7 +81,51 @@ export async function createServices(config: Config, options: ServiceOptions = {
   });
   const logins = new ProviderLogins(catalog, () => deviceId(db), (login) => publish({ type: "login", login }));
 
-  const engine = new Engine({
+  const engine = createEngine({ paths, catalog, registry, sandbox, policy, notes, memoryFiles, memoryEdits, feed, activity, log, cacheLifetimeMs: options.cacheLifetimeMs });
+  const bots = createBotService({ config, paths, registry, memoryFiles, sandbox, engine, policy, feed, activity, publish });
+
+  async function close(): Promise<void> {
+    latestRelease.stop();
+    policy.shutDown();
+    await engine.closeAll();
+    feed.close();
+    sandbox.stopAll();
+    db.close();
+  }
+
+  return { config, paths, db, hub, alerts, auth, registry, bots, memoryFiles, notes, approvalStore, policy, sandbox, catalog, logins, engine, feed, activity, alertSettings, usage, latestRelease, publish, resumeBots: () => resumeBots(engine, registry, sandbox, log), close };
+}
+
+// Opens every bot's Harness, so work a crash interrupted resumes without waiting for a message.
+async function resumeBots(engine: Engine, registry: BotRegistry, sandbox: SandboxManager, log: (message: string) => void): Promise<void> {
+  if (!sandbox.status.ok) {
+    log(`Bots are not running: ${sandbox.status.reason}`);
+    return;
+  }
+  for (const bot of registry.list()) await engine.open(bot).catch((error) => log(`bot ${bot.id} failed to open: ${String(error)}`));
+}
+
+type DataPaths = ReturnType<typeof dataPaths>;
+
+type EngineParts = {
+  paths: DataPaths;
+  catalog: ProviderCatalog;
+  registry: BotRegistry;
+  sandbox: SandboxManager;
+  policy: PermissionPolicy;
+  notes: NotesStore;
+  memoryFiles: MemoryFiles;
+  memoryEdits: MemoryEdits;
+  feed: ChatFeed;
+  activity: BotActivityTracker;
+  log: (message: string) => void;
+  cacheLifetimeMs: number | undefined;
+};
+
+// The engine, with each bot's settings, sandbox, permission checks, and memory tool wired in.
+function createEngine(parts: EngineParts): Engine {
+  const { paths, catalog, registry, sandbox, policy, notes, memoryFiles, memoryEdits, feed, activity } = parts;
+  return new Engine({
     models: catalog.models,
     sessionFile: (botId) => path.join(paths.botDir(botId), "session.sqlite"),
     currentBot: (botId) => registry.get(botId),
@@ -103,11 +147,21 @@ export async function createServices(config: Config, options: ServiceOptions = {
       feed.update(botId, view);
       activity.refresh(botId);
     },
-    log,
-    cacheLifetimeMs: options.cacheLifetimeMs,
+    log: parts.log,
+    cacheLifetimeMs: parts.cacheLifetimeMs,
   });
+}
 
-  const bots = new BotService({
+type BotServiceParts = Pick<EngineParts, "paths" | "registry" | "memoryFiles" | "sandbox" | "policy" | "feed" | "activity"> & {
+  config: Config;
+  engine: Engine;
+  publish: (event: StreamEvent) => void;
+};
+
+// Bot storage, and what follows when a bot changes or is deleted: open chats, its sandbox, and the engine.
+function createBotService(parts: BotServiceParts): BotService {
+  const { config, paths, registry, memoryFiles, sandbox, engine, policy, feed, activity, publish } = parts;
+  return new BotService({
     registry,
     paths,
     homeDir: config.homeDir,
@@ -131,26 +185,6 @@ export async function createServices(config: Config, options: ServiceOptions = {
       },
     },
   });
-
-  // Opens every bot's Harness, so work a crash interrupted resumes without waiting for a message.
-  async function resumeBots(): Promise<void> {
-    if (!sandbox.status.ok) {
-      log(`Bots are not running: ${sandbox.status.reason}`);
-      return;
-    }
-    for (const bot of registry.list()) await engine.open(bot).catch((error) => log(`bot ${bot.id} failed to open: ${String(error)}`));
-  }
-
-  async function close(): Promise<void> {
-    latestRelease.stop();
-    policy.shutDown();
-    await engine.closeAll();
-    feed.close();
-    sandbox.stopAll();
-    db.close();
-  }
-
-  return { config, paths, db, hub, alerts, auth, registry, bots, memoryFiles, notes, approvalStore, policy, sandbox, catalog, logins, engine, feed, activity, alertSettings, usage, latestRelease, publish, resumeBots, close };
 }
 
 // A stable id for this server, which some sign-ins send as the device id.

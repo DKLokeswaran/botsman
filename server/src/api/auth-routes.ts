@@ -7,15 +7,13 @@ import type { Services } from "../services.ts";
 
 const PUBLIC = { public: true };
 
-export function registerAuthRoutes(app: FastifyInstance, services: Services): void {
-  const { auth, bots } = services;
-  // Wrong passwords: ten per address and thirty in all every fifteen minutes. The overall cap holds when a local
-  // process fakes X-Forwarded-For. Setup has its own ten attempts per address.
+const refuse = () => new ApiError(429, "rate_limited", "Too many sign-in attempts; wait and try again");
+
+// Wrong passwords: ten per address and thirty in all every fifteen minutes. The overall cap holds when a local
+// process fakes X-Forwarded-For.
+function limitedSignIn(): (ip: string, attempt: () => Promise<Tokens>) => Promise<Tokens> {
   const perAddress = new RateLimiter(10, 15 * 60_000);
   const overall = new RateLimiter(30, 15 * 60_000);
-  const setups = new RateLimiter(10, 15 * 60_000);
-  const refuse = () => new ApiError(429, "rate_limited", "Too many sign-in attempts; wait and try again");
-
   // A sign-in is counted before the password is checked, so parallel guesses can't all slip under the caps.
   // Anything but a wrong password gives the count back, so the owner's own sign-ins never use the budget.
   const signIn = async (ip: string, attempt: () => Promise<Tokens>): Promise<Tokens> => {
@@ -35,6 +33,14 @@ export function registerAuthRoutes(app: FastifyInstance, services: Services): vo
     perAddress.forgive(ip);
     overall.forgive("all");
   };
+  return signIn;
+}
+
+export function registerAuthRoutes(app: FastifyInstance, services: Services): void {
+  const { auth, bots } = services;
+  const signIn = limitedSignIn();
+  // Setup has its own ten attempts per address.
+  const setups = new RateLimiter(10, 15 * 60_000);
 
   app.get("/api/setup", { config: PUBLIC }, async (): Promise<SetupStatus> => ({ needsSetup: !auth.hasOwner() }));
 

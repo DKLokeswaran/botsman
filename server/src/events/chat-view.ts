@@ -17,28 +17,41 @@ export type ViewDocs = Readonly<Record<string, unknown>>;
 export const OWNER_MESSAGE_KIND = "botsman.owner-message";
 export const PRE_COMPACTION_KIND = "botsman.pre-compaction";
 
+type Notice = Extract<ChatMessage, { type: "notice" }>;
+
+// Entries shown as a notice line in the chat.
+const NOTICES: Readonly<Record<string, Pick<Notice, "kind" | "text">>> = {
+  [PRE_COMPACTION_KIND]: { kind: "pre_compaction_save", text: "Saving notes and memory before compacting the chat" },
+  "pi.compaction": { kind: "compaction", text: "The chat was compacted" },
+  "pi.reset": { kind: "reset", text: "The chat context was cleared" },
+};
+
 // Turns one transcript entry into a chat message, or nothing for entries the apps don't show.
 export function toChatMessage(entry: ViewEntry): ChatMessage | undefined {
+  const notice = NOTICES[entry.kind];
+  if (notice !== undefined) return { type: "notice", id: String(entry.id), ...notice };
+  return messageOf(entry);
+}
+
+// An entry holding a message from the owner, the bot, or a tool.
+function messageOf(entry: ViewEntry): ChatMessage | undefined {
   const message = entry.model?.[0];
   const id = String(entry.id);
-  switch (entry.kind) {
-    case OWNER_MESSAGE_KIND:
-      return { type: "user", id: id, at: timeOf(message), text: String((entry.data as { text?: string } | undefined)?.text ?? "") };
-    case "pi.user":
-      return { type: "user", id: id, at: timeOf(message), text: textOf(message) };
-    case "pi.assistant":
-      return message?.role === "assistant" ? assistantMessage(id, message) : undefined;
-    case "pi.tool-result":
-      return message?.role === "toolResult" ? toolResultMessage(id, message) : undefined;
-    case PRE_COMPACTION_KIND:
-      return { type: "notice", id: id, kind: "pre_compaction_save", text: "Saving notes and memory before compacting the chat" };
-    case "pi.compaction":
-      return { type: "notice", id: id, kind: "compaction", text: "The chat was compacted" };
-    case "pi.reset":
-      return { type: "notice", id: id, kind: "reset", text: "The chat context was cleared" };
-    default:
-      return undefined;
-  }
+  if (entry.kind === OWNER_MESSAGE_KIND) return { type: "user", id, at: timeOf(message), text: ownerText(entry) };
+  if (entry.kind === "pi.user") return { type: "user", id, at: timeOf(message), text: textOf(message) };
+  return replyOf(entry.kind, id, message);
+}
+
+// The owner's words, without the memory text sent with them.
+function ownerText(entry: ViewEntry): string {
+  return String((entry.data as { text?: string } | undefined)?.text ?? "");
+}
+
+// A bot reply or a tool result, when the entry holds one.
+function replyOf(kind: string, id: string, message: Message | undefined): ChatMessage | undefined {
+  if (kind === "pi.assistant" && message?.role === "assistant") return assistantMessage(id, message);
+  if (kind === "pi.tool-result" && message?.role === "toolResult") return toolResultMessage(id, message);
+  return undefined;
 }
 
 function assistantMessage(id: string, message: AssistantMessage): ChatMessage {

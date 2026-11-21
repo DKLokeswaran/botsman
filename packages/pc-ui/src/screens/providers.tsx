@@ -108,6 +108,14 @@ function SignIn({ provider }: { provider: Provider }) {
         </Button>
       </div>
     );
+  return <LoginSteps login={login} onRestart={() => setLoginId(undefined)} />;
+}
+
+type Login = NonNullable<ReturnType<typeof useLogin>>;
+type LoginView = ReturnType<typeof loginView>;
+
+// The running sign-in: the address to open, any code to enter, the provider's question, and how it ended.
+function LoginSteps({ login, onRestart }: { login: Login; onRestart: () => void }) {
   const view = loginView(login);
   return (
     <div className="flex flex-col gap-3 text-sm">
@@ -128,23 +136,33 @@ function SignIn({ provider }: { provider: Provider }) {
         </p>
       )}
       {view.prompt === undefined ? null : <LoginPrompt key={view.prompt.promptId} loginId={login.id} prompt={view.prompt} />}
-      {view.outcome === "running" && view.progress !== undefined ? <p className="text-muted-foreground">{view.progress}</p> : null}
-      {view.outcome === "connected" ? <p className="text-primary">Connected.</p> : null}
-      {view.outcome === "failed" || view.outcome === "cancelled" ? <ErrorText>{view.error ?? "The sign-in stopped."}</ErrorText> : null}
-      {view.outcome === "running" ? (
-        <Button variant="text" className="self-start" onClick={() => void client.cancelLogin(login.id)}>
-          Cancel sign-in
-        </Button>
-      ) : (
-        <Button variant="text" className="self-start" onClick={() => setLoginId(undefined)}>
-          Start again
-        </Button>
-      )}
+      <LoginOutcome view={view} loginId={login.id} onRestart={onRestart} />
     </div>
   );
 }
 
-function LoginPrompt({ loginId, prompt }: { loginId: string; prompt: NonNullable<ReturnType<typeof loginView>["prompt"]> }) {
+// Progress while the sign-in runs, how it ended, and a way to cancel it or start again.
+function LoginOutcome({ view, loginId, onRestart }: { view: LoginView; loginId: string; onRestart: () => void }) {
+  const client = useBotsmanClient();
+  return (
+    <>
+      {view.outcome === "running" && view.progress !== undefined ? <p className="text-muted-foreground">{view.progress}</p> : null}
+      {view.outcome === "connected" ? <p className="text-primary">Connected.</p> : null}
+      {view.outcome === "failed" || view.outcome === "cancelled" ? <ErrorText>{view.error ?? "The sign-in stopped."}</ErrorText> : null}
+      {view.outcome === "running" ? (
+        <Button variant="text" className="self-start" onClick={() => void client.cancelLogin(loginId)}>
+          Cancel sign-in
+        </Button>
+      ) : (
+        <Button variant="text" className="self-start" onClick={onRestart}>
+          Start again
+        </Button>
+      )}
+    </>
+  );
+}
+
+function LoginPrompt({ loginId, prompt }: { loginId: string; prompt: NonNullable<LoginView["prompt"]> }) {
   const client = useBotsmanClient();
   const [value, setValue] = useState(prompt.options[0]?.id ?? "");
   const answer = useAction(() => client.answerLogin(loginId, prompt.promptId, value));

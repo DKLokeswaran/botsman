@@ -45,7 +45,7 @@ export function NoteScreen({ botId, name }: { botId: string; name: string }) {
 
 // A note shown as it reads, with Edit and Delete. A new note opens ready to write.
 function NoteEditor({ botId, name, content, isNew }: { botId: string; name: string; content: string; isNew: boolean }) {
-  const { editing, startEditing, saved, fileName, setFileName, text, setText, problem, save, cancel, asking, setAsking, remove } = useNoteEditor(
+  const editor = useNoteEditor(
     botId,
     name,
     content,
@@ -53,30 +53,8 @@ function NoteEditor({ botId, name, content, isNew }: { botId: string; name: stri
     (savedName) => (window.location.hash = noteHref(botId, savedName)),
     () => (window.location.hash = notesHref(botId)),
   );
-  if (!editing)
-    return (
-      <div className="flex flex-col gap-3">
-        <ReadOnlyText text={saved} />
-        <ErrorText>{remove.error}</ErrorText>
-        <div className="flex flex-wrap gap-2">
-          <Button onClick={startEditing}>Edit</Button>
-          {asking ? (
-            <>
-              <Button variant="danger" disabled={remove.busy} onClick={() => void remove.run()}>
-                Delete this note
-              </Button>
-              <Button variant="text" onClick={() => setAsking(false)}>
-                Cancel
-              </Button>
-            </>
-          ) : (
-            <Button variant="danger" onClick={() => setAsking(true)}>
-              Delete
-            </Button>
-          )}
-        </div>
-      </div>
-    );
+  if (!editor.editing) return <NoteView editor={editor} />;
+  const { fileName, setFileName, text, setText, problem, save, cancel } = editor;
   return (
     <div className="flex flex-col gap-3">
       <Field label="File name" spellCheck={false} value={fileName} onChange={(event) => setFileName(event.target.value)} />
@@ -92,6 +70,36 @@ function NoteEditor({ botId, name, content, isNew }: { botId: string; name: stri
         {isNew ? null : (
           <Button variant="text" onClick={cancel}>
             Cancel
+          </Button>
+        )}
+      </div>
+    </div>
+  );
+}
+
+type NoteEditing = ReturnType<typeof useNoteEditor>;
+
+// The note as it reads, with Edit, and Delete behind a second press.
+function NoteView({ editor }: { editor: NoteEditing }) {
+  const { startEditing, saved, asking, setAsking, remove } = editor;
+  return (
+    <div className="flex flex-col gap-3">
+      <ReadOnlyText text={saved} />
+      <ErrorText>{remove.error}</ErrorText>
+      <div className="flex flex-wrap gap-2">
+        <Button onClick={startEditing}>Edit</Button>
+        {asking ? (
+          <>
+            <Button variant="danger" disabled={remove.busy} onClick={() => void remove.run()}>
+              Delete this note
+            </Button>
+            <Button variant="text" onClick={() => setAsking(false)}>
+              Cancel
+            </Button>
+          </>
+        ) : (
+          <Button variant="danger" onClick={() => setAsking(true)}>
+            Delete
           </Button>
         )}
       </div>

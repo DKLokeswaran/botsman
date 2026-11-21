@@ -1,4 +1,4 @@
-import { chatSubtitle, contextTokens, modelProblem } from "@botsman/client-core";
+import { type Bot, chatSubtitle, contextTokens, modelProblem } from "@botsman/client-core";
 import { useBot, useChat, useConnectionStatus, useModels } from "@botsman/client-core/react";
 import { useEffect, useRef } from "react";
 import { Avatar } from "../components/avatar.tsx";
@@ -20,17 +20,7 @@ export function ChatScreen({ botId }: { botId: string }) {
   const busy = state.live.running || state.live.compacting;
   return (
     <section className="flex h-full min-w-0 flex-1 flex-col">
-      <header className="relative flex items-center gap-3 border-b border-border px-4 py-3">
-        <a href={botInfoHref(bot.id)} aria-label={`${bot.name} info`} className="rounded-lg hover:opacity-80">
-          <Avatar bot={bot} />
-        </a>
-        <div className="min-w-0">
-          <a href={botInfoHref(bot.id)} className="block truncate font-display text-base font-bold uppercase hover:opacity-80">
-            {bot.name}
-          </a>
-          <p className="truncate text-xs text-muted-foreground">{chatSubtitle(state.settings, state.totals.usage.cost, models, contextTokens(state.messages))}</p>
-        </div>
-      </header>
+      <ChatHeader bot={bot} subtitle={chatSubtitle(state.settings, state.totals.usage.cost, models, contextTokens(state.messages))} />
       {reconnecting ? (
         <p role="status" className="border-b border-border bg-card px-4 py-1.5 text-center text-xs text-primary">
           Reconnecting…
@@ -62,6 +52,23 @@ export function ChatScreen({ botId }: { botId: string }) {
         <Composer chat={chat} bot={bot} settings={state.settings} sendModes={sendModes} busy={busy} />
       </div>
     </section>
+  );
+}
+
+// The bot's face and name, which open its info, over the model, cost, and context in use.
+function ChatHeader({ bot, subtitle }: { bot: Bot; subtitle: string }) {
+  return (
+    <header className="relative flex items-center gap-3 border-b border-border px-4 py-3">
+      <a href={botInfoHref(bot.id)} aria-label={`${bot.name} info`} className="rounded-lg hover:opacity-80">
+        <Avatar bot={bot} />
+      </a>
+      <div className="min-w-0">
+        <a href={botInfoHref(bot.id)} className="block truncate font-display text-base font-bold uppercase hover:opacity-80">
+          {bot.name}
+        </a>
+        <p className="truncate text-xs text-muted-foreground">{subtitle}</p>
+      </div>
+    </header>
   );
 }
 

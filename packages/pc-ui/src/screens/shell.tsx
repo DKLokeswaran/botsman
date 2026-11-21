@@ -40,6 +40,11 @@ function MainPane({ app, client, route, loading, botId, notifications, autostart
   if (route.name === "usage") return <UsageScreen />;
   if (route.name === "settings") return <SettingsScreen app={app} client={client} notifications={notifications} autostart={autostart} theme={theme} />;
   if (loading || botId === undefined) return <p className="p-6 text-muted-foreground">Loading…</p>;
+  return <BotPage route={route} botId={botId} />;
+}
+
+// One bot's pages. Its home is its chat.
+function BotPage({ route, botId }: { route: Route; botId: string }) {
   if (route.name === "bot") return <BotInfoScreen key={botId} botId={botId} />;
   if (route.name === "bot-settings") return <BotSettingsScreen key={botId} botId={botId} />;
   if (route.name === "memory") return <MemoryScreen key={botId} botId={botId} />;

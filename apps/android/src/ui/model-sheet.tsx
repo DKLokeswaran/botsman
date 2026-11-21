@@ -42,16 +42,7 @@ export function ModelSheet({ visible, bot, chat, onClose }: { visible: boolean; 
             })}
           </ScrollView>
           <Text style={[styles.label, { color: colors.foreground }]}>Reasoning effort</Text>
-          <View style={styles.chips}>
-            {effortChoices(current).map((level) => {
-              const chosen = level === shownEffort(current, value.thinkingLevel);
-              return (
-                <Pressable key={level} accessibilityRole="radio" accessibilityState={{ checked: chosen }} onPress={() => void save.run({ thinkingLevel: level })} style={[styles.chip, { borderColor: chosen ? colors.primary : colors.border }]}>
-                  <Text style={[styles.chipText, { color: chosen ? colors.primary : colors.foreground }]}>{effortLabel(level)}</Text>
-                </Pressable>
-              );
-            })}
-          </View>
+          <EffortChips model={current} thinkingLevel={value.thinkingLevel} onPick={(level) => void save.run({ thinkingLevel: level })} />
           <ErrorText>{save.error}</ErrorText>
           <Pressable accessibilityRole="button" onPress={() => (onClose(), router.push("/providers"))} hitSlop={8} style={styles.footer}>
             <Text style={[styles.optionText, { color: colors.primary }]}>Connect a provider</Text>
@@ -59,6 +50,25 @@ export function ModelSheet({ visible, bot, chat, onClose }: { visible: boolean; 
         </View>
       </SafeAreaView>
     </Modal>
+  );
+}
+
+type Model = ReturnType<typeof useModels>["models"][number];
+
+// The reasoning efforts the model offers, with the one in use marked.
+function EffortChips({ model, thinkingLevel, onPick }: { model: Model | undefined; thinkingLevel: ThinkingLevel; onPick: (level: ThinkingLevel) => void }) {
+  const { colors } = useTheme();
+  return (
+    <View style={styles.chips}>
+      {effortChoices(model).map((level) => {
+        const chosen = level === shownEffort(model, thinkingLevel);
+        return (
+          <Pressable key={level} accessibilityRole="radio" accessibilityState={{ checked: chosen }} onPress={() => onPick(level)} style={[styles.chip, { borderColor: chosen ? colors.primary : colors.border }]}>
+            <Text style={[styles.chipText, { color: chosen ? colors.primary : colors.foreground }]}>{effortLabel(level)}</Text>
+          </Pressable>
+        );
+      })}
+    </View>
   );
 }
 

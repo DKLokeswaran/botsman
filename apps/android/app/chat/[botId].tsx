@@ -1,4 +1,4 @@
-import { type ChatItem, chatSubtitle, contextTokens, modelProblem } from "@botsman/client-core";
+import { type Bot, type ChatItem, chatSubtitle, contextTokens, modelProblem } from "@botsman/client-core";
 import { useBot, useChat, useConnectionStatus, useModels } from "@botsman/client-core/react";
 import { LegendList } from "@legendapp/list/react-native";
 import { router, useLocalSearchParams } from "expo-router";
@@ -23,28 +23,10 @@ export default function ChatScreen() {
 
   if (bot === undefined) return <Text style={[styles.missing, { color: colors.mutedForeground }]}>This bot no longer exists.</Text>;
   const busy = state.live.running || state.live.compacting;
-  const openInfo = () => router.push({ pathname: "/bot/[botId]", params: { botId: bot.id } });
   return (
     <SafeAreaView style={styles.screen}>
       <KeyboardAvoidingView behavior="padding" style={styles.screen}>
-        <View style={[styles.header, { borderBottomColor: colors.border }]}>
-          <Pressable accessibilityRole="button" accessibilityLabel="Back to bots" onPress={() => router.back()} hitSlop={12}>
-            <Text style={[styles.back, { color: colors.foreground }]}>‹</Text>
-          </Pressable>
-          <Pressable accessibilityRole="button" accessibilityLabel={`${bot.name} info`} onPress={openInfo} hitSlop={4}>
-            <Avatar bot={bot} size={36} />
-          </Pressable>
-          <View style={styles.headerText}>
-            <Pressable accessibilityRole="button" accessibilityLabel={`${bot.name} info`} onPress={openInfo} hitSlop={{ top: 8, bottom: 2 }}>
-              <Text numberOfLines={1} style={[styles.name, { color: colors.foreground }]}>
-                {bot.name.toUpperCase()}
-              </Text>
-            </Pressable>
-            <Text numberOfLines={1} style={[styles.sub, { color: colors.mutedForeground }]}>
-              {chatSubtitle(state.settings, state.totals.usage.cost, models, contextTokens(state.messages))}
-            </Text>
-          </View>
-        </View>
+        <ChatHeader bot={bot} subtitle={chatSubtitle(state.settings, state.totals.usage.cost, models, contextTokens(state.messages))} />
         {reconnecting ? <Text style={[styles.banner, { color: colors.primary, backgroundColor: colors.card, borderBottomColor: colors.border }]}>Reconnecting…</Text> : null}
         <LegendList
           data={items}
@@ -77,6 +59,32 @@ export default function ChatScreen() {
         </View>
       </KeyboardAvoidingView>
     </SafeAreaView>
+  );
+}
+
+// Back, then the bot's face and name, which open its info, over the model, cost, and context in use.
+function ChatHeader({ bot, subtitle }: { bot: Bot; subtitle: string }) {
+  const { colors } = useTheme();
+  const openInfo = () => router.push({ pathname: "/bot/[botId]", params: { botId: bot.id } });
+  return (
+    <View style={[styles.header, { borderBottomColor: colors.border }]}>
+      <Pressable accessibilityRole="button" accessibilityLabel="Back to bots" onPress={() => router.back()} hitSlop={12}>
+        <Text style={[styles.back, { color: colors.foreground }]}>‹</Text>
+      </Pressable>
+      <Pressable accessibilityRole="button" accessibilityLabel={`${bot.name} info`} onPress={openInfo} hitSlop={4}>
+        <Avatar bot={bot} size={36} />
+      </Pressable>
+      <View style={styles.headerText}>
+        <Pressable accessibilityRole="button" accessibilityLabel={`${bot.name} info`} onPress={openInfo} hitSlop={{ top: 8, bottom: 2 }}>
+          <Text numberOfLines={1} style={[styles.name, { color: colors.foreground }]}>
+            {bot.name.toUpperCase()}
+          </Text>
+        </Pressable>
+        <Text numberOfLines={1} style={[styles.sub, { color: colors.mutedForeground }]}>
+          {subtitle}
+        </Text>
+      </View>
+    </View>
   );
 }
 

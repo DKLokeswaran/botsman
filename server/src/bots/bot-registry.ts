@@ -91,21 +91,26 @@ export class BotRegistry {
 
   setChatSettings(botId: string, model: ModelRef | null | undefined, thinkingLevel: ThinkingLevel | undefined): void {
     const row = this.#db.prepare("SELECT * FROM chat_settings WHERE bot_id = ?").get(botId) as Row | undefined;
-    const provider = model === undefined ? (row?.model_provider ?? null) : (model?.provider ?? null);
-    const modelId = model === undefined ? (row?.model_id ?? null) : (model?.modelId ?? null);
+    const [provider, modelId] = chatModel(row, model);
     const thinking = thinkingLevel ?? row?.thinking_level ?? null;
     this.#db
       .prepare(
         `INSERT INTO chat_settings (bot_id, model_provider, model_id, thinking_level) VALUES (?, ?, ?, ?)
          ON CONFLICT (bot_id) DO UPDATE SET model_provider = excluded.model_provider, model_id = excluded.model_id, thinking_level = excluded.thinking_level`,
       )
-      .run(botId, provider as string | null, modelId as string | null, thinking as string | null);
+      .run(botId, provider, modelId, thinking as string | null);
   }
 
   #assertNameFree(name: string, id: string): void {
     const row = this.#db.prepare("SELECT id FROM bots WHERE lower(name) = lower(?) AND deleted_at IS NULL AND id != ?").get(name, id);
     if (row !== undefined) throw conflict(`A bot named ${name} already exists`);
   }
+}
+
+// The chat's model columns: the new model, none for null, or the stored one when the model isn't changing.
+function chatModel(row: Row | undefined, model: ModelRef | null | undefined): [string | null, string | null] {
+  if (model === undefined) return [(row?.model_provider ?? null) as string | null, (row?.model_id ?? null) as string | null];
+  return [model?.provider ?? null, model?.modelId ?? null];
 }
 
 type Column = [string, string | number | null];
