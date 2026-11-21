@@ -9,6 +9,7 @@ Contributors without write access work in their own fork. A fork has its own wor
 ```bash
 pnpm install
 pnpm -r typecheck
+pnpm lint:imports
 pnpm -r test
 ```
 

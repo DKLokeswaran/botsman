@@ -9,6 +9,10 @@
   "scripts": {
     "test": "pnpm -r test",
     "typecheck": "pnpm -r typecheck",
+    "lint:imports": "depcruise packages apps server --config .dependency-cruiser.cjs",
     "start": "pnpm --filter @botsman/server start"
+  },
+  "devDependencies": {
+    "dependency-cruiser": "18.8.0"
   }
 }

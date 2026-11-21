@@ -34,6 +34,7 @@
 | Builds and checks | GitHub Actions | See [GitHub Actions](#github-actions) |
 | Tests | Vitest 5.0.5, using Pi's faux model provider through a scripted test model | Tests run with no model bills. M1 has no test against a real model. |
 | Type checks | TypeScript 6.0.3, `tsc` with no emit | Checks the sources Node runs as they are |
+| Import rules | dependency-cruiser 18.8.0 | Checks where each import resolves, so a relative path can't get around a rule. One command for agents and CI. See [import rules](#import-rules). |
 
 ## Repo layout
 
@@ -50,6 +51,39 @@ deploy                  install script, systemd unit, and AppArmor profile
 mockups                 clickable UI reference
 docs                    this documentation
 ```
+
+## Import rules
+
+Each package imports only the packages below it:
+
+```mermaid
+flowchart LR
+    protocol --> core["client-core"]
+    protocol --> server
+    core --> pcui["pc-ui"]
+    tokens --> pcui
+    core --> android["apps/android"]
+    tokens --> android
+    pcui --> windows["apps/windows"]
+    pcui --> web["apps/web"]
+    server -. "tests only" .-> core
+```
+
+`pnpm lint:imports` checks these rules with dependency-cruiser, from `.dependency-cruiser.cjs` at the repo root. It runs on every pull request, and anyone changing imports runs it before finishing. A rule checks where an import resolves on disk, so a relative path into another package breaks it the same way the package's name does.
+
+1. `protocol` imports no other workspace package.
+2. `tokens` imports no other workspace package.
+3. `client-core` imports only `protocol`.
+4. Nothing outside `server` imports from it, except `client-core`'s tests, which run the client against a real server.
+5. `pc-ui` imports only `client-core` and `tokens`. It takes the protocol's types from `client-core`.
+6. `apps/android` imports only `client-core` and `tokens`, never `protocol` or `pc-ui`.
+7. `apps/windows` and `apps/web` import only `pc-ui`. It re-exports the types they need.
+8. No app imports another app.
+9. Only the server's `engine` module imports Pi Durable. The server's tests may import it to test the engine.
+10. Only the server and `protocol` import Pi packages, and `protocol` imports only `pi-schema`. Apps never see Pi's formats, so a Pi upgrade changes no client code.
+11. Code that ships imports only its own package's dependencies. Tests, scripts, config files, and type-only imports may use devDependencies, and a peerDependency also listed as a devDependency for type checks counts as a dependency.
+
+The re-exports behind rules 5 and 7 carry types only, through `export type *`, so the protocol's and `client-core`'s functions stay out of the screens and shells.
 
 ## Versions and releases
 
