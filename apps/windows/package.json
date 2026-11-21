@@ -10,7 +10,6 @@
     "typecheck": "tsc -p tsconfig.json"
   },
   "dependencies": {
-    "@botsman/client-core": "workspace:*",
     "@botsman/pc-ui": "workspace:*",
     "@tauri-apps/api": "2.12.4",
     "@tauri-apps/plugin-http": "2.9.0",

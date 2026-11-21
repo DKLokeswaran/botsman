@@ -299,9 +299,6 @@ importers:
 
   apps/windows:
     dependencies:
-      '@botsman/client-core':
-        specifier: workspace:*
-        version: link:../../packages/client-core
       '@botsman/pc-ui':
         specifier: workspace:*
         version: link:../../packages/pc-ui

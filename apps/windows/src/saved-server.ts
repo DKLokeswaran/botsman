@@ -1,4 +1,4 @@
-import type { AppEnvironment } from "@botsman/client-core";
+import type { AppEnvironment } from "@botsman/pc-ui";
 
 const KEY = "botsman.server";
 
