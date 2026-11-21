@@ -1,8 +1,8 @@
 // The alerts connection that keeps running while the window is hidden. It holds the alerts stream open with an
 // alerts-only token, posts a notification for each alert, and after a drop sends where it left off.
 use futures_util::{SinkExt, StreamExt};
+use crate::alerts_stream::{Alert, AlertsClientMessage, AlertsServerMessage};
 use serde::{Deserialize, Serialize};
-use serde_json::{json, Value};
 use std::collections::HashMap;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Mutex;
@@ -121,12 +121,12 @@ async fn follow<R: Runtime>(app: &AppHandle<R>) -> Result<Ending, Box<dyn std::e
     let (Some(server), Some(token)) = (saved.server, saved.token) else { return Ok(Ending::SignedOut) };
     let url = format!("{}/api/alerts", server.replacen("http", "ws", 1));
     let (mut socket, _) = connect_async(url).await?;
-    let hello = json!({ "type": "hello", "token": token, "epoch": saved.epoch, "seq": saved.seq });
-    socket.send(Message::Text(hello.to_string().into())).await?;
+    let hello = AlertsClientMessage::Hello { token, epoch: saved.epoch, seq: saved.seq };
+    socket.send(Message::Text(serde_json::to_string(&hello)?.into())).await?;
     let mut ping = tokio::time::interval(Duration::from_secs(25));
     loop {
         tokio::select! {
-            _ = ping.tick() => socket.send(Message::Text(json!({ "type": "ping" }).to_string().into())).await?,
+            _ = ping.tick() => socket.send(Message::Text(serde_json::to_string(&AlertsClientMessage::Ping)?.into())).await?,
             message = socket.next() => match message {
                 Some(Ok(Message::Text(text))) => {
                     if receive(app, &text) { return Ok(Ending::SignedOut); }
@@ -140,24 +140,23 @@ async fn follow<R: Runtime>(app: &AppHandle<R>) -> Result<Ending, Box<dyn std::e
 
 // Handles one message, and answers whether the server refused the token, which means the device was signed out.
 fn receive<R: Runtime>(app: &AppHandle<R>, text: &str) -> bool {
-    let Ok(message) = serde_json::from_str::<Value>(text) else { return false };
-    match message["type"].as_str() {
+    let Ok(message) = serde_json::from_str::<AlertsServerMessage>(text) else { return false };
+    match message {
         // The server took the token and the connection is caught up.
-        Some("ready") => {
+        AlertsServerMessage::Ready => {
             app.state::<Alerts>().connected.store(true, Ordering::Relaxed);
             false
         }
-        Some("alert") | Some("reset") => {
-            app.state::<Alerts>().connected.store(true, Ordering::Relaxed);
-            let epoch = message["epoch"].as_str().unwrap_or_default().to_string();
-            let seq = message["seq"].as_i64().unwrap_or_default();
-            let saved = update(app, |saved| (saved.epoch, saved.seq) = (epoch, seq));
-            if message["type"] == "alert" {
-                notify(app, &saved, &message["alert"]);
-            }
+        AlertsServerMessage::Reset { epoch, seq } => {
+            keep_position(app, epoch, seq);
             false
         }
-        Some("error") if message["error"] == "unauthorized" => {
+        AlertsServerMessage::Alert { epoch, seq, alert } => {
+            let saved = keep_position(app, epoch, seq);
+            notify(app, &saved, &alert);
+            false
+        }
+        AlertsServerMessage::Error { error, .. } if error == "unauthorized" => {
             update(app, |saved| saved.token = None);
             true
         }
@@ -165,14 +164,19 @@ fn receive<R: Runtime>(app: &AppHandle<R>, text: &str) -> bool {
     }
 }
 
+// Saves where the stream is up to, so a reconnect asks only for what came after.
+fn keep_position<R: Runtime>(app: &AppHandle<R>, epoch: String, seq: i64) -> Saved {
+    app.state::<Alerts>().connected.store(true, Ordering::Relaxed);
+    update(app, |saved| (saved.epoch, saved.seq) = (epoch, seq))
+}
+
 // Posts the alert, unless the window is in front, where the app already shows what needs the owner.
-fn notify<R: Runtime>(app: &AppHandle<R>, saved: &Saved, alert: &Value) {
+fn notify<R: Runtime>(app: &AppHandle<R>, saved: &Saved, alert: &Alert) {
     if window_in_front(app) {
         return;
     }
-    let kind = alert["kind"].as_str().unwrap_or_default();
-    let bot_id = alert["botId"].as_str().unwrap_or_default();
-    let name = saved.names.get(bot_id).map(String::as_str).unwrap_or("A bot");
+    let kind = alert.kind.as_str();
+    let name = saved.names.get(&alert.bot_id).map(String::as_str).unwrap_or("A bot");
     let template = saved.templates.get(kind).map(String::as_str).unwrap_or("{bot} needs you");
     // The product name, so a preview app's notifications say Botsman Preview.
     let _ = app.notification().builder().title(&app.package_info().name).body(template.replace("{bot}", name)).show();

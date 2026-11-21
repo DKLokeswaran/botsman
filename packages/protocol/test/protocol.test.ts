@@ -2,6 +2,7 @@ import { readFileSync } from "node:fs";
 import { compile } from "@earendil-works/pi-schema";
 import { describe, expect, it } from "vitest";
 import { alertsJsonSchema } from "../scripts/alerts-schema.ts";
+import { ALERTS_TYPE_FILES, kotlinAlertsTypes, rustAlertsTypes } from "../scripts/alerts-types.ts";
 import * as protocol from "../src/index.ts";
 
 describe("protocol schemas", () => {
@@ -20,6 +21,12 @@ describe("protocol schemas", () => {
   it("keep the committed alerts schema in sync", () => {
     const committed = JSON.parse(readFileSync(new URL("../schema/alerts.schema.json", import.meta.url), "utf8"));
     expect(committed).toEqual(JSON.parse(JSON.stringify(alertsJsonSchema())));
+  });
+
+  it("keep the committed Rust and Kotlin alert types in sync with the schema", () => {
+    const schema = JSON.parse(readFileSync(new URL("../schema/alerts.schema.json", import.meta.url), "utf8"));
+    expect(readFileSync(ALERTS_TYPE_FILES.rust, "utf8")).toBe(rustAlertsTypes(schema));
+    expect(readFileSync(ALERTS_TYPE_FILES.kotlin, "utf8")).toBe(kotlinAlertsTypes(schema));
   });
 });
 

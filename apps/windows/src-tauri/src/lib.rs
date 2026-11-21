@@ -1,4 +1,5 @@
 mod alerts;
+mod alerts_stream;
 mod autostart;
 mod tokens;
 
