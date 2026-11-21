@@ -1,6 +1,5 @@
-import { characterCount, MEMORY_FILES, memoryAudience } from "@botsman/client-core";
+import { characterCount, MEMORY_FILES, memoryAudience, type MemoryFile } from "@botsman/client-core";
 import { useBot, useMemoryEditor, useMemoryScreen } from "@botsman/client-core/react";
-import type { MemoryFile } from "@botsman/protocol";
 import { useLocalSearchParams } from "expo-router";
 import { StyleSheet, Text, TextInput, View } from "react-native";
 import { ApprovalCard } from "../../src/chat/approval-card";

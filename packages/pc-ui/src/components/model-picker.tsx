@@ -1,6 +1,5 @@
-import { type ChatController, effortChoices, shownEffort, effortLabel, modelLabel, PICKER_SCOPES, type PickerScope, pickerValue, sameModel } from "@botsman/client-core";
+import { type ChatController, effortChoices, shownEffort, effortLabel, modelLabel, PICKER_SCOPES, type PickerScope, pickerValue, sameModel, type Bot, type ChatSettings, type ModelRef, type ThinkingLevel } from "@botsman/client-core";
 import { useAction, useBotsmanClient, useModels } from "@botsman/client-core/react";
-import type { Bot, ChatSettings, ModelRef, ThinkingLevel } from "@botsman/protocol";
 import { useState } from "react";
 import { ErrorText, Segmented } from "./page.tsx";
 

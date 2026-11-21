@@ -1,6 +1,5 @@
-import { type AppController, serverUpdate, serverUpdateSteps, serverVersionLine } from "@botsman/client-core";
+import { type AppController, serverUpdate, serverUpdateSteps, serverVersionLine, type Health } from "@botsman/client-core";
 import { useStore } from "@botsman/client-core/react";
-import type { Health } from "@botsman/protocol";
 import { StyleSheet, Text, View } from "react-native";
 import { fontFamilies, radius, space, useTheme } from "../theme";
 import { pageStyles } from "./page";

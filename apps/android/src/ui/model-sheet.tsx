@@ -1,6 +1,5 @@
-import { type ChatController, effortChoices, effortLabel, modelLabel, PICKER_SCOPES, type PickerScope, pickerValue, sameModel, shownEffort } from "@botsman/client-core";
+import { type ChatController, effortChoices, effortLabel, modelLabel, PICKER_SCOPES, type PickerScope, pickerValue, sameModel, shownEffort, type Bot, type ChatSettings, type ModelRef, type ThinkingLevel } from "@botsman/client-core";
 import { useAction, useBotsmanClient, useModels } from "@botsman/client-core/react";
-import type { Bot, ChatSettings, ModelRef, ThinkingLevel } from "@botsman/protocol";
 import { router } from "expo-router";
 import { useState } from "react";
 import { Modal, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";

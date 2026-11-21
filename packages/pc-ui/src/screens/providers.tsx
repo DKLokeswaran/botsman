@@ -1,6 +1,5 @@
-import { loginView, providerStatus } from "@botsman/client-core";
+import { loginView, providerStatus, type Provider } from "@botsman/client-core";
 import { useAction, useBotsmanClient, useLogin, useProviders } from "@botsman/client-core/react";
-import type { Provider } from "@botsman/protocol";
 import { useState } from "react";
 import { ErrorText, Page, Segmented } from "../components/page.tsx";
 import { Button } from "../components/ui/button.tsx";

@@ -171,9 +171,6 @@ importers:
       '@botsman/client-core':
         specifier: workspace:*
         version: link:../../packages/client-core
-      '@botsman/protocol':
-        specifier: workspace:*
-        version: link:../../packages/protocol
       '@botsman/tokens':
         specifier: workspace:*
         version: link:../../packages/tokens
@@ -308,9 +305,6 @@ importers:
       '@botsman/pc-ui':
         specifier: workspace:*
         version: link:../../packages/pc-ui
-      '@botsman/protocol':
-        specifier: workspace:*
-        version: link:../../packages/protocol
       '@tauri-apps/api':
         specifier: 2.12.4
         version: 2.12.4
@@ -382,9 +376,6 @@ importers:
       '@botsman/client-core':
         specifier: workspace:*
         version: link:../client-core
-      '@botsman/protocol':
-        specifier: workspace:*
-        version: link:../protocol
       '@botsman/tokens':
         specifier: workspace:*
         version: link:../tokens

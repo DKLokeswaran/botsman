@@ -1,6 +1,5 @@
-import { characterCount, MEMORY_FILES, memoryAudience } from "@botsman/client-core";
+import { characterCount, MEMORY_FILES, memoryAudience, type MemoryFile } from "@botsman/client-core";
 import { useBot, useMemoryEditor, useMemoryScreen } from "@botsman/client-core/react";
-import type { MemoryFile } from "@botsman/protocol";
 import { ApprovalCard } from "../components/approval-card.tsx";
 import { ErrorText, Page } from "../components/page.tsx";
 import { Button } from "../components/ui/button.tsx";

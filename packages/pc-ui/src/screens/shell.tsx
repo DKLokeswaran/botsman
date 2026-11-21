@@ -1,6 +1,5 @@
-import { type AppController, type BotsmanClient, botRowText, formatCountdown } from "@botsman/client-core";
+import { type AppController, type BotsmanClient, botRowText, formatCountdown, type Approval, type Bot } from "@botsman/client-core";
 import { useAppName, useBotActivity, useBots, useConnectionStatus, useNeedsYou, useNow, useServerState } from "@botsman/client-core/react";
-import type { Approval, Bot } from "@botsman/protocol";
 import { Avatar } from "../components/avatar.tsx";
 import { UpdateDialog } from "../components/update-dialog.tsx";
 import type { Autostart, PageNotifications } from "../platform.ts";

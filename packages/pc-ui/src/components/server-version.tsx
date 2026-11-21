@@ -1,6 +1,5 @@
-import { type AppController, serverUpdate, serverUpdateSteps, serverVersionLine } from "@botsman/client-core";
+import { type AppController, serverUpdate, serverUpdateSteps, serverVersionLine, type Health } from "@botsman/client-core";
 import { useStore } from "@botsman/client-core/react";
-import type { Health } from "@botsman/protocol";
 
 // The connected server's version, and how to update it when a newer release exists.
 export function ServerVersion({ app }: { app: AppController }) {

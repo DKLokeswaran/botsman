@@ -1,6 +1,5 @@
-import { loginView, providerStatus } from "@botsman/client-core";
+import { loginView, providerStatus, type Provider } from "@botsman/client-core";
 import { useAction, useBotsmanClient, useLogin, useProviders } from "@botsman/client-core/react";
-import type { Provider } from "@botsman/protocol";
 import * as Linking from "expo-linking";
 import { useState } from "react";
 import { StyleSheet, Text, View } from "react-native";

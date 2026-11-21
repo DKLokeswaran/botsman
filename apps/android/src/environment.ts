@@ -1,5 +1,4 @@
-import type { AppEnvironment, TokenStore } from "@botsman/client-core";
-import type { Tokens } from "@botsman/protocol";
+import type { AppEnvironment, TokenStore, Tokens } from "@botsman/client-core";
 import * as SecureStore from "expo-secure-store";
 import { BotsmanAlerts } from "../modules/botsman-alerts";
 import { APP_NAME } from "./app-name";

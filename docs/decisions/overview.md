@@ -115,6 +115,8 @@ Rust and Kotlin message types for the alerts stream are generated from the same 
 
 The `client-core` package holds login, reconnect, catch-up, state, approvals, sending, and retries, in plain TypeScript with no DOM dependency. React hooks wrap it, so a screen on either app gets the same data and actions.
 
+Only `client-core` and the server depend on `protocol`. `client-core` re-exports the protocol's types with `export type *`, so screens and shells take message types such as `Bot` from `client-core`. The re-export carries types only, so the protocol's functions can't be called from a screen.
+
 Its main parts:
 
 | Part | Job |

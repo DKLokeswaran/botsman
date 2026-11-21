@@ -1,4 +1,4 @@
-import type { Bot } from "@botsman/protocol";
+import type { Bot } from "@botsman/client-core";
 import { MARK_STROKE, MARKS } from "@botsman/tokens";
 import { Image, StyleSheet, Text, View } from "react-native";
 import Svg, { Path } from "react-native-svg";

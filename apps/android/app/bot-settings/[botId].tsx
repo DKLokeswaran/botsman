@@ -1,6 +1,5 @@
-import { APPROVAL_WAITS, approvalWaitLabel, PERMISSION_MODES } from "@botsman/client-core";
+import { APPROVAL_WAITS, approvalWaitLabel, PERMISSION_MODES, type Bot, type BotUpdate } from "@botsman/client-core";
 import { useAction, useBot, useBotsmanClient } from "@botsman/client-core/react";
-import type { Bot, BotUpdate } from "@botsman/protocol";
 import { useLocalSearchParams } from "expo-router";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 import { space, useTheme } from "../../src/theme";

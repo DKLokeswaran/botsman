@@ -1,6 +1,5 @@
-import { type ChatController, modelChipLabel, type SendMode, type SlashCommand, type SlashScreen } from "@botsman/client-core";
+import { type ChatController, modelChipLabel, type SendMode, type SlashCommand, type SlashScreen, type Bot, type ChatSettings } from "@botsman/client-core";
 import { useComposer, useModels } from "@botsman/client-core/react";
-import type { Bot, ChatSettings } from "@botsman/protocol";
 import { ICONS } from "@botsman/tokens";
 import { type KeyboardEvent, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { MarkIcon } from "./avatar.tsx";

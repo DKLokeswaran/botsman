@@ -1,6 +1,5 @@
-import { formatCountdown, memoryDiff, memoryEditText } from "@botsman/client-core";
+import { formatCountdown, memoryDiff, memoryEditText, type Approval } from "@botsman/client-core";
 import { useAction, useApproval, useBot, useBotsmanClient, useNow } from "@botsman/client-core/react";
-import type { Approval } from "@botsman/protocol";
 import { ScrollView, StyleSheet, Text, View } from "react-native";
 import { fontFamilies, radius, space, useTheme } from "../theme";
 import { Button } from "../ui/button";

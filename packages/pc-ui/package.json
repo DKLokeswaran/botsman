@@ -12,7 +12,6 @@
   },
   "dependencies": {
     "@botsman/client-core": "workspace:*",
-    "@botsman/protocol": "workspace:*",
     "@botsman/tokens": "workspace:*",
     "@fontsource/fragment-mono": "5.3.0",
     "@fontsource/inter": "5.3.0",
