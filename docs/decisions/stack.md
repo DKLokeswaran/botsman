@@ -75,16 +75,17 @@ flowchart LR
 1. `protocol` imports no other workspace package.
 2. `tokens` imports no other workspace package.
 3. `client-core` imports only `protocol`.
-4. Nothing outside `server` imports from it, except `client-core`'s tests, which run the client against a real server.
-5. `pc-ui` imports only `client-core` and `tokens`. It takes the protocol's types from `client-core`.
-6. `apps/android` imports only `client-core` and `tokens`, never `protocol` or `pc-ui`.
-7. `apps/windows` and `apps/web` import only `pc-ui`. It re-exports the types they need.
-8. No app imports another app.
-9. Only the server's `engine` module imports Pi Durable. The server's tests may import it to test the engine.
-10. Only the server and `protocol` import Pi packages, and `protocol` imports only `pi-schema`. Apps never see Pi's formats, so a Pi upgrade changes no client code.
-11. Code that ships imports only its own package's dependencies. Tests, scripts, config files, and type-only imports may use devDependencies, and a peerDependency also listed as a devDependency for type checks counts as a dependency.
+4. `server` imports only `protocol`.
+5. Nothing outside `server` imports from it, except `client-core`'s tests, which run the client against a real server.
+6. `pc-ui` imports only `client-core` and `tokens`. It takes the protocol's types from `client-core`.
+7. `apps/android` imports only `client-core` and `tokens`, never `protocol` or `pc-ui`.
+8. `apps/windows` and `apps/web` import only `pc-ui`. It re-exports the types they need.
+9. No app imports another app.
+10. Only the server's `engine` module imports Pi Durable. The server's tests may import it to test the engine.
+11. Only the server and `protocol` import Pi packages, and `protocol` imports only `pi-schema`. Apps never see Pi's formats, so a Pi upgrade changes no client code.
+12. Code that ships imports only its own package's dependencies. Tests, scripts, config files, and type-only imports may use devDependencies, and a peerDependency also listed as a devDependency for type checks counts as a dependency.
 
-The re-exports behind rules 5 and 7 carry types only, through `export type *`, so the protocol's and `client-core`'s functions stay out of the screens and shells.
+The re-exports behind rules 6 and 8 carry types only, through `export type *`, so the protocol's and `client-core`'s functions stay out of the screens and shells.
 
 ## Code rules
 

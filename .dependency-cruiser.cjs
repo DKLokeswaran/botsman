@@ -18,6 +18,7 @@ module.exports = {
       "packages/client-core",
       "packages/protocol",
     ]),
+    onlyImports("server-imports-only-protocol", "The server imports only protocol.", "^server/", ["packages/protocol"]),
     {
       name: "only-client-core-tests-import-server",
       comment: "Nothing outside server/ imports it, except client-core's tests, which run the client against a real server.",
