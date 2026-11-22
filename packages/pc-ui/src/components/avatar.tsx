@@ -1,4 +1,4 @@
-import type { Bot } from "@botsman/protocol";
+import type { Bot } from "@botsman/client-core";
 import { MARK_STROKE, MARKS } from "@botsman/tokens";
 
 // A bot's picture: its uploaded photo, its chosen mark, or a square with its initial.

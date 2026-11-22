@@ -1,6 +1,5 @@
-import { type ChatController, modelChipLabel, type SendMode, type SlashCommand, type SlashScreen } from "@botsman/client-core";
+import { type ChatController, modelChipLabel, type SendMode, type SlashCommand, type SlashScreen, type Bot, type ChatSettings } from "@botsman/client-core";
 import { useComposer, useModels } from "@botsman/client-core/react";
-import type { Bot, ChatSettings } from "@botsman/protocol";
 import { ICONS } from "@botsman/tokens";
 import { type KeyboardEvent, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { MarkIcon } from "./avatar.tsx";
@@ -44,31 +43,38 @@ export function Composer({ chat, bot, settings, sendModes, busy }: { chat: ChatC
         <button type="button" aria-expanded={picking} onClick={() => setPicking(!picking)} className="truncate rounded-md bg-muted px-2.5 py-1.5 text-xs font-semibold hover:bg-accent">
           {modelChipLabel(settings, models)}
         </button>
-        {busy ? (
-          <>
-            {sendModes.includes("queue") ? (
-              <Button variant="text" disabled={empty} onClick={() => send("queue")}>
-                Queue
-              </Button>
-            ) : null}
-            {sendModes.includes("steer") ? (
-              <Button disabled={empty} onClick={() => send("steer")}>
-                Steer
-              </Button>
-            ) : null}
-            <Button variant="danger" disabled={stop.busy} onClick={() => void stop.run()}>
-              <span aria-hidden className="size-2.5 rounded-[1px] bg-current" /> Stop
-            </Button>
-          </>
-        ) : (
-          <button type="button" aria-label="Send" disabled={empty} onClick={() => send("send")} className="flex size-9 items-center justify-center rounded-lg bg-primary text-primary-foreground hover:opacity-90 disabled:opacity-40">
-            <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
-              <path d="M12 19V5M5 12l7-7 7 7" />
-            </svg>
-          </button>
-        )}
+        <SendButtons busy={busy} sendModes={sendModes} empty={empty} send={send} stop={stop} />
       </div>
     </div>
+  );
+}
+
+type Composing = ReturnType<typeof useComposer>;
+
+// Send while the bot is idle. While it works: Queue and Steer where the chat offers them, and Stop.
+function SendButtons({ busy, sendModes, empty, send, stop }: { busy: boolean; sendModes: SendMode[]; empty: boolean; send: Composing["send"]; stop: Composing["stop"] }) {
+  return busy ? (
+    <>
+      {sendModes.includes("queue") ? (
+        <Button variant="text" disabled={empty} onClick={() => send("queue")}>
+          Queue
+        </Button>
+      ) : null}
+      {sendModes.includes("steer") ? (
+        <Button disabled={empty} onClick={() => send("steer")}>
+          Steer
+        </Button>
+      ) : null}
+      <Button variant="danger" disabled={stop.busy} onClick={() => void stop.run()}>
+        <span aria-hidden className="size-2.5 rounded-[1px] bg-current" /> Stop
+      </Button>
+    </>
+  ) : (
+    <button type="button" aria-label="Send" disabled={empty} onClick={() => send("send")} className="flex size-9 items-center justify-center rounded-lg bg-primary text-primary-foreground hover:opacity-90 disabled:opacity-40">
+      <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+        <path d="M12 19V5M5 12l7-7 7 7" />
+      </svg>
+    </button>
   );
 }
 

@@ -17,7 +17,7 @@ import { toChatMessage } from "../events/chat-view.ts";
 import type { Services } from "../services.ts";
 
 export function registerChatRoutes(app: FastifyInstance, services: Services): void {
-  const { bots, engine, feed, registry } = services;
+  const { engine } = services;
   const opts = { schema: { params: IdParams } };
 
   app.get<{ Params: IdParams }>("/api/bots/:id/chat", opts, async (request): Promise<ChatSnapshot> => {
@@ -68,16 +68,21 @@ export function registerChatRoutes(app: FastifyInstance, services: Services): vo
     return { ok: true };
   });
 
-  app.patch<{ Params: IdParams; Body: ChatSettingsUpdate }>("/api/bots/:id/chat/settings", { schema: { params: IdParams, body: ChatSettingsUpdate } }, async (request): Promise<ChatSettings> => {
-    const bot = runnableBot(services, request.params.id);
-    const model = request.body.model;
-    if (model && !services.catalog.hasModel(model.provider, model.modelId)) throw badRequest(`Unknown model ${model.provider}/${model.modelId}`);
-    registry.setChatSettings(bot.id, model, request.body.thinkingLevel);
-    await engine.configure(bots.get(bot.id));
-    const settings = registry.chatSettings(bot);
-    feed.settingsChanged(bot.id, settings);
-    return settings;
-  });
+  app.patch<{ Params: IdParams; Body: ChatSettingsUpdate }>("/api/bots/:id/chat/settings", { schema: { params: IdParams, body: ChatSettingsUpdate } }, async (request): Promise<ChatSettings> =>
+    updateChatSettings(services, runnableBot(services, request.params.id), request.body),
+  );
+}
+
+// Saves the chat's model and thinking level, applies them to the running bot, and tells every app.
+async function updateChatSettings(services: Services, bot: Bot, change: ChatSettingsUpdate): Promise<ChatSettings> {
+  const { bots, engine, feed, registry } = services;
+  const model = change.model;
+  if (model && !services.catalog.hasModel(model.provider, model.modelId)) throw badRequest(`Unknown model ${model.provider}/${model.modelId}`);
+  registry.setChatSettings(bot.id, model, change.thinkingLevel);
+  await engine.configure(bots.get(bot.id));
+  const settings = registry.chatSettings(bot);
+  feed.settingsChanged(bot.id, settings);
+  return settings;
 }
 
 // Bots never run unsandboxed: chat is refused while sandboxes don't work.

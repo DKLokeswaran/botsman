@@ -10,7 +10,7 @@ export function ChooseServerScreen({ app, address, error }: { app: AppController
   const [value, setValue] = useState(address);
   const connect = useAction(() => app.connect(value));
   return (
-    <EntryCard title="Connect to your server" lede="Enter the address of your Botsman server. It must use HTTPS." error={connect.error ?? error} onSubmit={() => void connect.run()}>
+    <EntryCard title="Connect to your server" lede="Enter the address of your server. It must use HTTPS." error={connect.error ?? error} onSubmit={() => void connect.run()}>
       <Field label="Server address" value={value} onChange={(event) => setValue(event.target.value)} placeholder="https://bots.example.com" spellCheck={false} autoFocus />
       <Button type="submit" variant="primary" disabled={connect.busy || value.trim() === ""}>
         Connect

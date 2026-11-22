@@ -19,7 +19,7 @@ export function useLoaded<T>(load: () => Promise<T>, inputs: readonly unknown[],
       current = false;
       clearTimeout(timer);
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    // Loads again only when an input changes or on `reload`. A new `load` on each render doesn't reload.
   }, [...inputs, round]);
   return { value, error, reload };
 }

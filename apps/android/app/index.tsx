@@ -1,6 +1,5 @@
-import { botRowText, formatCountdown } from "@botsman/client-core";
+import { botRowText, formatCountdown, type Approval, type Bot } from "@botsman/client-core";
 import { useAppName, useBotActivity, useBots, useConnectionStatus, useNeedsYou, useNow, useServerState } from "@botsman/client-core/react";
-import type { Approval, Bot } from "@botsman/protocol";
 import { router } from "expo-router";
 import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";

@@ -1,6 +1,5 @@
-import { ALERT_CHOICES, THEME_MODES, type ThemeMode, type AppController, type BotsmanClient, deviceDetail } from "@botsman/client-core";
+import { ALERT_CHOICES, THEME_MODES, type ThemeMode, type AppController, type BotsmanClient, deviceDetail, type DeviceSession } from "@botsman/client-core";
 import { useAlertSettings, useDevices } from "@botsman/client-core/react";
-import type { DeviceSession } from "@botsman/protocol";
 import { ErrorText, LinkRow, Page, Segmented, ToggleRow } from "../components/page.tsx";
 import { Button } from "../components/ui/button.tsx";
 import { AppVersion } from "../components/app-version.tsx";

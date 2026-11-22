@@ -26,7 +26,7 @@ export function useNewBotDraft(onCreated: (botId: string) => void) {
     const bot = await client.createBot({ name: name.trim(), description: description.trim(), purpose: purpose.trim(), defaultModel: model, folder: folder.trim() });
     onCreated(bot.id);
   });
-  const free = space === undefined ? "" : ` Free space: ${formatBytes(space.freeBytes)} of ${formatBytes(space.totalBytes)}.`;
+  const folderAllowed = space?.allowed !== false;
   return {
     name,
     setName,
@@ -40,9 +40,22 @@ export function useNewBotDraft(onCreated: (botId: string) => void) {
     setModel: setPicked,
     folder,
     setFolder,
-    folderHint: `Leave it empty for the default. The bot can read and write everything in this folder.${free}`,
-    error: problem ?? (space?.allowed === false ? space.reason : undefined) ?? create.error,
-    ready: name.trim() !== "" && problem === undefined && space?.allowed !== false,
+    folderHint: folderHint(space),
+    error: problem ?? folderRefusal(space) ?? create.error,
+    ready: name.trim() !== "" && problem === undefined && folderAllowed,
     create,
   };
+}
+
+type FreeSpace = ReturnType<typeof useFreeSpace>;
+
+// The folder field's hint, with the folder's free space once it is known.
+function folderHint(space: FreeSpace): string {
+  const free = space === undefined ? "" : ` Free space: ${formatBytes(space.freeBytes)} of ${formatBytes(space.totalBytes)}.`;
+  return `Leave it empty for the default. The bot can read and write everything in this folder.${free}`;
+}
+
+// Why the server refuses the folder, if it does.
+function folderRefusal(space: FreeSpace): string | undefined {
+  return space?.allowed === false ? space.reason : undefined;
 }

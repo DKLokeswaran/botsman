@@ -1,4 +1,4 @@
-import type { AppUpdater } from "@botsman/client-core";
+import type { AppUpdater } from "@botsman/pc-ui";
 import { getVersion } from "@tauri-apps/api/app";
 import { check } from "@tauri-apps/plugin-updater";
 

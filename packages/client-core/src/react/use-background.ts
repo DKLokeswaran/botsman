@@ -18,7 +18,7 @@ export function useBackgroundStatus(background: BackgroundAlerts, onResume?: (re
       clearInterval(timer);
       stopListening?.();
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    // Starts again only when the connection or the setting changes. A new `onResume` on each render doesn't restart it.
   }, [background, enabled]);
   return { enabled, status };
 }

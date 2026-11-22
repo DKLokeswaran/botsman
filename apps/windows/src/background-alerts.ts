@@ -1,4 +1,4 @@
-import type { BackgroundAlertsService } from "@botsman/client-core";
+import type { BackgroundAlertsService } from "@botsman/pc-ui";
 import { invoke } from "@tauri-apps/api/core";
 
 // The alerts connection in Rust, which keeps running while the window is hidden in the tray.

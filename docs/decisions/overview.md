@@ -115,6 +115,8 @@ Rust and Kotlin message types for the alerts stream are generated from the same 
 
 The `client-core` package holds login, reconnect, catch-up, state, approvals, sending, and retries, in plain TypeScript with no DOM dependency. React hooks wrap it, so a screen on either app gets the same data and actions.
 
+Only `client-core` and the server depend on `protocol`. `client-core` re-exports the protocol's types with `export type *`, so screens take message types such as `Bot` from `client-core`. The re-export carries types only, so the protocol's functions can't be called from a screen.
+
 Its main parts:
 
 | Part | Job |
@@ -131,7 +133,7 @@ The `pc-ui` package holds the Windows and web screens, and Android builds its ow
 
 Android's screens are separate, because the best Android chat needs native views. Between Android and the other two apps, roughly 40% of client code is shared, by estimate: nearly all logic and none of the screens.
 
-`apps/windows` and `apps/web` are thin shells around `pc-ui`, so the web dashboard needs no screens of its own.
+`apps/windows` and `apps/web` are thin shells around `pc-ui`, so the web dashboard needs no screens of its own. Both depend on `pc-ui` alone. `pc-ui` re-exports `client-core`'s types, the protocol's among them, with `export type *`, so a shell takes the platform interfaces it implements, such as `TokenStore` and `AppUpdater`, from `pc-ui`.
 
 | Need | Windows | Web | Android |
 | --- | --- | --- | --- |

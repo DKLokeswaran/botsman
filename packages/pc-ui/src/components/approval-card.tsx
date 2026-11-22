@@ -1,6 +1,5 @@
-import { formatCountdown, memoryDiff, memoryEditText } from "@botsman/client-core";
+import { formatCountdown, memoryDiff, memoryEditText, type Approval } from "@botsman/client-core";
 import { useAction, useApproval, useBot, useBotsmanClient, useNow } from "@botsman/client-core/react";
-import type { Approval } from "@botsman/protocol";
 import { Button } from "./ui/button.tsx";
 
 // A tool call waiting for the owner: why the bot asks, the full command, the time left, and the answers.

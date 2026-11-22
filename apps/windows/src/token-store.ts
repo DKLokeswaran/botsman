@@ -1,5 +1,4 @@
-import type { TokenStore } from "@botsman/client-core";
-import type { Tokens } from "@botsman/protocol";
+import type { TokenStore, Tokens } from "@botsman/pc-ui";
 import { invoke } from "@tauri-apps/api/core";
 
 // The session's tokens, kept in Windows Credential Manager by the Rust side.

@@ -1,6 +1,5 @@
-import { type ChatController, modelChipLabel, type SendMode, type SlashCommand, type SlashScreen } from "@botsman/client-core";
+import { type ChatController, modelChipLabel, type SendMode, type SlashCommand, type SlashScreen, type Bot, type ChatSettings } from "@botsman/client-core";
 import { useComposer, useModels } from "@botsman/client-core/react";
-import type { Bot, ChatSettings } from "@botsman/protocol";
 import { router } from "expo-router";
 import { useState } from "react";
 import { Pressable, StyleSheet, Text, TextInput, useWindowDimensions, View } from "react-native";

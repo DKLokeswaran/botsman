@@ -1,6 +1,5 @@
-import { modelLabel, sameModel } from "@botsman/client-core";
+import { modelLabel, sameModel, type ModelInfo, type ModelRef } from "@botsman/client-core";
 import { useNewBotDraft } from "@botsman/client-core/react";
-import type { ModelInfo, ModelRef } from "@botsman/protocol";
 import { router } from "expo-router";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 import { space, useTheme } from "../src/theme";

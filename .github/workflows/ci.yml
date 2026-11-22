@@ -21,6 +21,7 @@ jobs:
       - uses: actions/checkout@v7
       - uses: ./.github/actions/setup
       - run: pnpm -r typecheck
+      - run: pnpm lint
       - run: pnpm -r test
       - run: pnpm --filter @botsman/web build
       - name: Bundle the Android app's JavaScript

@@ -55,11 +55,19 @@ function failureItems(live: LiveState): ChatItem[] {
 
 // A short line saying what a tool call does: the command, the path, or the first argument.
 export function toolSummary(name: string, args: Record<string, unknown>): string {
-  const main = args.command ?? args.path ?? args.file ?? args.query ?? args.url ?? args.action ?? Object.values(args)[0];
-  const detail = typeof main === "string" ? main : main === undefined ? "" : JSON.stringify(main);
-  const oneLine = detail.replace(/\s+/g, " ").trim();
+  const oneLine = mainArgument(args).replace(/\s+/g, " ").trim();
   const cut = oneLine.length > SUMMARY_LENGTH ? `${oneLine.slice(0, SUMMARY_LENGTH)}…` : oneLine;
   return cut === "" ? name : `${name} · ${cut}`;
+}
+
+const SUMMARY_KEYS = ["command", "path", "file", "query", "url", "action"];
+
+// The argument that best says what a call does, as text: the first of SUMMARY_KEYS that is set, or else the first one.
+function mainArgument(args: Record<string, unknown>): string {
+  const key = SUMMARY_KEYS.find((name) => args[name] !== undefined && args[name] !== null);
+  const main = key === undefined ? Object.values(args)[0] : args[key];
+  if (main === undefined) return "";
+  return typeof main === "string" ? main : JSON.stringify(main);
 }
 
 // The bot's messages between two owner messages or notices form one run. Tool results are drawn inside their call.
@@ -132,15 +140,24 @@ function totalUsage(messages: Assistant[]): Usage | null {
 // What is happening right now joins the run it belongs to: the run after the owner's latest message, or a new one
 // when nothing has arrived yet, so the chat shows the bot working from the moment it starts.
 function addLive(items: ChatItem[], live: LiveState): ChatItem[] {
-  if (!live.running && live.streamingText === "" && live.streamingThinking === "" && live.tools.length === 0) return items;
+  if (isIdle(live)) return items;
   const last = items.at(-1);
   const current: RunItem = last?.kind === "run" ? last : { kind: "run", id: LIVE_ID, at: null, steps: [], model: null, usage: null, error: null, working: false };
+  const updated = withLive(current, live);
+  return last?.kind === "run" ? [...items.slice(0, -1), updated] : [...items, updated];
+}
+
+function isIdle(live: LiveState): boolean {
+  return !live.running && live.streamingText === "" && live.streamingThinking === "" && live.tools.length === 0;
+}
+
+// The run with the live thinking, tools not yet in its steps, and streaming text added at the end.
+function withLive(current: RunItem, live: LiveState): RunItem {
   const settledCalls = new Set(current.steps.flatMap((step) => (step.kind === "work" ? step.tools.map((tool) => tool.callId) : [])));
   const steps = current.steps.map((step) => (step.kind === "work" ? { ...step, tools: [...step.tools] } : step));
   addWork(steps, `${LIVE_ID}-work`, live.streamingThinking, live.tools.filter((tool) => !settledCalls.has(tool.callId)).map(liveTool));
   if (live.streamingText !== "") steps.push({ kind: "text", id: `${LIVE_ID}-text`, text: live.streamingText });
-  const updated: RunItem = { ...current, steps, error: live.running ? null : current.error, working: live.running };
-  return last?.kind === "run" ? [...items.slice(0, -1), updated] : [...items, updated];
+  return { ...current, steps, error: live.running ? null : current.error, working: live.running };
 }
 
 function toolResults(messages: ChatMessage[]): Map<string, ToolResult> {

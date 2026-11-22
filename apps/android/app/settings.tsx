@@ -1,6 +1,5 @@
-import { ALERT_CHOICES, THEME_MODES, deviceDetail } from "@botsman/client-core";
+import { ALERT_CHOICES, THEME_MODES, deviceDetail, type DeviceSession } from "@botsman/client-core";
 import { useAlertSettings, useBotsmanClient, useDevices } from "@botsman/client-core/react";
-import type { DeviceSession } from "@botsman/protocol";
 import { router } from "expo-router";
 import { StyleSheet, Text, View } from "react-native";
 import { useAppController } from "../src/app-context";

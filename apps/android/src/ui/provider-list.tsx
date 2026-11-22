@@ -1,6 +1,5 @@
-import { loginView, providerStatus } from "@botsman/client-core";
+import { loginView, providerStatus, type Provider } from "@botsman/client-core";
 import { useAction, useBotsmanClient, useLogin, useProviders } from "@botsman/client-core/react";
-import type { Provider } from "@botsman/protocol";
 import * as Linking from "expo-linking";
 import { useState } from "react";
 import { StyleSheet, Text, View } from "react-native";
@@ -72,7 +71,6 @@ function ApiKeyForm({ provider, onDone }: { provider: Provider; onDone: () => vo
 
 // A browser sign-in the server runs: open the address, enter any code there, and answer what the provider asks.
 function SignIn({ provider }: { provider: Provider }) {
-  const { colors } = useTheme();
   const client = useBotsmanClient();
   const [loginId, setLoginId] = useState<string>();
   const login = useLogin(loginId);
@@ -84,6 +82,15 @@ function SignIn({ provider }: { provider: Provider }) {
         <Button label="Start sign-in" variant="primary" disabled={start.busy} onPress={() => void start.run()} />
       </View>
     );
+  return <LoginSteps login={login} onRestart={() => setLoginId(undefined)} />;
+}
+
+type Login = NonNullable<ReturnType<typeof useLogin>>;
+type LoginView = ReturnType<typeof loginView>;
+
+// The running sign-in: the address to open, any code to enter, the provider's question, and how it ended.
+function LoginSteps({ login, onRestart }: { login: Login; onRestart: () => void }) {
+  const { colors } = useTheme();
   const view = loginView(login);
   return (
     <View style={styles.group}>
@@ -106,15 +113,26 @@ function SignIn({ provider }: { provider: Provider }) {
         </View>
       )}
       {view.prompt === undefined ? null : <LoginPrompt key={view.prompt.promptId} loginId={login.id} prompt={view.prompt} />}
-      {view.outcome === "running" && view.progress !== undefined ? <Note>{view.progress}</Note> : null}
-      {view.outcome === "connected" ? <Text style={[pageStyles.rowTitle, { color: colors.primary }]}>Connected.</Text> : null}
-      {view.outcome === "failed" || view.outcome === "cancelled" ? <ErrorText>{view.error ?? "The sign-in stopped."}</ErrorText> : null}
-      {view.outcome === "running" ? <Button label="Cancel sign-in" variant="text" onPress={() => void client.cancelLogin(login.id)} /> : <Button label="Start again" variant="text" onPress={() => setLoginId(undefined)} />}
+      <LoginOutcome view={view} loginId={login.id} onRestart={onRestart} />
     </View>
   );
 }
 
-function LoginPrompt({ loginId, prompt }: { loginId: string; prompt: NonNullable<ReturnType<typeof loginView>["prompt"]> }) {
+// Progress while the sign-in runs, how it ended, and a way to cancel it or start again.
+function LoginOutcome({ view, loginId, onRestart }: { view: LoginView; loginId: string; onRestart: () => void }) {
+  const { colors } = useTheme();
+  const client = useBotsmanClient();
+  return (
+    <>
+      {view.outcome === "running" && view.progress !== undefined ? <Note>{view.progress}</Note> : null}
+      {view.outcome === "connected" ? <Text style={[pageStyles.rowTitle, { color: colors.primary }]}>Connected.</Text> : null}
+      {view.outcome === "failed" || view.outcome === "cancelled" ? <ErrorText>{view.error ?? "The sign-in stopped."}</ErrorText> : null}
+      {view.outcome === "running" ? <Button label="Cancel sign-in" variant="text" onPress={() => void client.cancelLogin(loginId)} /> : <Button label="Start again" variant="text" onPress={onRestart} />}
+    </>
+  );
+}
+
+function LoginPrompt({ loginId, prompt }: { loginId: string; prompt: NonNullable<LoginView["prompt"]> }) {
   const client = useBotsmanClient();
   const [value, setValue] = useState(prompt.options[0]?.id ?? "");
   const answer = useAction(() => client.answerLogin(loginId, prompt.promptId, value));

@@ -1,6 +1,5 @@
-import { botNameProblem, modelDefaultLabel, photoAvatar } from "@botsman/client-core";
+import { botNameProblem, modelDefaultLabel, photoAvatar, type Avatar as AvatarValue, type Bot } from "@botsman/client-core";
 import { useAction, useBot, useBotsmanClient } from "@botsman/client-core/react";
-import type { Avatar as AvatarValue, Bot } from "@botsman/protocol";
 import { MARK_IDS, MARKS } from "@botsman/tokens";
 import { router, useLocalSearchParams } from "expo-router";
 import { useState } from "react";

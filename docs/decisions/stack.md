@@ -34,6 +34,8 @@
 | Builds and checks | GitHub Actions | See [GitHub Actions](#github-actions) |
 | Tests | Vitest 5.0.5, using Pi's faux model provider through a scripted test model | Tests run with no model bills. M1 has no test against a real model. |
 | Type checks | TypeScript 6.0.3, `tsc` with no emit | Checks the sources Node runs as they are |
+| Import rules | dependency-cruiser 18.8.0 | Checks where each import resolves, so a relative path can't get around a rule. One command for agents and CI. See [import rules](#import-rules). |
+| Code rules | ESLint 10.14.0 with `@typescript-eslint/parser` 8.72.1, and stylelint 18.0.0 | Only the rules below, most of them the repo's own, with no shared rule sets. See [code rules](#code-rules). |
 
 ## Repo layout
 
@@ -50,6 +52,59 @@ deploy                  install script, systemd unit, and AppArmor profile
 mockups                 clickable UI reference
 docs                    this documentation
 ```
+
+## Import rules
+
+Each package imports only the packages below it:
+
+```mermaid
+flowchart LR
+    protocol --> core["client-core"]
+    protocol --> server
+    core --> pcui["pc-ui"]
+    tokens --> pcui
+    core --> android["apps/android"]
+    tokens --> android
+    pcui --> windows["apps/windows"]
+    pcui --> web["apps/web"]
+    server -. "tests only" .-> core
+```
+
+`pnpm lint:imports` checks these rules with dependency-cruiser, from `.dependency-cruiser.cjs` at the repo root. It runs on every pull request, and anyone changing imports runs it before finishing. A rule checks where an import resolves on disk, so a relative path into another package breaks it the same way the package's name does.
+
+1. `protocol` imports no other workspace package.
+2. `tokens` imports no other workspace package.
+3. `client-core` imports only `protocol`.
+4. `server` imports only `protocol`.
+5. Nothing outside `server` imports from it, except `client-core`'s tests, which run the client against a real server.
+6. `pc-ui` imports only `client-core` and `tokens`. It takes the protocol's types from `client-core`.
+7. `apps/android` imports only `client-core` and `tokens`, never `protocol` or `pc-ui`.
+8. `apps/windows` and `apps/web` import only `pc-ui`. It re-exports the types they need.
+9. No app imports another app.
+10. Only the server's `engine` module imports Pi Durable. The server's tests may import it to test the engine.
+11. Only the server and `protocol` import Pi packages, and `protocol` imports only `pi-schema`. Apps never see Pi's formats, so a Pi upgrade changes no client code.
+12. Code that ships imports only its own package's dependencies. Tests, scripts, config files, and type-only imports may use devDependencies, and a peerDependency also listed as a devDependency for type checks counts as a dependency.
+
+The re-exports behind rules 6 and 8 carry types only, through `export type *`, so the protocol's and `client-core`'s functions stay out of the screens and shells.
+
+## Code rules
+
+`pnpm lint` runs the import rules above, then ESLint from `eslint.config.js` and stylelint from `stylelint.config.js`, both at the repo root. The repo's own rules are in `lint/`. It runs on every pull request, and every change runs it before finishing.
+
+| Rule | Where | Why |
+| --- | --- | --- |
+| Complexity at most 10 | Code that ships | Functions stay small enough to read. |
+| At most 50 lines per function, not counting blank lines and comments | Code that ships | Same reason. |
+| A warning for a named function that only passes its parameters to another function | Code that ships | Small functions shouldn't turn into wrappers that add no meaning. It warns rather than fails, because some wrappers hide a private member on purpose. |
+| No `eval`, `new Function`, or code in a string passed to a timer | All TypeScript | A string from a bot or a web page must never run as code. |
+| No outside font host, in code or stylesheets, and no stylesheet loaded from another host | All TypeScript and stylesheets | Fonts ship inside the apps. |
+| No `dangerouslySetInnerHTML` and no `rehype-raw` | Client packages | Replies render Markdown with no raw HTML. |
+| No hex colours | Client packages and stylesheets outside `tokens` | Colours come from the `tokens` package. |
+| The app's name is never written out | Client packages | It comes from `APP_NAME`, so a preview build says Botsman Preview. |
+| No `fetch`, `WebSocket`, `localStorage`, `sessionStorage`, `indexedDB`, `expo-sqlite`, or `expo-secure-store` | Screens and their components on both apps | Screens hold no logic. They reach the network and storage through `client-core` and the platform shells. |
+| `process.env` only in `server/src/config.ts` | The server's code | The server reads its settings in one place and never reads provider keys from its environment. |
+
+Code that ships is `src/` in every package and app, and Android's `app/`. Tests, scripts, and config files are left out of the size rules. Client packages are `pc-ui` and the three apps.
 
 ## Versions and releases
 

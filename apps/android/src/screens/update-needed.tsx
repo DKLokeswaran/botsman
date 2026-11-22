@@ -9,7 +9,7 @@ import { ServerUpdateSteps } from "../ui/server-version";
 
 const COPY = {
   update_app: { title: "Update the app", lede: "This app is too old for your server. Install the newest version of the app, then open it again." },
-  update_server: { title: "Update the server", lede: "Your server is older than this app. Update Botsman on the server, then try again." },
+  update_server: { title: "Update the server", lede: "Your server is older than this app. Update the server, then try again." },
 };
 
 // Shown when the app and the server share no protocol version. Nothing else works until one side is updated.

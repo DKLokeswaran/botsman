@@ -24,3 +24,6 @@ export * from "./background-alerts.ts";
 export * from "./local-cache.ts";
 export * from "./memory-diff.ts";
 export * from "./theme-mode.ts";
+
+// The protocol's types, for screens and shells. Only types: its functions stay inside client-core.
+export type * from "@botsman/protocol";

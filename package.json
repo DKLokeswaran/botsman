@@ -9,6 +9,16 @@
   "scripts": {
     "test": "pnpm -r test",
     "typecheck": "pnpm -r typecheck",
+    "lint": "pnpm lint:imports && pnpm lint:code && pnpm lint:styles",
+    "lint:imports": "depcruise packages apps server --config .dependency-cruiser.cjs",
+    "lint:code": "eslint .",
+    "lint:styles": "stylelint \"packages/*/src/**/*.css\" \"apps/*/src/**/*.css\" --allow-empty-input",
     "start": "pnpm --filter @botsman/server start"
+  },
+  "devDependencies": {
+    "@typescript-eslint/parser": "8.72.1",
+    "dependency-cruiser": "18.8.0",
+    "eslint": "10.14.0",
+    "stylelint": "18.0.0"
   }
 }

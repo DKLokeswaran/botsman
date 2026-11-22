@@ -1,6 +1,5 @@
-import { modelLabel, sameModel } from "@botsman/client-core";
+import { modelLabel, sameModel, type ModelInfo, type ModelRef } from "@botsman/client-core";
 import { useNewBotDraft } from "@botsman/client-core/react";
-import type { ModelInfo, ModelRef } from "@botsman/protocol";
 import { ErrorText, Page } from "../components/page.tsx";
 import { Button } from "../components/ui/button.tsx";
 import { Field } from "../components/ui/field.tsx";
