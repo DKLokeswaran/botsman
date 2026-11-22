@@ -89,8 +89,10 @@ class AlertsService : Service() {
       webSocket.send(hello.toJson().toString())
     }
 
+    // A frame that can't be read is skipped and the socket stays open, as on Windows.
     override fun onMessage(webSocket: WebSocket, text: String) {
-      when (val message = AlertsServerMessage.fromJson(JSONObject(text))) {
+      val message = runCatching { AlertsServerMessage.fromJson(JSONObject(text)) }.getOrNull() ?: return
+      when (message) {
         is AlertsServerMessage.Ready -> onReady()
         is AlertsServerMessage.Alert -> onAlert(message)
         is AlertsServerMessage.Reset -> onPosition(message.epoch, message.seq)
