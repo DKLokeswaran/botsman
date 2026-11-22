@@ -85,19 +85,17 @@ class AlertsService : Service() {
 
   private inner class Listener(private val token: String) : WebSocketListener() {
     override fun onOpen(webSocket: WebSocket, response: Response) {
-      val hello = AlertsClientMessage.Hello(token, prefs.epoch, prefs.seq.toLong())
-      webSocket.send(hello.toJson().toString())
+      val hello = JSONObject().put("type", "hello").put("token", token).put("epoch", prefs.epoch).put("seq", prefs.seq)
+      webSocket.send(hello.toString())
     }
 
-    // A frame that can't be read is skipped and the socket stays open, as on Windows.
     override fun onMessage(webSocket: WebSocket, text: String) {
-      val message = runCatching { AlertsServerMessage.fromJson(JSONObject(text)) }.getOrNull() ?: return
-      when (message) {
-        is AlertsServerMessage.Ready -> onReady()
-        is AlertsServerMessage.Alert -> onAlert(message)
-        is AlertsServerMessage.Reset -> onPosition(message.epoch, message.seq)
-        is AlertsServerMessage.Error -> onRefused(message)
-        else -> {}
+      val message = JSONObject(text)
+      when (message.optString("type")) {
+        "ready" -> onReady()
+        "alert" -> onAlert(message)
+        "reset" -> onPosition(message)
+        "error" -> onRefused(message)
       }
     }
 
@@ -116,21 +114,22 @@ class AlertsService : Service() {
     retryMs = FIRST_RETRY_MS
   }
 
-  private fun onPosition(epoch: String, seq: Long) {
+  private fun onPosition(message: JSONObject) {
     connected = true
     retryMs = FIRST_RETRY_MS
-    prefs.savePosition(epoch, seq.toInt())
+    prefs.savePosition(message.getString("epoch"), message.getInt("seq"))
   }
 
-  private fun onAlert(message: AlertsServerMessage.Alert) {
-    onPosition(message.epoch, message.seq)
+  private fun onAlert(message: JSONObject) {
+    onPosition(message)
+    val alert = message.getJSONObject("alert")
     if (appInFront) return
-    notifyAlert(message.alert.id, message.alert.kind.value, message.alert.botId)
+    notifyAlert(alert.getString("id"), alert.getString("kind"), alert.getString("botId"))
   }
 
   // The device was signed out, so its token no longer works. The connection stops until the owner signs in again.
-  private fun onRefused(message: AlertsServerMessage.Error) {
-    if (message.error != "unauthorized") return
+  private fun onRefused(message: JSONObject) {
+    if (message.optString("error") != "unauthorized") return
     running = false
     prefs.forget()
     stopSelf()

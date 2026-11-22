@@ -109,7 +109,7 @@ Our own schema, in the `protocol` package, defines every HTTP body and WebSocket
 - **Alerts stream.** A second, small stream carries only alert events, for the background connections.
 - **Protocol version.** The package holds one whole number that goes up on a breaking change. The server reports the range it accepts in `/api/health`, with its release version, commit, and the newest server release it knows of, and an app outside that range stops with a screen that says which side to update. Adding a field or an event leaves the number alone: apps ignore what they don't know, and treat a field a newer server added as possibly missing. See [versions and releases](stack.md#versions-and-releases).
 
-The alerts stream's messages are also written out as one JSON Schema file, `packages/protocol/schema/alerts.schema.json`, and the Windows (Rust) and Android (Kotlin) alerts connections use message types generated from it: `alerts_stream.rs` in `apps/windows/src-tauri/src` and `AlertsStream.kt` in the `botsman-alerts` module. `pnpm --filter @botsman/protocol alerts-schema` writes all three with the repo's own script, and a `protocol` test fails when a committed copy differs from a fresh run. Each generated message type and alert kind has an Unknown case, so a message type or alert kind a newer server adds is ignored rather than breaking the connection. A frame that doesn't match the generated types is skipped, and the connection stays open.
+Rust and Kotlin message types for the alerts stream are generated from the same JSON Schema.
 
 ## Apps
 
