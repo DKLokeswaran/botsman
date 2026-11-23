@@ -13,7 +13,7 @@ pnpm lint
 pnpm -r test
 ```
 
-A pull request runs these in GitHub Actions on every push. It builds the Windows and Android apps only when a maintainer adds the `build-apps` label, and a pull request from a fork never builds them. A fork builds them in the fork as below.
+A pull request runs these in GitHub Actions on every push. When it changes an app, it also builds that app once it's ready for review, and a draft builds only when a maintainer adds the `build-apps` label. A pull request merges only when these checks and the app builds pass. A pull request from a fork never builds the apps. A fork builds them in the fork as below.
 
 ## Preview apps
 

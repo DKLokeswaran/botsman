@@ -1,0 +1,30 @@
+name: App builds on request
+
+# Adding the `build-apps` label to a draft pull request builds its apps. Each push after that builds again in
+# android.yml and windows.yml, until the label is removed. This lives apart from those two so that adding any other
+# label never reports a skipped "Build the APK" or "Build the installer", which would hide an earlier failed build.
+on:
+  pull_request:
+    types: [labeled]
+
+permissions:
+  contents: read
+
+jobs:
+  android:
+    if: >-
+      github.event.label.name == 'build-apps' && github.event.pull_request.draft &&
+      github.event.pull_request.head.repo.full_name == github.repository
+    uses: ./.github/workflows/android.yml
+    secrets: inherit
+    permissions:
+      contents: write
+
+  windows:
+    if: >-
+      github.event.label.name == 'build-apps' && github.event.pull_request.draft &&
+      github.event.pull_request.head.repo.full_name == github.repository
+    uses: ./.github/workflows/windows.yml
+    secrets: inherit
+    permissions:
+      contents: write

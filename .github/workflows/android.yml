@@ -10,37 +10,50 @@ on:
       preview:
         type: boolean
         default: false
-  # A pull request builds only with the `build-apps` label, on the push or label that changes it.
+  # Which pull requests build is decided in the jobs below. Adding the `build-apps` label to a draft builds it
+  # through builds-on-request.yml.
   pull_request:
-    types: [opened, synchronize, reopened, labeled]
-    paths:
-      - apps/android/**
-      - packages/client-core/**
-      - packages/protocol/**
-      - packages/tokens/**
-      - pnpm-lock.yaml
-      - .github/workflows/android.yml
-      - .github/actions/setup/**
+    types: [opened, synchronize, reopened, ready_for_review]
 
-# A newer push cancels an older build of the same branch. Adding a label other than `build-apps` gets its own group,
-# so it never cancels a build.
+# A newer push cancels an older build of the same branch. A build asked for with the label has its own group.
 concurrency:
-  group: android-${{ github.ref }}-${{ inputs.preview && 'preview' || 'build' }}${{ github.event.action == 'labeled' && github.event.label.name != 'build-apps' && format('-{0}', github.run_id) || '' }}
+  group: android-${{ github.ref }}-${{ inputs.preview && 'preview' || github.event.action == 'labeled' && 'request' || 'build' }}
   cancel-in-progress: true
 
 permissions:
   contents: read
 
 jobs:
+  # Whether the pull request changes a file this build uses. Tests and Markdown files never go into the app.
+  changes:
+    name: Find the Android changes
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      build: ${{ steps.diff.outputs.build }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 2
+      - id: diff
+        run: |
+          used="$(git diff --name-only HEAD^1 HEAD | grep -Ev '(^|/)test/|\.md$' | grep -E '^(apps/android/|packages/(client-core|protocol|tokens)/|pnpm-lock\.yaml$|\.github/workflows/android\.yml$|\.github/actions/setup/)' || true)"
+          echo "build=$([ -n "$used" ] && echo true || echo false)" >> "$GITHUB_OUTPUT"
+          echo "${used:-No file this build uses changed.}"
+
   apk:
     name: Build the APK
-    # A pull request builds only from a branch of this repo with the `build-apps` label, and adding another label
-    # builds nothing. A pull request from a fork runs the checks in ci.yml, but never this build.
+    needs: changes
+    # On a pull request it builds when the change touches this app and the pull request is ready for review, or is a
+    # draft with the `build-apps` label. A skipped build counts as passed, which lets through a draft, which can't
+    # merge, and a change with nothing for this app. If finding the changes failed, it builds anyway. A pull request
+    # from a fork never builds, because this takes the slowest runners and would run anyone's code.
     if: >-
-      github.event_name != 'pull_request' || (
+      !cancelled() && (github.event_name != 'pull_request' || (
         github.event.pull_request.head.repo.full_name == github.repository &&
-        contains(github.event.pull_request.labels.*.name, 'build-apps') &&
-        (github.event.action != 'labeled' || github.event.label.name == 'build-apps'))
+        (needs.changes.result != 'success' || needs.changes.outputs.build == 'true') &&
+        (!github.event.pull_request.draft || contains(github.event.pull_request.labels.*.name, 'build-apps'))))
     runs-on: ubuntu-latest
     timeout-minutes: 60
     permissions:
