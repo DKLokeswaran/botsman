@@ -88,7 +88,6 @@ export async function createServices(config: Config, options: ServiceOptions = {
     latestRelease.stop();
     policy.shutDown();
     await engine.closeAll();
-    feed.close();
     sandbox.stopAll();
     db.close();
   }

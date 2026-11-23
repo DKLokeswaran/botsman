@@ -3,6 +3,10 @@ packages:
   - apps/*
   - server
 
+# client-core's tests run against a real server, and the server's tests apply patches with client-core, so each
+# lists the other as a devDependency. Nothing is built before it's checked, so recursive scripts may run in any order.
+ignoreWorkspaceCycles: true
+
 # Install scripts stay blocked unless listed here as true.
 allowBuilds:
   "@google/genai": false

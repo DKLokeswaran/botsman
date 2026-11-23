@@ -3,6 +3,7 @@ export * from "./approvals.ts";
 export * from "./auth.ts";
 export * from "./bots.ts";
 export * from "./chat.ts";
+export * from "./text-hash.ts";
 export * from "./common.ts";
 export * from "./memory.ts";
 export * from "./notes.ts";

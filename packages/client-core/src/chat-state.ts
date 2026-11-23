@@ -1,4 +1,5 @@
 import type { ChatEvent, ChatHistoryPage, ChatMessage, ChatSettings, ChatSnapshot, ChatTotals, LiveState } from "@botsman/protocol";
+import { applyLivePatch } from "./live-patch.ts";
 import type { SendMode } from "./send-rule.ts";
 
 // A message the owner sent that the chat has not shown yet, or that failed to send. `sent` turns true once the server
@@ -42,11 +43,21 @@ export function applyChatSnapshot(state: ChatState, snapshot: ChatSnapshot): Cha
   });
 }
 
-export function applyChatEvent(state: ChatState, event: ChatEvent): ChatState {
+// Applies one event. A live patch that fails its check gives undefined, and the chat then needs a fresh snapshot.
+export function applyChatEvent(state: ChatState, event: ChatEvent): ChatState | undefined {
   if (event.type === "message") return settlePending({ ...state, messages: withMessage(state.messages, event.message) });
-  if (event.type === "live") return settlePending({ ...state, live: event.live });
+  if (event.type === "live_patch") return withOptionalLive(state, applyLivePatch(state.live, event.patch));
   if (event.type === "totals") return { ...state, totals: event.totals };
   return { ...state, settings: event.settings };
+}
+
+// Sets the live state, settling a pending send that now shows in the queue.
+export function withLive(state: ChatState, live: LiveState): ChatState {
+  return settlePending({ ...state, live });
+}
+
+function withOptionalLive(state: ChatState, live: LiveState | undefined): ChatState | undefined {
+  return live === undefined ? undefined : withLive(state, live);
 }
 
 // Puts an older page of history in front of what is shown.
