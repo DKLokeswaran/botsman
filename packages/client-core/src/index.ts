@@ -6,6 +6,7 @@ export * from "./chat-controller.ts";
 export * from "./chat-items.ts";
 export * from "./chat-state.ts";
 export * from "./format.ts";
+export * from "./live-patch.ts";
 export * from "./send-rule.ts";
 export * from "./server-state.ts";
 export * from "./server-version.ts";

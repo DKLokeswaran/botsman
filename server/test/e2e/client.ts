@@ -1,3 +1,4 @@
+import { applyLivePatch, expectedHashes, hashesMatch } from "@botsman/client-core";
 import type {
   Approval,
   Bot,
@@ -6,6 +7,7 @@ import type {
   ChatEvent,
   ChatMessage,
   ChatSnapshot,
+  LivePatch,
   LiveState,
   MemoryFiles,
   NoteSearchResult,
@@ -16,7 +18,7 @@ import type {
 } from "@botsman/protocol";
 
 // A protocol-only client for the server, standing in for the apps. It goes through HTTPS headers, auth, and the
-// WebSocket exactly as an app would, using nothing but the `protocol` package's types.
+// WebSocket exactly as an app would, using nothing but the `protocol` package.
 export class BotsmanClient {
   readonly baseUrl: string;
   tokens: Tokens | undefined;
@@ -215,6 +217,13 @@ export class StreamClient {
     this.positions.set(stream, { epoch, seq });
     const chatEvent = event as ChatEvent;
     if (chatEvent.type === "message") this.messages.set(stream, [...(this.messages.get(stream) ?? []), chatEvent.message]);
-    if (chatEvent.type === "live") this.live.set(stream, chatEvent.live);
+    if (chatEvent.type === "live_patch") this.live.set(stream, patched(this.live.get(stream), chatEvent.patch));
   }
+}
+
+// Applies a live patch with the apps' own function. A patch that fails its check fails the test.
+function patched(live: LiveState | undefined, patch: LivePatch): LiveState {
+  const next = live === undefined ? undefined : applyLivePatch(live, patch);
+  if (next === undefined || !hashesMatch(next, expectedHashes(new Map(), patch))) throw new Error(`live patch failed its check: ${JSON.stringify(patch)}`);
+  return next;
 }

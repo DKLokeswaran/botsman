@@ -75,7 +75,7 @@ flowchart LR
 1. `protocol` imports no other workspace package.
 2. `tokens` imports no other workspace package.
 3. `client-core` imports only `protocol`.
-4. `server` imports only `protocol`.
+4. `server` imports only `protocol`. Its tests may also import `client-core`, to apply and check what the server sends the way an app does.
 5. Nothing outside `server` imports from it, except `client-core`'s tests, which run the client against a real server.
 6. `pc-ui` imports only `client-core` and `tokens`. It takes the protocol's types from `client-core`.
 7. `apps/android` imports only `client-core` and `tokens`, never `protocol` or `pc-ui`.
@@ -86,6 +86,8 @@ flowchart LR
 12. Code that ships imports only its own package's dependencies. Tests, scripts, config files, and type-only imports may use devDependencies, and a peerDependency also listed as a devDependency for type checks counts as a dependency.
 
 The re-exports behind rules 6 and 8 carry types only, through `export type *`, so the protocol's and `client-core`'s functions stay out of the screens and shells.
+
+`client-core`'s tests run against a real server and the server's tests apply patches with `client-core`, so each lists the other as a devDependency. `pnpm-workspace.yaml` sets `ignoreWorkspaceCycles`, so recursive scripts such as `pnpm -r typecheck` run in any order. Nothing is built before it's checked, so the order doesn't matter.
 
 ## Code rules
 
@@ -143,6 +145,7 @@ The `protocol` package holds one whole number. It goes up only when a change bre
 - Each app has its number built in, and `client-core` checks it before connecting.
 - An app below the server's range shows "Update the app" and offers the update. An app above the range shows "Update the server". Neither connects until the versions fit.
 - After a breaking change, the server keeps accepting the previous number until both apps have shipped on the new one.
+- One exception: the `live_patch` chat event replaced `live` while the number stayed at 1, because the released 0.1.0 apps had no users yet. A 0.1.0 app's chat screen breaks on a newer server.
 
 ### Where the apps get updates
 

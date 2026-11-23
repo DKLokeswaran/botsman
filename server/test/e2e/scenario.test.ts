@@ -1,6 +1,5 @@
 import { chatStream, type ChatMessage } from "@botsman/protocol";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { STREAM_INTERVAL_MS } from "../../src/events/chat-feed.ts";
 import { setUpServer, startTestServer, type TestServer } from "../helpers.ts";
 import type { StreamClient } from "./client.ts";
 
@@ -35,15 +34,45 @@ describe("M1 scenario", () => {
     expect(user).toMatchObject({ text: "hello there" });
   });
 
-  it("sends streamed text at most once per interval, since each update carries the whole reply so far", async () => {
+  // The bound grows with the reply's length, not with its square, so a short reply tests it: sending the whole reply
+  // so far in every update goes far past it. The scripted model streams about 400 tokens a second, so 100 ms of its
+  // text is far below 1 KB, and a regression to full copies fails the cap even on a short reply.
+  it("sends a streamed reply in about its own size plus a little per update", async () => {
     const from = stream.received.length;
-    const started = Date.now();
-    await server.client.send(botId, "slow 400");
-    await stream.waitForMessage(chat, (message) => message.type === "assistant" && message.text.endsWith("word399"));
-    const elapsed = Date.now() - started;
-    const streamed = stream.received.slice(from).filter((message) => message.type === "event" && message.stream === chat && message.event.type === "live" && message.event.live.streamingText !== "");
-    expect(streamed.length).toBeGreaterThan(0);
-    expect(streamed.length).toBeLessThanOrEqual(elapsed / STREAM_INTERVAL_MS + 2);
+    await server.client.send(botId, "slow 2000");
+    const reply = await stream.waitForMessage(chat, (message) => message.type === "assistant" && message.text.endsWith("word1999"));
+    const sent = stream.received.slice(from).filter((message) => message.type === "event" && message.stream === chat);
+    const bytes = sent.reduce((total, message) => total + JSON.stringify(message).length, 0);
+    const replyLength = reply.type === "assistant" ? reply.text.length : 0;
+    expect(bytes).toBeLessThan(3 * replyLength + 300 * sent.length);
+    const appends = sent.flatMap((message) => (message.type === "event" && message.event.type === "live_patch" ? [message.event.patch.streamingText?.append.length ?? 0] : []));
+    expect(appends.length).toBeGreaterThan(1);
+    expect(Math.max(...appends)).toBeLessThanOrEqual(1024);
+  });
+
+  it("catches up in the middle of a reply with patches only, ending on the server's own state", async () => {
+    await server.client.send(botId, "slow 3000");
+    await stream.waitForLive(chat, (live) => live.streamingText.length > 0);
+    const position = stream.positions.get(chat)!;
+    const live = stream.live.get(chat)!;
+    stream.close();
+    await new Promise((resolve) => setTimeout(resolve, 300));
+    const again = await server.client.stream();
+    again.positions.set(chat, position);
+    again.live.set(chat, live);
+    again.subscribe(chat, true);
+    const catchup = await again.waitFor((message) => message.type === "catchup" && message.stream === chat);
+    expect(catchup.type === "catchup" && catchup.events.length > 0 && catchup.events.every((item) => item.event.type === "live_patch")).toBe(true);
+    const caughtUp = again.live.get(chat)!.streamingText;
+    const fresh = await server.client.stream();
+    fresh.subscribe(chat);
+    await fresh.waitFor((message) => message.type === "snapshot" && message.stream === chat);
+    await again.waitForLive(chat, (state) => state.streamingText.length > caughtUp.length);
+    await server.client.stop(botId);
+    const ended = await again.waitForLive(chat, (state) => !state.running);
+    expect(ended).toEqual(await fresh.waitForLive(chat, (state) => !state.running));
+    fresh.close();
+    stream = again;
   });
 
   it("stops a reply", async () => {
@@ -75,6 +104,8 @@ describe("M1 scenario", () => {
     await new Promise((resolve) => setTimeout(resolve, 500));
     const again = await server.client.stream();
     again.positions.set(chat, position);
+    // Patches after the position apply on top of the live state as of that position.
+    again.live.set(chat, stream.live.get(chat)!);
     again.subscribe(chat, true);
     const catchup = await again.waitFor((message) => message.type === "catchup" && message.stream === chat);
     const caught = catchup.type === "catchup" ? catchup.events.map((item) => item.event) : [];

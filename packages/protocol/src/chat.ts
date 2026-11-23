@@ -118,9 +118,38 @@ export const ChatSettingsUpdate = obj({
 });
 export type ChatSettingsUpdate = Static<typeof ChatSettingsUpdate>;
 
-// Events on one chat's stream, each with the chat's sequence number.
+// How one text changed: drop this many characters from its start, then add this text at its end. `length` and
+// `hash` (32-bit FNV-1a over the UTF-16 units) describe the result, so the client can check it.
+export type TextChange = { drop: number; append: string; length: number; hash: number };
+
+// What changed in one running tool. A tool not seen before is new and comes with every field; its output starts as "".
+export type ToolPatch = {
+  callId: string;
+  name?: string;
+  status?: LiveTool["status"];
+  awaitingApproval?: string | null;
+  output?: TextChange;
+};
+
+// What changed in a chat's live state since the previous live event on its stream. A field that's absent didn't change.
+export type LivePatch = {
+  running?: boolean;
+  compacting?: boolean;
+  failure?: LiveState["failure"];
+  // The whole queue, when it changed.
+  queued?: QueuedMessage[];
+  // Only the tools that changed, applied after `toolsCleared`.
+  tools?: ToolPatch[];
+  // The round ended: every tool leaves the live state.
+  toolsCleared?: true;
+  streamingText?: TextChange;
+  streamingThinking?: TextChange;
+};
+
+// Events on one chat's stream, each with the chat's sequence number. A snapshot carries the full live state, and
+// each `live_patch` after it applies on top.
 export type ChatEvent =
   | { type: "message"; message: ChatMessage }
-  | { type: "live"; live: LiveState }
+  | { type: "live_patch"; patch: LivePatch }
   | { type: "totals"; totals: ChatTotals }
   | { type: "settings"; settings: ChatSettings };

@@ -1,11 +1,16 @@
-import { type ChatEvent, type ChatHistoryPage, type ChatSettings, type ChatSettingsUpdate, type ChatSnapshot, chatStream, type LiveState, type Ok, type SendMessageResponse } from "@botsman/protocol";
-import { addPending, applyChatEvent, applyChatSnapshot, applyHistoryPage, type ChatState, dropPending, emptyChat, failPending, markSent } from "./chat-state.ts";
+import type { ChatEvent, ChatHistoryPage, ChatSettings, ChatSettingsUpdate, ChatSnapshot, LivePatch, LiveState, Ok, SendMessageResponse } from "@botsman/protocol";
+import { chatStream } from "@botsman/protocol";
+import { applyLivePatch, expectedHashes, hashesMatch, type TextHashes } from "./live-patch.ts";
+import { addPending, applyChatEvent, applyChatSnapshot, applyHistoryPage, type ChatState, dropPending, emptyChat, failPending, markSent, withLive } from "./chat-state.ts";
 import { defaultSendMode, type SendMode } from "./send-rule.ts";
 import type { Session } from "./session.ts";
 import { Store } from "./store.ts";
 import type { StreamConnection, StreamMessage } from "./stream-connection.ts";
 
 const HISTORY_PAGE = 50;
+// Live patches folded since the last redraw, with the hashes their texts must have when drawn.
+type WaitingLive = { live: LiveState; hashes: TextHashes };
+
 // How long live updates gather before the chat redraws: 50 ms, and 1 ms more for every 100 characters streamed so
 // far, up to a second. Each redraw lays out the whole reply again, so a long reply redraws less often, and updates
 // that pile up while a slow device is still drawing become one redraw instead of a queue of them.
@@ -28,7 +33,7 @@ export class ChatController {
   #watchers = 0;
   #loadingEarlier = false;
   #readUpTo = 0;
-  #waitingLive: LiveState | undefined;
+  #waitingLive: WaitingLive | undefined;
   #liveTimer: ReturnType<typeof setTimeout> | undefined;
 
   constructor(botId: string, session: Session, connection: StreamConnection, newRequestId: () => string) {
@@ -119,22 +124,54 @@ export class ChatController {
       return this.#markRead();
     }
     const events = (message.type === "catchup" ? message.events.map((item) => item.event) : [message.event]) as ChatEvent[];
-    if (events.every((event) => event.type === "live")) return this.#holdLive(events.at(-1)!.live);
-    this.#drawWaitingLive();
-    this.state.update((state) => events.reduce(applyChatEvent, state));
-    this.#markRead();
+    if (events.length === 0) return;
+    if (events.every((event) => event.type === "live_patch")) return this.#holdLive(events);
+    if (this.#applyInOrder(events)) this.#markRead();
   }
 
-  // Keeps only the newest live state and draws it shortly, so a burst of updates draws once.
-  #holdLive(live: LiveState): void {
-    this.#waitingLive = live;
-    this.#liveTimer ??= setTimeout(() => this.#drawWaitingLive(), liveRedrawDelay(live));
+  // Folds a burst of patches and draws them shortly, so the burst draws once.
+  #holdLive(events: Extract<ChatEvent, { type: "live_patch" }>[]): void {
+    if (!events.every((event) => this.#fold(event.patch))) return;
+    this.#liveTimer ??= setTimeout(() => this.#drawWaitingLive(), liveRedrawDelay(this.#waitingLive!.live));
   }
 
-  #drawWaitingLive(): void {
-    const live = this.#waitingLive;
+  // Applies events in sequence order. A message, totals or settings event first draws the patches before it.
+  #applyInOrder(events: ChatEvent[]): boolean {
+    for (const event of events) {
+      const applied = event.type === "live_patch" ? this.#fold(event.patch) : this.#drawWaitingLive() && this.#applyOther(event);
+      if (!applied) return false;
+    }
+    return this.#drawWaitingLive();
+  }
+
+  #applyOther(event: ChatEvent): true {
+    this.state.update((state) => applyChatEvent(state, event) ?? state);
+    return true;
+  }
+
+  // Folds a patch onto the waiting state, or onto the state on screen when nothing waits. A patch that fails its
+  // check keeps the screen as it is and asks for a fresh snapshot.
+  #fold(patch: LivePatch): boolean {
+    const live = applyLivePatch(this.#waitingLive?.live ?? this.state.get().live, patch);
+    if (live === undefined) return this.#resync();
+    this.#waitingLive = { live, hashes: expectedHashes(this.#waitingLive?.hashes ?? new Map(), patch) };
+    return true;
+  }
+
+  // Draws the folded patches, once each changed text matches its hash.
+  #drawWaitingLive(): boolean {
+    const waiting = this.#waitingLive;
     this.#dropWaitingLive();
-    if (live !== undefined) this.state.update((state) => applyChatEvent(state, { type: "live", live }));
+    if (waiting === undefined) return true;
+    if (!hashesMatch(waiting.live, waiting.hashes)) return this.#resync();
+    this.state.update((state) => withLive(state, waiting.live));
+    return true;
+  }
+
+  #resync(): false {
+    this.#dropWaitingLive();
+    this.#connection.resync(chatStream(this.botId));
+    return false;
   }
 
   #dropWaitingLive(): void {

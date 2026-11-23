@@ -1,7 +1,9 @@
-import type { Approval, Bot, ChatMessage } from "@botsman/protocol";
+import type { Approval, Bot, ChatEvent, ChatMessage } from "@botsman/protocol";
 import { expect, test } from "vitest";
-import { addPending, markSent, chatItems, chatSubtitle, contextTokens, formatCost, formatCountdown, formatMessageTime, formatTokens, toolSummary, applyChatEvent, applyHistoryPage, applyServerEvent, defaultSendMode, emptyChat, emptyServerState, offeredSendModes, sortBots } from "../src/index.ts";
+import { addPending, markSent, chatItems, chatSubtitle, contextTokens, formatCost, formatCountdown, formatMessageTime, formatTokens, toolSummary, applyChatEvent as applyEvent, applyHistoryPage, applyServerEvent, defaultSendMode, emptyChat, emptyServerState, offeredSendModes, sortBots, type ChatState } from "../src/index.ts";
 
+// Applies an event the test expects to fit.
+const applyChatEvent = (state: ChatState, event: ChatEvent) => applyEvent(state, event)!;
 const user = (id: string, text: string): ChatMessage => ({ type: "user", id, at: null, text });
 const bot = (id: string, name: string, isMain = false) => ({ id, name, isMain }) as Bot;
 const approval = (id: string, status: Approval["status"], createdAt = 0) => ({ id, botId: "b1", status, createdAt }) as Approval;
@@ -36,10 +38,18 @@ test("a failed send stays until the owner retries or discards it", () => {
 test("an earlier message with the same text doesn't settle a send the server hasn't accepted yet", () => {
   const shown = applyChatEvent(emptyChat, { type: "message", message: user("1", "yes") });
   let state = addPending(shown, { requestId: "a", text: "yes", mode: "send", sent: false, failed: undefined });
-  state = applyChatEvent(state, { type: "live", live: { ...emptyChat.live, running: true } });
+  state = applyChatEvent(state, { type: "live_patch", patch: { running: true } });
   expect(state.pending).toHaveLength(1);
   state = markSent(applyChatEvent(state, { type: "message", message: user("2", "yes") }), "a");
   expect(state.pending).toEqual([]);
+});
+
+test("a live patch applies, and a queue patch settles a pending send", () => {
+  let state = addPending(emptyChat, { requestId: "a", text: "later", mode: "queue", sent: true, failed: undefined });
+  state = applyChatEvent(state, { type: "live_patch", patch: { running: true, queued: [{ id: "q1", text: "later", mode: "queue" }] } });
+  expect(state.live.running).toBe(true);
+  expect(state.pending).toEqual([]);
+  expect(applyEvent(state, { type: "live_patch", patch: { streamingText: { drop: 5, append: "", length: 0, hash: 0 } } })).toBeUndefined();
 });
 
 test("an older page goes in front, without repeating a message already shown", () => {

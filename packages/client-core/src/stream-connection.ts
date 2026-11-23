@@ -30,6 +30,8 @@ const FIRST_RETRY_MS = 500;
 const LONGEST_RETRY_MS = 15_000;
 const PING_EVERY_MS = 25_000;
 const PONG_WITHIN_MS = 10_000;
+// A stream asks for a fresh snapshot at most this often, so a repeatable bug can't ask on every patch or reconnect.
+const RESYNC_EVERY_MS = 10_000;
 
 // The live updates socket. It stays connected, signs in again after a drop, and asks each stream for what it
 // missed, so listeners see every event once and in order.
@@ -38,6 +40,10 @@ export class StreamConnection {
   readonly #options: StreamConnectionOptions;
   readonly #listeners = new Map<string, Set<StreamListener>>();
   readonly #positions = new Map<string, StreamPosition>();
+  // Streams waiting for a fresh snapshot, when each last asked for one, and the asks waiting for their turn.
+  readonly #resyncing = new Set<string>();
+  readonly #lastResync = new Map<string, number>();
+  readonly #resyncTimers = new Map<string, ReturnType<typeof setTimeout>>();
   #socket: SocketLike | undefined;
   #ready = false;
   #running = false;
@@ -61,8 +67,41 @@ export class StreamConnection {
     this.#running = false;
     this.#everOnline = false;
     clearTimeout(this.#retryTimer);
+    for (const timer of this.#resyncTimers.values()) clearTimeout(timer);
+    this.#resyncTimers.clear();
     this.#dropSocket();
     this.status.set("offline");
+  }
+
+  // Throws away what a stream's listeners hold and asks for a fresh snapshot, when an update didn't fit. Events
+  // already on their way are dropped until the snapshot arrives.
+  resync(stream: string): void {
+    if (!this.#listeners.has(stream)) return;
+    this.#positions.delete(stream);
+    this.#resyncing.add(stream);
+    if (this.#resyncTimers.has(stream)) return;
+    const wait = (this.#lastResync.get(stream) ?? -Infinity) + RESYNC_EVERY_MS - Date.now();
+    if (wait <= 0) return this.#askForSnapshot(stream);
+    this.#resyncTimers.set(stream, setTimeout(() => this.#askForSnapshot(stream), wait));
+  }
+
+  // Subscribes without a position. While offline, the next connection does it, since the position is gone.
+  #askForSnapshot(stream: string): void {
+    this.#resyncTimers.delete(stream);
+    this.#lastResync.set(stream, Date.now());
+    if (this.#ready) this.#sendSubscribe(stream);
+  }
+
+  // An error about one stream forgets where it was, and ends a resync, so it never stays stuck dropping events.
+  #forgetStream(stream: string): void {
+    this.#positions.delete(stream);
+    this.#endResync(stream);
+  }
+
+  #endResync(stream: string): void {
+    this.#resyncing.delete(stream);
+    clearTimeout(this.#resyncTimers.get(stream));
+    this.#resyncTimers.delete(stream);
   }
 
   // Listens to one stream. The first listener subscribes on the server, and the last one to leave unsubscribes.
@@ -79,6 +118,7 @@ export class StreamConnection {
     if (listeners === undefined || !listeners.delete(listener) || listeners.size > 0) return;
     this.#listeners.delete(stream);
     this.#positions.delete(stream);
+    this.#endResync(stream);
     if (this.#ready) this.#send({ type: "unsubscribe", stream });
   }
 
@@ -109,13 +149,14 @@ export class StreamConnection {
     this.#everOnline = true;
     this.#retryMs = FIRST_RETRY_MS;
     this.status.set("online");
-    for (const stream of this.#listeners.keys()) this.#sendSubscribe(stream);
+    // A stream waiting for its turn to resync subscribes when its turn comes.
+    for (const stream of this.#listeners.keys()) if (!this.#resyncTimers.has(stream)) this.#sendSubscribe(stream);
     this.#pingTimer = setInterval(() => this.#ping(), PING_EVERY_MS);
   }
 
   // A refused token is renewed before the next try. An error about one stream forgets where that stream was.
   #refused(message: Extract<ServerMessage, { type: "error" }>): void {
-    if (message.stream !== undefined) return void this.#positions.delete(message.stream);
+    if (message.stream !== undefined) return this.#forgetStream(message.stream);
     if (message.error !== "unauthorized") return;
     const socket = this.#socket;
     this.#dropSocket();
@@ -125,7 +166,14 @@ export class StreamConnection {
     );
   }
 
+  // A stream nobody listens to anymore records nothing, so the next listener starts from a snapshot. A resyncing
+  // stream drops everything until its snapshot.
   #deliver(message: StreamMessage): void {
+    if (!this.#listeners.has(message.stream)) return;
+    if (this.#resyncing.has(message.stream)) {
+      if (message.type !== "snapshot") return;
+      this.#endResync(message.stream);
+    }
     this.#positions.set(message.stream, { epoch: message.epoch, seq: lastSeq(message, this.#positions.get(message.stream)) });
     for (const listener of [...(this.#listeners.get(message.stream) ?? [])]) listener(message);
   }

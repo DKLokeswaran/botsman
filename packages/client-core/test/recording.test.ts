@@ -13,11 +13,18 @@ function replay(messages: readonly StreamMessage[]): ChatState[] {
   let state = emptyChat;
   for (const message of messages) {
     if (message.type === "snapshot") state = applyChatSnapshot(state, message.snapshot as ChatSnapshot);
-    if (message.type === "event") state = applyChatEvent(state, message.event as ChatEvent);
-    if (message.type === "catchup") state = message.events.reduce((next, item) => applyChatEvent(next, item.event as ChatEvent), state);
+    if (message.type === "event") state = applyRecorded(state, message.event as ChatEvent);
+    if (message.type === "catchup") for (const item of message.events) state = applyRecorded(state, item.event as ChatEvent);
     states.push(state);
   }
   return states;
+}
+
+// A recorded event that doesn't apply fails the test.
+function applyRecorded(state: ChatState, event: ChatEvent): ChatState {
+  const next = applyChatEvent(state, event);
+  if (next === undefined) throw new Error(`recorded event failed its check: ${JSON.stringify(event)}`);
+  return next;
 }
 
 // One line per item, with what a screen would show.

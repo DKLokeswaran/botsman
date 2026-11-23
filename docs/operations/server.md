@@ -132,4 +132,4 @@ pnpm -r typecheck
 pnpm -r test
 ```
 
-Tests use Pi's faux provider through the scripted model in `server/src/testing/script-model.ts`, so they make no model requests and cost nothing. The sandbox tests skip themselves when bubblewrap can't start. `server/test/e2e/` holds a client that uses only the `protocol` package, and runs the M1 scenario over HTTP and the WebSocket.
+Tests use Pi's faux provider through the scripted model in `server/src/testing/script-model.ts`, so they make no model requests and cost nothing. The sandbox tests skip themselves when bubblewrap can't start. `server/test/e2e/` holds a client that uses only the `protocol` package and the patch checks from `client-core`, and runs the M1 scenario over HTTP and the WebSocket.
