@@ -2,7 +2,7 @@ import { type Bot, BotLimits, type BotUpdate, type PermissionMode } from "@botsm
 import { useState } from "react";
 import { botNameProblem, PERMISSION_MODES, permissionNote } from "../bot-settings.ts";
 import { useBotsmanClient } from "./client-context.tsx";
-import { useBot } from "./hooks.ts";
+import { useBot } from "./use-server-state.ts";
 import { useAction } from "./use-action.ts";
 
 // The name and description form on bot info. Save shows once something changed, and spaces around the text don't count

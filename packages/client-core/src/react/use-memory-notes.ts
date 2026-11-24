@@ -2,7 +2,7 @@ import type { MemoryFile, MemoryFileName, MemoryFiles, Note, NoteInfo, NoteSearc
 import { useEffect, useState } from "react";
 import { MEMORY_FILES, newNoteName, noteNameProblem, pendingMemoryEdits } from "../memory-notes.ts";
 import { useBotsmanClient } from "./client-context.tsx";
-import { useNeedsYou } from "./hooks.ts";
+import { useNeedsYou } from "./use-server-state.ts";
 import { useAction } from "./use-action.ts";
 import { type Loaded, useLoaded } from "./use-loaded.ts";
 

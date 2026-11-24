@@ -1,7 +1,7 @@
 import { createContext, type ReactNode, useContext } from "react";
 import { APP_NAME } from "../app-name.ts";
 import type { AppController } from "../app-controller.ts";
-import { useStore } from "./hooks.ts";
+import { useStore } from "./use-server-state.ts";
 
 const AppNameContext = createContext(APP_NAME);
 

@@ -2,7 +2,7 @@ import type { AlertSettings, DeviceSession } from "@botsman/protocol";
 import { liveSessions } from "../settings-view.ts";
 import { USAGE_DAYS, type UsageView, usageView } from "../usage-view.ts";
 import { useBotsmanClient } from "./client-context.tsx";
-import { useBots, useServerState } from "./hooks.ts";
+import { useBots, useServerState } from "./use-server-state.ts";
 import { type Action, useAction } from "./use-action.ts";
 import { type Loaded, useLoaded } from "./use-loaded.ts";
 

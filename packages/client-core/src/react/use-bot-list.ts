@@ -1,7 +1,7 @@
 import type { Approval, Bot } from "@botsman/protocol";
 import { botRowText, connectionLine, formatCountdown, needsYouLine } from "../format.ts";
 import { useBotsmanClient } from "./client-context.tsx";
-import { useBot, useBotActivity, useConnectionStatus, useNeedsYou } from "./hooks.ts";
+import { useBot, useBotActivity, useConnectionStatus, useNeedsYou } from "./use-server-state.ts";
 import { useNow } from "./use-now.ts";
 
 const ROW_REFRESH_MS = 60_000;

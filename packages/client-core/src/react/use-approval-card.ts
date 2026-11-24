@@ -3,7 +3,7 @@ import { useMemo } from "react";
 import { formatCountdown } from "../format.ts";
 import { memoryEditView } from "../memory-diff.ts";
 import { useBotsmanClient } from "./client-context.tsx";
-import { useBot } from "./hooks.ts";
+import { useBot } from "./use-server-state.ts";
 import { useAction } from "./use-action.ts";
 import { useNow } from "./use-now.ts";
 

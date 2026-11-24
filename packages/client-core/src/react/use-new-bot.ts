@@ -3,7 +3,7 @@ import { useState } from "react";
 import { botNameProblem, modelChoices, suggestedModel } from "../bot-settings.ts";
 import { formatBytes } from "../format.ts";
 import { useBotsmanClient } from "./client-context.tsx";
-import { useBots } from "./hooks.ts";
+import { useBots } from "./use-server-state.ts";
 import { useAction } from "./use-action.ts";
 import { useFreeSpace, useModels } from "./use-models.ts";
 

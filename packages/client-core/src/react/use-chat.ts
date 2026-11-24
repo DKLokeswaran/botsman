@@ -6,7 +6,7 @@ import { chatSubtitle, contextTokens } from "../format.ts";
 import { modelProblem } from "../providers.ts";
 import { isBusy, offeredSendModes, type SendMode } from "../send-rule.ts";
 import { useBotsmanClient } from "./client-context.tsx";
-import { useConnectionStatus, useStore } from "./hooks.ts";
+import { useConnectionStatus, useStore } from "./use-server-state.ts";
 import { useModels } from "./use-models.ts";
 
 export type ChatView = {
