@@ -35,7 +35,7 @@ export function AddProviderScreen({ app }: { app: AppController }) {
 const styles = StyleSheet.create({
   screen: { flex: 1 },
   body: { padding: space[4], gap: space[4] },
-  wordmark: { fontFamily: fontFamilies.display, fontSize: 18, letterSpacing: 6 },
+  wordmark: { fontFamily: fontFamilies.displayRegular, fontSize: 18, letterSpacing: 6 },
   title: { fontFamily: fontFamilies.display, fontSize: 20 },
   buttons: { flexDirection: "row", justifyContent: "flex-end", gap: space[2] },
 });

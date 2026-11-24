@@ -59,11 +59,15 @@ describe("auth and exposure", () => {
     mkdirSync(path.join(dashboard, "assets"), { recursive: true });
     writeFileSync(path.join(dashboard, "index.html"), "<html>dashboard</html>");
     writeFileSync(path.join(dashboard, "assets", "app-abc123.js"), "console.log(1)");
+    writeFileSync(path.join(dashboard, "assets", "font-abc123.ttf"), "font");
 
     const script = await server.client.raw("GET", "/app/assets/app-abc123.js");
     expect(await script.text()).toBe("console.log(1)");
     expect(script.headers.get("content-type")).toContain("text/javascript");
     expect(script.headers.get("cache-control")).toContain("immutable");
+
+    const font = await server.client.raw("GET", "/app/assets/font-abc123.ttf");
+    expect(font.headers.get("content-type")).toBe("font/ttf");
 
     for (const url of ["/app/", "/app/chat/main", "/app/assets/missing.js"]) {
       const page = await server.client.raw("GET", url);

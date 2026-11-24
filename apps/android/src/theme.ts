@@ -1,16 +1,17 @@
 import { resolveTheme, type ThemeMode } from "@botsman/client-core";
-import { type Palette, palettes, radius, space } from "@botsman/tokens";
+import { fontFaces, type Palette, palettes, radius, space } from "@botsman/tokens";
 import { createContext, useContext } from "react";
 import { useColorScheme } from "react-native";
 
 // The font files the build embeds, named as Android knows them.
 export const fontFamilies = {
-  display: "Orbitron_700Bold",
-  displayBlack: "Orbitron_900Black",
-  body: "Inter_400Regular",
-  bodyMedium: "Inter_500Medium",
-  bodySemiBold: "Inter_600SemiBold",
-  mono: "FragmentMono_400Regular",
+  displayRegular: fontFaces.displayRegular.file,
+  display: fontFaces.display.file,
+  displayBlack: fontFaces.displayBlack.file,
+  body: fontFaces.body.file,
+  bodyMedium: fontFaces.bodyMedium.file,
+  bodySemiBold: fontFaces.bodySemiBold.file,
+  mono: fontFaces.mono.file,
 } as const;
 
 export type Theme = { colors: Palette; dark: boolean };

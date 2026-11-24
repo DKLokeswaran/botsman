@@ -34,7 +34,7 @@ const styles = StyleSheet.create({
   screen: { flex: 1 },
   scroll: { flexGrow: 1, justifyContent: "center", padding: space[4] },
   card: { borderWidth: 1, borderRadius: radius.lg, padding: space[5], gap: space[4] },
-  wordmark: { fontFamily: fontFamilies.display, fontSize: 18, letterSpacing: 6 },
+  wordmark: { fontFamily: fontFamilies.displayRegular, fontSize: 18, letterSpacing: 6 },
   title: { fontFamily: fontFamilies.display, fontSize: 22, lineHeight: 30 },
   lede: { fontFamily: fontFamilies.body, fontSize: 14, lineHeight: 21 },
 });

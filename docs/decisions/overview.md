@@ -192,7 +192,7 @@ Both are `HttpOnly`, `Secure`, and `SameSite=Strict`. A browser attaches cookies
 
 The apps keep sending a bearer token, and none of these checks apply to them.
 
-The dashboard's page carries a content security policy that allows only its own files and connections to its own server. Files under `assets/` have a content hash in their names and are cached for a year. The page itself is never cached.
+The dashboard's page carries a content security policy that allows only its own files and connections to its own server. It blocks inline fonts, so the dashboard's build keeps every font as a separate file. Files under `assets/` have a content hash in their names and are cached for a year. The page itself is never cached.
 
 ## Parity
 
