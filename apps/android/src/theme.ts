@@ -5,6 +5,7 @@ import { useColorScheme } from "react-native";
 
 // The font files the build embeds, named as Android knows them.
 export const fontFamilies = {
+  displayRegular: fontFaces.displayRegular.file,
   display: fontFaces.display.file,
   displayBlack: fontFaces.displayBlack.file,
   body: fontFaces.body.file,
