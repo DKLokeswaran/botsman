@@ -1,14 +1,6 @@
 @import "tailwindcss";
+/* The Zoetrik colours and faces. The font files ship with the app, so it draws the same offline and asks no outside host for fonts. */
 @import "@botsman/tokens/theme.css";
-
-/* The three Zoetrik faces ship with the app, so it draws the same offline and asks no outside host for fonts. */
-@import "@fontsource/orbitron/400.css";
-@import "@fontsource/orbitron/700.css";
-@import "@fontsource/orbitron/900.css";
-@import "@fontsource/inter/400.css";
-@import "@fontsource/inter/500.css";
-@import "@fontsource/inter/600.css";
-@import "@fontsource/fragment-mono/400.css";
 
 /* Tailwind scans this package's screens, wherever the app that imports it lives. */
 @source "./";

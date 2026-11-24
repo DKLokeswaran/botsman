@@ -91,6 +91,19 @@ export const fonts = {
   mono: "Fragment Mono",
 } as const;
 
+// Every font file the apps ship, from the fonts folder. Android knows each font by its file name.
+export const fontFaces = {
+  displayRegular: { family: fonts.display, weight: 400, file: "Orbitron_400Regular" },
+  display: { family: fonts.display, weight: 700, file: "Orbitron_700Bold" },
+  displayBlack: { family: fonts.display, weight: 900, file: "Orbitron_900Black" },
+  body: { family: fonts.body, weight: 400, file: "Inter_400Regular" },
+  bodyMedium: { family: fonts.body, weight: 500, file: "Inter_500Medium" },
+  bodySemiBold: { family: fonts.body, weight: 600, file: "Inter_600SemiBold" },
+  mono: { family: fonts.mono, weight: 400, file: "FragmentMono_400Regular" },
+} as const;
+
+type FontFace = (typeof fontFaces)[keyof typeof fontFaces];
+
 export const radius = { md: 4, lg: 8 } as const;
 
 // The 4-pixel spacing scale.
@@ -104,7 +117,19 @@ export function cssVariable(key: keyof Palette): string {
   return `--${key.replace(/[A-Z]/g, (letter) => `-${letter.toLowerCase()}`)}`;
 }
 
-// The stylesheet `pc-ui` loads: dark on `:root`, light under `[data-theme="light"]`.
+// The CSS rule that loads one font file. It covers every character in the file.
+function fontFaceCss({ family, weight, file }: FontFace): string {
+  const lines = [
+    `  font-family: "${family}";`,
+    "  font-style: normal;",
+    `  font-weight: ${weight};`,
+    "  font-display: swap;",
+    `  src: url("./fonts/${file}.ttf") format("truetype");`,
+  ];
+  return `@font-face {\n${lines.join("\n")}\n}\n`;
+}
+
+// The stylesheet `pc-ui` loads: the font files, then dark on `:root`, light under `[data-theme="light"]`.
 export function themeCss(): string {
   const block = (selector: string, palette: Palette, extra: string[] = []) => {
     const lines = (Object.keys(palette) as (keyof Palette)[]).map((key) => `  ${cssVariable(key)}: ${palette[key]};`);
@@ -118,6 +143,7 @@ export function themeCss(): string {
     `  --font-mono: "${fonts.mono}", ui-monospace, monospace;`,
     `  --reading-width: ${readingWidth}px;`,
   ];
-  return `/* Generated from src/index.ts by scripts/write-theme-css.ts. */\n${block(":root", palettes.dark, shared)}\n${block('[data-theme="light"]', palettes.light)}`;
+  const faces = Object.values(fontFaces).map(fontFaceCss).join("\n");
+  return `/* Generated from src/index.ts by scripts/write-theme-css.ts. */\n${faces}\n${block(":root", palettes.dark, shared)}\n${block('[data-theme="light"]', palettes.light)}`;
 }
 export * from "./marks.ts";

@@ -64,7 +64,7 @@ export default {
       'JSXAttribute[name.name="dangerouslySetInnerHTML"]',
       'ImportDeclaration[source.value="rehype-raw"]',
     ]),
-    "no-font-host": banned("Bans outside font hosts.", "Fonts ship inside the apps. Add the font as a package instead.", textMatching(FONT_HOST)),
+    "no-font-host": banned("Bans outside font hosts.", "Fonts ship inside the apps. Add the font to the tokens package instead.", textMatching(FONT_HOST)),
     "no-hex-colour": banned("Bans hex colours outside the tokens package.", "Colours come from the tokens package.", [`Literal[value=${HEX_COLOUR}]`]),
     "no-app-name-text": banned("Bans the app's name written out in screens.", "Take the app's name from APP_NAME, so a preview build says Botsman Preview.", textMatching(APP_NAME)),
     "no-screen-io": banned("Bans network and storage calls in screens.", "Screens hold no logic. Reach the network and storage through client-core.", [
