@@ -1,5 +1,5 @@
-import { botNameProblem, modelDefaultLabel, photoAvatar, type Avatar as AvatarValue, type Bot } from "@botsman/client-core";
-import { useAction, useBot, useBotsmanClient } from "@botsman/client-core/react";
+import { modelDefaultLabel, photoAvatar, type Avatar as AvatarValue, type Bot } from "@botsman/client-core";
+import { useAction, useBot, useBotNameForm, useBotsmanClient } from "@botsman/client-core/react";
 import { MARK_IDS, MARKS } from "@botsman/tokens";
 import { useRef, useState } from "react";
 import { Avatar, MarkIcon } from "../components/avatar.tsx";
@@ -82,25 +82,20 @@ function FacePicker({ bot }: { bot: Bot }) {
 }
 
 function NameForm({ bot }: { bot: Bot }) {
-  const client = useBotsmanClient();
-  const [name, setName] = useState(bot.name);
-  const [description, setDescription] = useState(bot.description);
-  const problem = botNameProblem(name);
-  const changed = name.trim() !== bot.name || description.trim() !== bot.description;
-  const save = useAction(() => client.updateBot(bot.id, { name: name.trim(), description: description.trim() }));
+  const form = useBotNameForm(bot);
   return (
     <form
       className="flex flex-col gap-3"
       onSubmit={(event) => {
         event.preventDefault();
-        void save.run();
+        form.submit();
       }}
     >
-      <Field label="Name" value={name} maxLength={60} onChange={(event) => setName(event.target.value)} />
-      <Field label="Description" value={description} maxLength={500} onChange={(event) => setDescription(event.target.value)} />
-      <ErrorText>{changed ? (problem ?? save.error) : save.error}</ErrorText>
-      {changed ? (
-        <Button type="submit" variant="primary" className="self-start" disabled={problem !== undefined || save.busy}>
+      <Field label="Name" value={form.name} maxLength={form.limits.name} onChange={(event) => form.setName(event.target.value)} />
+      <Field label="Description" value={form.description} maxLength={form.limits.description} onChange={(event) => form.setDescription(event.target.value)} />
+      <ErrorText>{form.error}</ErrorText>
+      {form.changed ? (
+        <Button type="submit" variant="primary" className="self-start" disabled={!form.ready}>
           Save
         </Button>
       ) : null}

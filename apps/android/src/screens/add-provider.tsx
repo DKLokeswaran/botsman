@@ -1,5 +1,5 @@
 import type { AppController } from "@botsman/client-core";
-import { useAppName, useAction, useProviders } from "@botsman/client-core/react";
+import { useAppName, useProviderStep } from "@botsman/client-core/react";
 import { ScrollView, StyleSheet, Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { fontFamilies, space, useTheme } from "../theme";
@@ -11,9 +11,7 @@ import { ProviderList } from "../ui/provider-list";
 export function AddProviderScreen({ app }: { app: AppController }) {
   const appName = useAppName();
   const { colors } = useTheme();
-  const { providers } = useProviders();
-  const connected = providers?.some((provider) => provider.connected) ?? false;
-  const finish = useAction(() => app.finishSetup());
+  const step = useProviderStep(app);
   return (
     <SafeAreaView style={[styles.screen, { backgroundColor: colors.background }]}>
       <ScrollView contentContainerStyle={styles.body} keyboardShouldPersistTaps="handled">
@@ -22,10 +20,10 @@ export function AddProviderScreen({ app }: { app: AppController }) {
         <Text style={[styles.title, { color: colors.foreground }]}>ADD A MODEL PROVIDER</Text>
         <Note>Bots need one provider to run. Its key or sign-in is stored only on the server, and it can't be viewed after saving.</Note>
         <ProviderList />
-        <ErrorText>{finish.error}</ErrorText>
+        <ErrorText>{step.error}</ErrorText>
         <View style={styles.buttons}>
-          <Button label="Skip for now" variant="text" disabled={finish.busy} onPress={() => void finish.run()} />
-          <Button label="Continue" variant="primary" disabled={!connected || finish.busy} onPress={() => void finish.run()} />
+          <Button label="Skip for now" variant="text" disabled={!step.canSkip} onPress={step.finish} />
+          <Button label="Continue" variant="primary" disabled={!step.canContinue} onPress={step.finish} />
         </View>
       </ScrollView>
     </SafeAreaView>

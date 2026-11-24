@@ -1,7 +1,9 @@
 import { arr, bool, int, obj, opt, type Static, str } from "@earendil-works/pi-schema";
 
 // Note names are plain file names ending in .md, with no folders.
-export const NoteName = str({ minLength: 4, maxLength: 120, pattern: "^[A-Za-z0-9][A-Za-z0-9 ._-]*\\.md$" });
+export const NoteNameLimits = { shortest: 4, longest: 120 } as const;
+export const NOTE_NAME_PATTERN = "^[A-Za-z0-9][A-Za-z0-9 ._-]*\\.md$";
+export const NoteName = str({ minLength: NoteNameLimits.shortest, maxLength: NoteNameLimits.longest, pattern: NOTE_NAME_PATTERN });
 
 export const NoteInfo = obj({ name: str(), size: int(), modifiedAt: int() });
 export type NoteInfo = Static<typeof NoteInfo>;

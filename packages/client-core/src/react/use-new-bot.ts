@@ -1,6 +1,6 @@
-import type { ModelRef } from "@botsman/protocol";
+import { BotLimits, type ModelInfo, type ModelRef } from "@botsman/protocol";
 import { useState } from "react";
-import { botNameProblem, suggestedModel } from "../bot-settings.ts";
+import { botNameProblem, modelChoices, suggestedModel } from "../bot-settings.ts";
 import { formatBytes } from "../format.ts";
 import { useBotsmanClient } from "./client-context.tsx";
 import { useBots } from "./hooks.ts";
@@ -34,17 +34,23 @@ export function useNewBotDraft(onCreated: (botId: string) => void) {
     setDescription,
     purpose,
     setPurpose,
-    models,
+    limits: BotLimits,
+    models: modelChoices(models, model),
     loading,
-    model,
+    modelHint: modelHint(models, loading),
     setModel: setPicked,
     folder,
     setFolder,
     folderHint: folderHint(space),
     error: problem ?? folderRefusal(space) ?? create.error,
-    ready: name.trim() !== "" && problem === undefined && folderAllowed,
+    ready: name.trim() !== "" && problem === undefined && folderAllowed && !create.busy,
     create,
   };
+}
+
+// What the model field says when there is nothing to choose.
+function modelHint(models: readonly ModelInfo[], loading: boolean): string | undefined {
+  return !loading && models.length === 0 ? "Connect a model provider to choose a model." : undefined;
 }
 
 type FreeSpace = ReturnType<typeof useFreeSpace>;

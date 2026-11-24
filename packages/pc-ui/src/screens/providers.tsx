@@ -1,6 +1,5 @@
-import { loginView, providerStatus, type Provider } from "@botsman/client-core";
-import { useAction, useBotsmanClient, useLogin, useProviders } from "@botsman/client-core/react";
-import { useState } from "react";
+import type { Provider } from "@botsman/client-core";
+import { useApiKeyForm, useConnectForm, useLoginPrompt, useLoginSteps, useProviderList, useProviderRow, useProviderSignIn } from "@botsman/client-core/react";
 import { ErrorText, Page, Segmented } from "../components/page.tsx";
 import { Button } from "../components/ui/button.tsx";
 import { Field } from "../components/ui/field.tsx";
@@ -17,32 +16,30 @@ export function ProvidersScreen() {
 
 // Every provider, each opening to its Connect form. Also used in first-run setup.
 export function ProviderList() {
-  const { providers, error } = useProviders();
-  const [open, setOpen] = useState<string>();
+  const { providers, error, openId, toggle } = useProviderList();
   return (
     <>
       <ErrorText>{error}</ErrorText>
       {providers === undefined ? <p className="text-sm text-muted-foreground">Loading…</p> : null}
       {providers?.map((provider) => (
-        <ProviderRow key={provider.id} provider={provider} open={open === provider.id} onOpen={() => setOpen(open === provider.id ? undefined : provider.id)} />
+        <ProviderRow key={provider.id} provider={provider} open={openId === provider.id} onOpen={() => toggle(provider.id)} />
       ))}
     </>
   );
 }
 
 function ProviderRow({ provider, open, onOpen }: { provider: Provider; open: boolean; onOpen: () => void }) {
-  const client = useBotsmanClient();
-  const remove = useAction(() => client.disconnectProvider(provider.id));
+  const { status, connectLabel, remove } = useProviderRow(provider, open);
   return (
     <div className="flex flex-col gap-3 rounded-lg border border-border px-3 py-2.5">
       <div className="flex items-center justify-between gap-3">
         <span>
           <span className="block text-sm font-semibold">{provider.name}</span>
-          <span className={`block text-xs ${provider.connected ? "text-primary" : "text-muted-foreground"}`}>{providerStatus(provider.connected, provider.connectedWith)}</span>
+          <span className={`block text-xs ${provider.connected ? "text-primary" : "text-muted-foreground"}`}>{status}</span>
         </span>
         <span className="flex gap-2">
           <Button variant={provider.connected ? "ghost" : "primary"} onClick={onOpen}>
-            {open ? "Close" : provider.connected ? "Replace" : "Connect"}
+            {connectLabel}
           </Button>
           {provider.connected ? (
             <Button variant="danger" disabled={remove.busy} onClick={() => void remove.run()}>
@@ -58,35 +55,28 @@ function ProviderRow({ provider, open, onOpen }: { provider: Provider; open: boo
 }
 
 function ConnectForm({ provider, onDone }: { provider: Provider; onDone: () => void }) {
-  const [method, setMethod] = useState(provider.methods[0]!);
+  const { method, setMethod, methods } = useConnectForm(provider);
   return (
     <div className="flex flex-col gap-3 border-t border-border pt-3">
-      {provider.methods.length < 2 ? null : (
-        <Segmented label="How to connect" options={provider.methods.map((option) => ({ value: option, label: option === "api_key" ? "API key" : (provider.oauthLabel ?? "Sign in") }))} value={method} onChange={setMethod} />
-      )}
+      {methods === undefined ? null : <Segmented label="How to connect" options={methods} value={method} onChange={setMethod} />}
       {method === "api_key" ? <ApiKeyForm provider={provider} onDone={onDone} /> : <SignIn provider={provider} />}
     </div>
   );
 }
 
 function ApiKeyForm({ provider, onDone }: { provider: Provider; onDone: () => void }) {
-  const client = useBotsmanClient();
-  const [key, setKey] = useState("");
-  const save = useAction(async () => {
-    await client.saveApiKey(provider.id, key);
-    onDone();
-  });
+  const form = useApiKeyForm(provider, onDone);
   return (
     <form
       className="flex flex-col gap-3"
       onSubmit={(event) => {
         event.preventDefault();
-        void save.run();
+        form.submit();
       }}
     >
-      <Field label={`${provider.name} API key`} type="password" autoComplete="off" value={key} onChange={(event) => setKey(event.target.value)} />
-      <ErrorText>{save.error}</ErrorText>
-      <Button type="submit" variant="primary" className="self-start" disabled={key.trim() === "" || save.busy}>
+      <Field label={form.label} type="password" autoComplete="off" value={form.key} onChange={(event) => form.setKey(event.target.value)} />
+      <ErrorText>{form.error}</ErrorText>
+      <Button type="submit" variant="primary" className="self-start" disabled={!form.ready}>
         Save key
       </Button>
     </form>
@@ -95,10 +85,7 @@ function ApiKeyForm({ provider, onDone }: { provider: Provider; onDone: () => vo
 
 // A browser sign-in the server runs: open the address, enter any code there, and answer what the provider asks.
 function SignIn({ provider }: { provider: Provider }) {
-  const client = useBotsmanClient();
-  const [loginId, setLoginId] = useState<string>();
-  const login = useLogin(loginId);
-  const start = useAction(async () => setLoginId((await client.startLogin(provider.id)).id));
+  const { login, start, restart } = useProviderSignIn(provider);
   if (login === undefined)
     return (
       <div className="flex flex-col gap-2">
@@ -108,64 +95,61 @@ function SignIn({ provider }: { provider: Provider }) {
         </Button>
       </div>
     );
-  return <LoginSteps login={login} onRestart={() => setLoginId(undefined)} />;
+  return <LoginSteps login={login} onRestart={restart} />;
 }
 
-type Login = NonNullable<ReturnType<typeof useLogin>>;
-type LoginView = ReturnType<typeof loginView>;
+type Login = NonNullable<ReturnType<typeof useProviderSignIn>["login"]>;
+type SignInSteps = ReturnType<typeof useLoginSteps>;
 
 // The running sign-in: the address to open, any code to enter, the provider's question, and how it ended.
 function LoginSteps({ login, onRestart }: { login: Login; onRestart: () => void }) {
-  const view = loginView(login);
+  const { link, linkText, code, prompt, line, cancel } = useLoginSteps(login);
   return (
     <div className="flex flex-col gap-3 text-sm">
-      {view.link === undefined ? null : (
+      {link === undefined ? null : (
         <div className="flex flex-col gap-1.5">
-          <p>{view.link.instructions ?? "Open this address and sign in."}</p>
-          <a href={view.link.url} target="_blank" rel="noreferrer" className="break-all text-primary underline">
-            {view.link.url}
+          <p>{linkText}</p>
+          <a href={link.url} target="_blank" rel="noreferrer" className="break-all text-primary underline">
+            {link.url}
           </a>
         </div>
       )}
-      {view.code === undefined ? null : (
+      {code === undefined ? null : (
         <p>
-          Enter <span className="font-mono text-base font-bold">{view.code.userCode}</span> at{" "}
-          <a href={view.code.verificationUri} target="_blank" rel="noreferrer" className="text-primary underline">
-            {view.code.verificationUri}
+          Enter <span className="font-mono text-base font-bold">{code.userCode}</span> at{" "}
+          <a href={code.verificationUri} target="_blank" rel="noreferrer" className="text-primary underline">
+            {code.verificationUri}
           </a>
         </p>
       )}
-      {view.prompt === undefined ? null : <LoginPrompt key={view.prompt.promptId} loginId={login.id} prompt={view.prompt} />}
-      <LoginOutcome view={view} loginId={login.id} onRestart={onRestart} />
+      {prompt === undefined ? null : <LoginPrompt key={prompt.promptId} loginId={login.id} prompt={prompt} />}
+      <LoginOutcome line={line} cancel={cancel} onRestart={onRestart} />
     </div>
   );
 }
 
+const LINE_TONES = { muted: "text-muted-foreground", good: "text-primary", bad: "text-destructive" };
+
 // Progress while the sign-in runs, how it ended, and a way to cancel it or start again.
-function LoginOutcome({ view, loginId, onRestart }: { view: LoginView; loginId: string; onRestart: () => void }) {
-  const client = useBotsmanClient();
+function LoginOutcome({ line, cancel, onRestart }: Pick<SignInSteps, "line" | "cancel"> & { onRestart: () => void }) {
   return (
     <>
-      {view.outcome === "running" && view.progress !== undefined ? <p className="text-muted-foreground">{view.progress}</p> : null}
-      {view.outcome === "connected" ? <p className="text-primary">Connected.</p> : null}
-      {view.outcome === "failed" || view.outcome === "cancelled" ? <ErrorText>{view.error ?? "The sign-in stopped."}</ErrorText> : null}
-      {view.outcome === "running" ? (
-        <Button variant="text" className="self-start" onClick={() => void client.cancelLogin(loginId)}>
-          Cancel sign-in
-        </Button>
-      ) : (
+      {line === undefined ? null : <p className={LINE_TONES[line.tone]}>{line.text}</p>}
+      {cancel === undefined ? (
         <Button variant="text" className="self-start" onClick={onRestart}>
           Start again
+        </Button>
+      ) : (
+        <Button variant="text" className="self-start" onClick={cancel}>
+          Cancel sign-in
         </Button>
       )}
     </>
   );
 }
 
-function LoginPrompt({ loginId, prompt }: { loginId: string; prompt: NonNullable<LoginView["prompt"]> }) {
-  const client = useBotsmanClient();
-  const [value, setValue] = useState(prompt.options[0]?.id ?? "");
-  const answer = useAction(() => client.answerLogin(loginId, prompt.promptId, value));
+function LoginPrompt({ loginId, prompt }: { loginId: string; prompt: NonNullable<SignInSteps["prompt"]> }) {
+  const { value, setValue, answer } = useLoginPrompt(loginId, prompt);
   return (
     <form
       className="flex flex-col gap-2"

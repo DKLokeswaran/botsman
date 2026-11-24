@@ -1,4 +1,4 @@
-import { type ChatController, type ChatItem, formatUsage, messageTime, queuedNote, type RunItem, type RunStep, runText, showsWorking, type ToolLine, toolVerb, workLabel } from "@botsman/client-core";
+import { type ChatController, type ChatItem, messageTime, queuedNote, type RunItem, type RunStep, runFooter, showsWorking, type ToolLine, toolVerb, workLabel } from "@botsman/client-core";
 
 type WorkStep = Extract<RunStep, { kind: "work" }>;
 import { useAction, useCopied } from "@botsman/client-core/react";
@@ -86,7 +86,7 @@ function Run({ item, botName }: { item: RunItem; botName: string }) {
       )}
       {showsWorking(item) ? <Text style={[styles.body, { color: colors.mutedForeground }]}>Working…</Text> : null}
       {item.error === null ? null : <Text style={[styles.body, { color: colors.destructive }]}>{item.error}</Text>}
-      {item.working ? null : <RunFooter item={item} />}
+      <RunFooter item={item} />
     </View>
   );
 }
@@ -95,13 +95,14 @@ function Run({ item, botName }: { item: RunItem; botName: string }) {
 function RunFooter({ item }: { item: RunItem }) {
   const { colors } = useTheme();
   const { copied, copy } = useCopied(Clipboard.setStringAsync);
-  const text = runText(item);
-  if (item.usage === null && text === "") return null;
+  const footer = runFooter(item);
+  if (footer === undefined) return null;
+  const { usage, copyText } = footer;
   return (
     <View style={styles.footer}>
-      {item.usage === null ? null : <Text style={[styles.small, { color: colors.mutedForeground }]}>{formatUsage(item.usage)}</Text>}
-      {text === "" ? null : (
-        <Pressable accessibilityRole="button" onPress={() => void copy(text)} hitSlop={8}>
+      {usage === undefined ? null : <Text style={[styles.small, { color: colors.mutedForeground }]}>{usage}</Text>}
+      {copyText === undefined ? null : (
+        <Pressable accessibilityRole="button" onPress={() => void copy(copyText)} hitSlop={8}>
           <Text style={[styles.small, styles.copy, { color: colors.mutedForeground }]}>{copied ? "Copied" : "Copy"}</Text>
         </Pressable>
       )}

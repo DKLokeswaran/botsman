@@ -1,11 +1,12 @@
-import type { Approval, MemoryFileName } from "@botsman/protocol";
+import { type Approval, type MemoryFileName, NOTE_NAME_PATTERN, NoteNameLimits } from "@botsman/protocol";
 
-// What each memory file holds and who writes it, as the memory screen explains it.
-export const MEMORY_FILES: readonly { name: MemoryFileName; about: string; shared: boolean }[] = [
-  { name: "USER_PROFILE.md", about: "About you, for every bot. Only you write this.", shared: true },
-  { name: "USER_MEMORY.md", about: "What the bots have learned about you. Only the main bot writes this, and every edit asks you first. Other bots ask the main bot to record things.", shared: true },
-  { name: "BOT_PROFILE.md", about: "This bot's purpose and instructions. Only you write this.", shared: false },
-  { name: "BOT_MEMORY.md", about: "What this bot keeps for itself. Every edit it makes asks you first.", shared: false },
+// The memory screen's files: each one's tab label, what it holds and who writes it. The labels leave out `.md` to fit a
+// phone's width.
+export const MEMORY_FILES: readonly { name: MemoryFileName; label: string; about: string; shared: boolean }[] = [
+  { name: "USER_PROFILE.md", label: "USER PROFILE", about: "About you, for every bot. Only you write this.", shared: true },
+  { name: "USER_MEMORY.md", label: "USER MEMORY", about: "What the bots have learned about you. Only the main bot writes this, and every edit asks you first. Other bots ask the main bot to record things.", shared: true },
+  { name: "BOT_PROFILE.md", label: "BOT PROFILE", about: "This bot's purpose and instructions. Only you write this.", shared: false },
+  { name: "BOT_MEMORY.md", label: "BOT MEMORY", about: "What this bot keeps for itself. Every edit it makes asks you first.", shared: false },
 ];
 
 // Who sees a file: every bot, or only this one.
@@ -23,11 +24,12 @@ export function pendingMemoryEdits(approvals: readonly Approval[], botId: string
   return approvals.filter((approval) => approval.botId === botId && approval.memoryEdit !== null);
 }
 
-const NOTE_NAME = /^[A-Za-z0-9][A-Za-z0-9 ._-]*\.md$/;
+const NOTE_NAME = new RegExp(NOTE_NAME_PATTERN);
 
 // Why a note name can't be saved, or undefined when it can. Names are plain file names ending in .md.
 export function noteNameProblem(name: string): string | undefined {
-  if (name.length < 4 || name.length > 120) return "Use 4 to 120 characters, ending in .md.";
+  const { shortest, longest } = NoteNameLimits;
+  if (name.length < shortest || name.length > longest) return `Use ${shortest} to ${longest} characters, ending in .md.`;
   if (!NOTE_NAME.test(name)) return "Start with a letter or digit, use letters, digits, spaces, dots, dashes, or underscores, and end in .md.";
   return undefined;
 }

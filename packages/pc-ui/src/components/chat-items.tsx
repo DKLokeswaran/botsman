@@ -1,4 +1,4 @@
-import { type ChatController, type ChatItem, formatUsage, messageTime, queuedNote, type RunItem, type RunStep, runText, showsWorking, type ToolLine, toolVerb, workLabel } from "@botsman/client-core";
+import { type ChatController, type ChatItem, messageTime, queuedNote, type RunItem, type RunStep, runFooter, showsWorking, type ToolLine, toolVerb, workLabel } from "@botsman/client-core";
 
 type WorkStep = Extract<RunStep, { kind: "work" }>;
 import { useAction, useCopied } from "@botsman/client-core/react";
@@ -73,7 +73,7 @@ function Run({ item, botName }: { item: RunItem; botName: string }) {
       )}
       {showsWorking(item) ? <p className="animate-pulse text-sm text-muted-foreground">Working…</p> : null}
       {item.error === null ? null : <p className="text-sm text-destructive">{item.error}</p>}
-      {item.working ? null : <RunFooter item={item} />}
+      <RunFooter item={item} />
     </article>
   );
 }
@@ -81,13 +81,14 @@ function Run({ item, botName }: { item: RunItem; botName: string }) {
 // Under a finished run: its tokens and cost, and Copy for everything it said.
 function RunFooter({ item }: { item: RunItem }) {
   const { copied, copy } = useCopied((text) => navigator.clipboard.writeText(text));
-  const text = runText(item);
-  if (item.usage === null && text === "") return null;
+  const footer = runFooter(item);
+  if (footer === undefined) return null;
+  const { usage, copyText } = footer;
   return (
     <div className="flex items-center gap-3 text-xs text-muted-foreground">
-      {item.usage === null ? null : <span>{formatUsage(item.usage)}</span>}
-      {text === "" ? null : (
-        <button type="button" className="rounded-md px-1.5 py-0.5 font-semibold hover:bg-accent hover:text-foreground" onClick={() => void copy(text)}>
+      {usage === undefined ? null : <span>{usage}</span>}
+      {copyText === undefined ? null : (
+        <button type="button" className="rounded-md px-1.5 py-0.5 font-semibold hover:bg-accent hover:text-foreground" onClick={() => void copy(copyText)}>
           {copied ? "Copied" : "Copy"}
         </button>
       )}

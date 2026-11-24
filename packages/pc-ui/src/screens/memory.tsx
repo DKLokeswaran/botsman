@@ -19,7 +19,7 @@ export function MemoryScreen({ botId }: { botId: string }) {
       <div role="tablist" aria-label="Memory file" className="flex flex-wrap gap-1 rounded-lg border border-border p-0.5">
         {MEMORY_FILES.map((candidate) => (
           <button key={candidate.name} type="button" role="tab" aria-selected={candidate.name === open} onClick={() => setOpen(candidate.name)} className={`flex-1 rounded-md px-2 py-1.5 font-mono text-xs ${candidate.name === open ? "bg-primary text-primary-foreground" : "hover:bg-accent"}`}>
-            {candidate.name}
+            {candidate.label}
           </button>
         ))}
       </div>

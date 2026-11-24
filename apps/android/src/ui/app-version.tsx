@@ -1,5 +1,5 @@
-import { type UpdateChecker, versionLine } from "@botsman/client-core";
-import { useAppName, useUpdateInfo, useUpdateState } from "@botsman/client-core/react";
+import type { UpdateChecker } from "@botsman/client-core";
+import { useAppVersion } from "@botsman/client-core/react";
 import { StyleSheet, Text, View } from "react-native";
 import { space, useTheme } from "../theme";
 import { Button } from "./button";
@@ -8,16 +8,14 @@ import { UpdateNotice } from "./update-notice";
 
 // This app's version, whether it is up to date, and a way to check now.
 export function AppVersion({ updates }: { updates: UpdateChecker | undefined }) {
-  const appName = useAppName();
   const { colors } = useTheme();
-  const info = useUpdateInfo(updates);
-  const state = useUpdateState(updates);
+  const { line, canCheck } = useAppVersion(updates);
   if (updates === undefined) return null;
   return (
     <View style={styles.group}>
       <View style={[pageStyles.row, { borderColor: colors.border }]}>
-        <Text style={[pageStyles.small, styles.grow, { color: colors.foreground }]}>{versionLine(appName, info, state)}</Text>
-        <Button label="Check" disabled={info.checking || state.status === "installing"} onPress={() => void updates.checkNow()} />
+        <Text style={[pageStyles.small, styles.grow, { color: colors.foreground }]}>{line}</Text>
+        <Button label="Check" disabled={!canCheck} onPress={() => void updates.checkNow()} />
       </View>
       <UpdateNotice updates={updates} />
     </View>

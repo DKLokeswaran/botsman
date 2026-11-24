@@ -1,5 +1,5 @@
-import { botNameProblem, modelDefaultLabel, photoAvatar, type Avatar as AvatarValue, type Bot } from "@botsman/client-core";
-import { useAction, useBot, useBotsmanClient } from "@botsman/client-core/react";
+import { modelDefaultLabel, photoAvatar, type Avatar as AvatarValue, type Bot } from "@botsman/client-core";
+import { useAction, useBot, useBotNameForm, useBotsmanClient } from "@botsman/client-core/react";
 import { MARK_IDS, MARKS } from "@botsman/tokens";
 import { router, useLocalSearchParams } from "expo-router";
 import { useState } from "react";
@@ -64,18 +64,13 @@ function FacePicker({ bot }: { bot: Bot }) {
 }
 
 function NameForm({ bot }: { bot: Bot }) {
-  const client = useBotsmanClient();
-  const [name, setName] = useState(bot.name);
-  const [description, setDescription] = useState(bot.description);
-  const problem = botNameProblem(name);
-  const changed = name.trim() !== bot.name || description.trim() !== bot.description;
-  const save = useAction(() => client.updateBot(bot.id, { name: name.trim(), description: description.trim() }));
+  const form = useBotNameForm(bot);
   return (
     <View style={styles.group}>
-      <Field label="Name" value={name} maxLength={60} autoCapitalize="words" onChangeText={setName} />
-      <Field label="Description" value={description} maxLength={500} autoCapitalize="sentences" onChangeText={setDescription} />
-      <ErrorText>{changed ? (problem ?? save.error) : save.error}</ErrorText>
-      {changed ? <Button label="Save" variant="primary" disabled={problem !== undefined || save.busy} onPress={() => void save.run()} /> : null}
+      <Field label="Name" value={form.name} maxLength={form.limits.name} autoCapitalize="words" onChangeText={form.setName} />
+      <Field label="Description" value={form.description} maxLength={form.limits.description} autoCapitalize="sentences" onChangeText={form.setDescription} />
+      <ErrorText>{form.error}</ErrorText>
+      {form.changed ? <Button label="Save" variant="primary" disabled={!form.ready} onPress={form.submit} /> : null}
     </View>
   );
 }

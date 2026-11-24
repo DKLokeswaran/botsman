@@ -1,5 +1,5 @@
-import { type Bot, type ChatItem, chatSubtitle, contextTokens, modelProblem } from "@botsman/client-core";
-import { useBot, useChat, useConnectionStatus, useModels } from "@botsman/client-core/react";
+import type { Bot, ChatItem } from "@botsman/client-core";
+import { useBot, useChat } from "@botsman/client-core/react";
 import { LegendList } from "@legendapp/list/react-native";
 import { router, useLocalSearchParams } from "expo-router";
 import { Pressable, StyleSheet, Text, View } from "react-native";
@@ -16,17 +16,13 @@ export default function ChatScreen() {
   const { botId } = useLocalSearchParams<{ botId: string }>();
   const { colors } = useTheme();
   const bot = useBot(botId);
-  const { chat, state, items, sendModes } = useChat(botId);
-  const reconnecting = useConnectionStatus() === "reconnecting";
-  const { models, loading } = useModels();
-  const problem = loading || state.status === "loading" ? undefined : modelProblem(models, state.settings.model);
+  const { chat, state, items, sendModes, busy, reconnecting, subtitle, problem } = useChat(botId);
 
   if (bot === undefined) return <Text style={[styles.missing, { color: colors.mutedForeground }]}>This bot no longer exists.</Text>;
-  const busy = state.live.running || state.live.compacting;
   return (
     <SafeAreaView style={styles.screen}>
       <KeyboardAvoidingView behavior="padding" style={styles.screen}>
-        <ChatHeader bot={bot} subtitle={chatSubtitle(state.settings, state.totals.usage.cost, models, contextTokens(state.messages))} />
+        <ChatHeader bot={bot} subtitle={subtitle} />
         {reconnecting ? <Text style={[styles.banner, { color: colors.primary, backgroundColor: colors.card, borderBottomColor: colors.border }]}>Reconnecting…</Text> : null}
         <LegendList
           data={items}

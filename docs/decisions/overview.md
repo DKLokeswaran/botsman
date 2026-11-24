@@ -123,6 +123,16 @@ The `client-core` package holds login, reconnect, catch-up, state, approvals, se
 
 Only `client-core` and the server depend on `protocol`. `client-core` re-exports the protocol's types with `export type *`, so screens take message types such as `Bot` from `client-core`. The re-export carries types only, so the protocol's functions can't be called from a screen.
 
+Where code goes:
+
+- **`protocol`** holds what both sides must agree on: message types, stream names, the version check, and each limit and pattern the server enforces, such as the shortest owner password, `BotLimits`, and the note name pattern. The server and `client-core` read those and never write the numbers again. `botIdOfStream` stays here though only the server calls it, because it reverses `chatStream`. `protocolFit` and `compareVersions` stay here as part of the version contract, though only `client-core` decides with `protocolFit`. Code that only builds or checks the package, such as the alerts JSON Schema, lives in its `scripts`.
+- **`client-core`** holds every rule, state, and text that depends on state for the screens. A screen or form whose logic both apps need has one hook, such as `useModelPicker` or `useSetUpForm`, with its decisions in plain functions that have tests. A form's `submit` does nothing until the form is ready, so the keyboard's Enter and the button agree.
+- **Screens** hold layout, styling, navigation, fixed wording, and calls to the platform, such as the clipboard and photo picker. A line about what the platform does, such as how an update installs, comes from the screen.
+- **`tokens`** holds sizes and shapes both apps draw, such as how much of a bot's picture its mark fills.
+- **Native alerts code** fills a bot's name into the wording itself, because Kotlin and Rust can't call `client-core`.
+
+Both apps name the server in the line under the bot list, "Connected to" and "Reconnecting to" followed by its host, and label the memory files without `.md`, so the labels fit a phone.
+
 Its main parts:
 
 | Part | Job |

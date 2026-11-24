@@ -1,7 +1,6 @@
-import { loginView, providerStatus, type Provider } from "@botsman/client-core";
-import { useAction, useBotsmanClient, useLogin, useProviders } from "@botsman/client-core/react";
+import type { Provider } from "@botsman/client-core";
+import { useApiKeyForm, useConnectForm, useLoginPrompt, useLoginSteps, useProviderList, useProviderRow, useProviderSignIn } from "@botsman/client-core/react";
 import * as Linking from "expo-linking";
-import { useState } from "react";
 import { StyleSheet, Text, View } from "react-native";
 import { fontFamilies, radius, space, useTheme } from "../theme";
 import { Button } from "./button";
@@ -10,14 +9,13 @@ import { ErrorText, Note, pageStyles, Segmented } from "./page";
 
 // Every provider, each opening to its Connect form. Used by the providers screen and first-run setup.
 export function ProviderList() {
-  const { providers, error } = useProviders();
-  const [open, setOpen] = useState<string>();
+  const { providers, error, openId, toggle } = useProviderList();
   return (
     <>
       <ErrorText>{error}</ErrorText>
       {providers === undefined ? <Note>Loading…</Note> : null}
       {providers?.map((provider) => (
-        <ProviderRow key={provider.id} provider={provider} open={open === provider.id} onOpen={() => setOpen(open === provider.id ? undefined : provider.id)} />
+        <ProviderRow key={provider.id} provider={provider} open={openId === provider.id} onOpen={() => toggle(provider.id)} />
       ))}
     </>
   );
@@ -25,14 +23,13 @@ export function ProviderList() {
 
 function ProviderRow({ provider, open, onOpen }: { provider: Provider; open: boolean; onOpen: () => void }) {
   const { colors } = useTheme();
-  const client = useBotsmanClient();
-  const remove = useAction(() => client.disconnectProvider(provider.id));
+  const { status, connectLabel, remove } = useProviderRow(provider, open);
   return (
     <View style={[styles.card, { borderColor: colors.border }]}>
       <Text style={[pageStyles.rowTitle, { color: colors.foreground }]}>{provider.name}</Text>
-      <Text style={[pageStyles.small, { color: provider.connected ? colors.primary : colors.mutedForeground }]}>{providerStatus(provider.connected, provider.connectedWith)}</Text>
+      <Text style={[pageStyles.small, { color: provider.connected ? colors.primary : colors.mutedForeground }]}>{status}</Text>
       <View style={styles.row}>
-        <Button label={open ? "Close" : provider.connected ? "Replace" : "Connect"} variant={provider.connected ? "ghost" : "primary"} onPress={onOpen} />
+        <Button label={connectLabel} variant={provider.connected ? "ghost" : "primary"} onPress={onOpen} />
         {provider.connected ? <Button label="Remove" variant="danger" disabled={remove.busy} onPress={() => void remove.run()} /> : null}
       </View>
       <ErrorText>{remove.error}</ErrorText>
@@ -42,39 +39,29 @@ function ProviderRow({ provider, open, onOpen }: { provider: Provider; open: boo
 }
 
 function ConnectForm({ provider, onDone }: { provider: Provider; onDone: () => void }) {
-  const [method, setMethod] = useState(provider.methods[0]!);
+  const { method, setMethod, methods } = useConnectForm(provider);
   return (
     <View style={styles.group}>
-      {provider.methods.length < 2 ? null : (
-        <Segmented label="How to connect" options={provider.methods.map((option) => ({ value: option, label: option === "api_key" ? "API key" : (provider.oauthLabel ?? "Sign in") }))} value={method} onChange={setMethod} />
-      )}
+      {methods === undefined ? null : <Segmented label="How to connect" options={methods} value={method} onChange={setMethod} />}
       {method === "api_key" ? <ApiKeyForm provider={provider} onDone={onDone} /> : <SignIn provider={provider} />}
     </View>
   );
 }
 
 function ApiKeyForm({ provider, onDone }: { provider: Provider; onDone: () => void }) {
-  const client = useBotsmanClient();
-  const [key, setKey] = useState("");
-  const save = useAction(async () => {
-    await client.saveApiKey(provider.id, key);
-    onDone();
-  });
+  const form = useApiKeyForm(provider, onDone);
   return (
     <View style={styles.group}>
-      <Field label={`${provider.name} API key`} secureTextEntry value={key} onChangeText={setKey} />
-      <ErrorText>{save.error}</ErrorText>
-      <Button label="Save key" variant="primary" disabled={key.trim() === "" || save.busy} onPress={() => void save.run()} />
+      <Field label={form.label} secureTextEntry value={form.key} onChangeText={form.setKey} />
+      <ErrorText>{form.error}</ErrorText>
+      <Button label="Save key" variant="primary" disabled={!form.ready} onPress={form.submit} />
     </View>
   );
 }
 
 // A browser sign-in the server runs: open the address, enter any code there, and answer what the provider asks.
 function SignIn({ provider }: { provider: Provider }) {
-  const client = useBotsmanClient();
-  const [loginId, setLoginId] = useState<string>();
-  const login = useLogin(loginId);
-  const start = useAction(async () => setLoginId((await client.startLogin(provider.id)).id));
+  const { login, start, restart } = useProviderSignIn(provider);
   if (login === undefined)
     return (
       <View style={styles.group}>
@@ -82,60 +69,57 @@ function SignIn({ provider }: { provider: Provider }) {
         <Button label="Start sign-in" variant="primary" disabled={start.busy} onPress={() => void start.run()} />
       </View>
     );
-  return <LoginSteps login={login} onRestart={() => setLoginId(undefined)} />;
+  return <LoginSteps login={login} onRestart={restart} />;
 }
 
-type Login = NonNullable<ReturnType<typeof useLogin>>;
-type LoginView = ReturnType<typeof loginView>;
+type Login = NonNullable<ReturnType<typeof useProviderSignIn>["login"]>;
+type SignInSteps = ReturnType<typeof useLoginSteps>;
 
 // The running sign-in: the address to open, any code to enter, the provider's question, and how it ended.
 function LoginSteps({ login, onRestart }: { login: Login; onRestart: () => void }) {
   const { colors } = useTheme();
-  const view = loginView(login);
+  const { link, linkText, code, prompt, line, cancel } = useLoginSteps(login);
   return (
     <View style={styles.group}>
-      {view.link === undefined ? null : (
+      {link === undefined ? null : (
         <View style={styles.group}>
-          <Note>{view.link.instructions ?? "Open this address and sign in."}</Note>
-          <Button label="Open in browser" variant="primary" onPress={() => void Linking.openURL(view.link!.url)} />
+          <Note>{linkText}</Note>
+          <Button label="Open in browser" variant="primary" onPress={() => void Linking.openURL(link.url)} />
           <Text selectable style={[pageStyles.small, { color: colors.mutedForeground }]}>
-            {view.link.url}
+            {link.url}
           </Text>
         </View>
       )}
-      {view.code === undefined ? null : (
+      {code === undefined ? null : (
         <View style={styles.group}>
           <Note>Enter this code on the provider's page:</Note>
           <Text selectable style={[styles.code, { color: colors.foreground }]}>
-            {view.code.userCode}
+            {code.userCode}
           </Text>
-          <Button label="Open the page" variant="ghost" onPress={() => void Linking.openURL(view.code!.verificationUri)} />
+          <Button label="Open the page" variant="ghost" onPress={() => void Linking.openURL(code.verificationUri)} />
         </View>
       )}
-      {view.prompt === undefined ? null : <LoginPrompt key={view.prompt.promptId} loginId={login.id} prompt={view.prompt} />}
-      <LoginOutcome view={view} loginId={login.id} onRestart={onRestart} />
+      {prompt === undefined ? null : <LoginPrompt key={prompt.promptId} loginId={login.id} prompt={prompt} />}
+      <LoginOutcome line={line} cancel={cancel} onRestart={onRestart} />
     </View>
   );
 }
 
 // Progress while the sign-in runs, how it ended, and a way to cancel it or start again.
-function LoginOutcome({ view, loginId, onRestart }: { view: LoginView; loginId: string; onRestart: () => void }) {
+function LoginOutcome({ line, cancel, onRestart }: Pick<SignInSteps, "line" | "cancel"> & { onRestart: () => void }) {
   const { colors } = useTheme();
-  const client = useBotsmanClient();
   return (
     <>
-      {view.outcome === "running" && view.progress !== undefined ? <Note>{view.progress}</Note> : null}
-      {view.outcome === "connected" ? <Text style={[pageStyles.rowTitle, { color: colors.primary }]}>Connected.</Text> : null}
-      {view.outcome === "failed" || view.outcome === "cancelled" ? <ErrorText>{view.error ?? "The sign-in stopped."}</ErrorText> : null}
-      {view.outcome === "running" ? <Button label="Cancel sign-in" variant="text" onPress={() => void client.cancelLogin(loginId)} /> : <Button label="Start again" variant="text" onPress={onRestart} />}
+      {line?.tone === "muted" ? <Note>{line.text}</Note> : null}
+      {line?.tone === "good" ? <Text style={[pageStyles.rowTitle, { color: colors.primary }]}>{line.text}</Text> : null}
+      {line?.tone === "bad" ? <ErrorText>{line.text}</ErrorText> : null}
+      {cancel === undefined ? <Button label="Start again" variant="text" onPress={onRestart} /> : <Button label="Cancel sign-in" variant="text" onPress={cancel} />}
     </>
   );
 }
 
-function LoginPrompt({ loginId, prompt }: { loginId: string; prompt: NonNullable<LoginView["prompt"]> }) {
-  const client = useBotsmanClient();
-  const [value, setValue] = useState(prompt.options[0]?.id ?? "");
-  const answer = useAction(() => client.answerLogin(loginId, prompt.promptId, value));
+function LoginPrompt({ loginId, prompt }: { loginId: string; prompt: NonNullable<SignInSteps["prompt"]> }) {
+  const { value, setValue, answer } = useLoginPrompt(loginId, prompt);
   return (
     <View style={styles.group}>
       {prompt.kind === "select" ? (

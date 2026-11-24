@@ -1,4 +1,4 @@
-import { PHOTO_SIZE } from "@botsman/client-core";
+import { PHOTO_QUALITY, PHOTO_SIZE } from "@botsman/client-core";
 import { ImageManipulator, SaveFormat } from "expo-image-manipulator";
 import { launchImageLibraryAsync } from "expo-image-picker";
 
@@ -8,6 +8,6 @@ export async function pickPhoto(): Promise<string | undefined> {
   const uri = picked.canceled ? undefined : picked.assets[0]?.uri;
   if (uri === undefined) return undefined;
   const image = await ImageManipulator.manipulate(uri).resize({ width: PHOTO_SIZE, height: PHOTO_SIZE }).renderAsync();
-  const saved = await image.saveAsync({ format: SaveFormat.JPEG, compress: 0.85, base64: true });
+  const saved = await image.saveAsync({ format: SaveFormat.JPEG, compress: PHOTO_QUALITY, base64: true });
   return `data:image/jpeg;base64,${saved.base64}`;
 }

@@ -1,23 +1,20 @@
-import { APPROVAL_WAITS, approvalWaitLabel, PERMISSION_MODES, type Bot, type BotUpdate } from "@botsman/client-core";
-import { useAction, useBot, useBotsmanClient } from "@botsman/client-core/react";
+import { APPROVAL_WAITS, approvalWaitLabel, type Bot } from "@botsman/client-core";
+import { useBotSettings } from "@botsman/client-core/react";
 import { ErrorText, Page, Segmented, ToggleRow } from "../components/page.tsx";
 import { botInfoHref } from "../use-route.ts";
 
 // How much a bot may do without asking: its permission mode, how long approvals wait, and network access.
 export function BotSettingsScreen({ botId }: { botId: string }) {
-  const bot = useBot(botId);
-  const client = useBotsmanClient();
-  const save = useAction((change: BotUpdate) => client.updateBot(botId, change));
+  const { bot, modes, modeNote, change, error } = useBotSettings(botId);
   if (bot === undefined) return <p className="p-6 text-muted-foreground">This bot no longer exists.</p>;
-  const mode = PERMISSION_MODES.find((option) => option.mode === bot.permissionMode)!;
   return (
     <Page title={bot.name} subtitle="Bot settings" back={botInfoHref(bot.id)}>
       <h2 className="font-display text-sm font-bold uppercase">Permissions</h2>
-      <Segmented label="Permission mode" options={PERMISSION_MODES.map((option) => ({ value: option.mode, label: option.label }))} value={bot.permissionMode} onChange={(mode) => void save.run({ permissionMode: mode })} />
-      <p className="text-sm text-muted-foreground">{mode.note} Memory edits always ask, in every mode.</p>
-      <ApprovalWait bot={bot} onChange={(approvalWaitMs) => void save.run({ approvalWaitMs })} />
-      <ToggleRow title="Network" detail="Commands run by this bot can reach the internet" on={bot.network} onChange={(network) => void save.run({ network })} />
-      <ErrorText>{save.error}</ErrorText>
+      <Segmented label="Permission mode" options={modes} value={bot.permissionMode} onChange={(permissionMode) => change({ permissionMode })} />
+      <p className="text-sm text-muted-foreground">{modeNote}</p>
+      <ApprovalWait bot={bot} onChange={(approvalWaitMs) => change({ approvalWaitMs })} />
+      <ToggleRow title="Network" detail="Commands run by this bot can reach the internet" on={bot.network} onChange={(network) => change({ network })} />
+      <ErrorText>{error}</ErrorText>
     </Page>
   );
 }

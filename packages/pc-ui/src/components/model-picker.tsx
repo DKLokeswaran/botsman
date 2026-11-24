@@ -1,6 +1,5 @@
-import { type ChatController, effortChoices, shownEffort, effortLabel, modelLabel, PICKER_SCOPES, type PickerScope, pickerValue, sameModel, type Bot, type ChatSettings, type ModelRef, type ThinkingLevel } from "@botsman/client-core";
-import { useAction, useBotsmanClient, useModels } from "@botsman/client-core/react";
-import { useState } from "react";
+import type { Bot, ChatController, ChatSettings } from "@botsman/client-core";
+import { useModelPicker } from "@botsman/client-core/react";
 import { ErrorText, Segmented } from "./page.tsx";
 
 const POPOVER = "absolute top-full left-4 z-10 mt-2 w-80";
@@ -8,34 +7,27 @@ const POPOVER = "absolute top-full left-4 z-10 mt-2 w-80";
 // Picks the model and reasoning effort for the open chat, or for the bot's default. Without a chat, such as on bot
 // info, it changes only the bot's default.
 export function ModelPicker({ chat, bot, onClose, className = POPOVER }: { chat?: { controller: ChatController; settings: ChatSettings }; bot: Bot; onClose: () => void; className?: string }) {
-  const client = useBotsmanClient();
-  const { models, loading } = useModels();
-  const [scope, setScope] = useState<PickerScope>(chat === undefined ? "bot" : "chat");
-  const value = pickerValue(scope, chat?.settings ?? { model: bot.defaultModel, thinkingLevel: bot.thinkingLevel }, bot);
-  const save = useAction((change: { model?: ModelRef | null; thinkingLevel?: ThinkingLevel }) =>
-    scope === "chat" && chat !== undefined ? chat.controller.changeSettings(change) : client.updateBot(bot.id, { defaultModel: change.model, thinkingLevel: change.thinkingLevel }),
-  );
-  const current = models.find((model) => sameModel(model, value.model));
+  const picker = useModelPicker(bot, chat);
   return (
     <div role="dialog" aria-label="Model and reasoning" className={`flex flex-col gap-3 rounded-xl border border-border bg-card p-3 text-sm ${className}`}>
-      {chat === undefined ? null : <Segmented label="Applies to" options={PICKER_SCOPES} value={scope} onChange={setScope} compact />}
-      <p className="text-xs text-muted-foreground">{value.note}</p>
+      {picker.scopes === undefined ? null : <Segmented label="Applies to" options={picker.scopes} value={picker.scope} onChange={picker.setScope} compact />}
+      <p className="text-xs text-muted-foreground">{picker.note}</p>
       <h4 className="font-semibold">Model</h4>
-      {loading ? <p className="text-muted-foreground">Loading…</p> : null}
+      {picker.loading ? <p className="text-muted-foreground">Loading…</p> : null}
       <div className="flex max-h-56 flex-col overflow-y-auto">
-        {models.map((model) => (
-          <Choice key={`${model.provider}/${model.id}`} label={modelLabel(model)} chosen={sameModel(model, value.model)} onPick={() => void save.run({ model: { provider: model.provider, modelId: model.id } })} />
+        {picker.models.map((model) => (
+          <Choice key={model.key} label={model.label} chosen={model.chosen} onPick={() => picker.pickModel(model.ref)} />
         ))}
       </div>
       <h4 className="font-semibold">Reasoning effort</h4>
       <div className="flex flex-wrap gap-1">
-        {effortChoices(current).map((level) => (
-          <button key={level} type="button" aria-pressed={level === shownEffort(current, value.thinkingLevel)} onClick={() => void save.run({ thinkingLevel: level })} className={`rounded-md border px-2 py-1 text-xs ${level === shownEffort(current, value.thinkingLevel) ? "border-primary text-primary" : "border-border hover:bg-accent"}`}>
-            {effortLabel(level)}
+        {picker.efforts.map(({ level, label, chosen }) => (
+          <button key={level} type="button" aria-pressed={chosen} onClick={() => picker.pickEffort(level)} className={`rounded-md border px-2 py-1 text-xs ${chosen ? "border-primary text-primary" : "border-border hover:bg-accent"}`}>
+            {label}
           </button>
         ))}
       </div>
-      <ErrorText>{save.error}</ErrorText>
+      <ErrorText>{picker.error}</ErrorText>
       <a href="#/providers" className="text-primary underline" onClick={onClose}>
         Connect a provider
       </a>

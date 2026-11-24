@@ -1,6 +1,7 @@
 import { readFileSync } from "node:fs";
 import { compile } from "@earendil-works/pi-schema";
 import { describe, expect, it } from "vitest";
+import { alertsJsonSchema } from "../scripts/alerts-schema.ts";
 import * as protocol from "../src/index.ts";
 
 describe("protocol schemas", () => {
@@ -18,7 +19,7 @@ describe("protocol schemas", () => {
 
   it("keep the committed alerts schema in sync", () => {
     const committed = JSON.parse(readFileSync(new URL("../schema/alerts.schema.json", import.meta.url), "utf8"));
-    expect(committed).toEqual(JSON.parse(JSON.stringify(protocol.alertsJsonSchema())));
+    expect(committed).toEqual(JSON.parse(JSON.stringify(alertsJsonSchema())));
   });
 });
 

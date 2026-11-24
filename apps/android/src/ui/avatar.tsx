@@ -1,5 +1,5 @@
-import type { Bot } from "@botsman/client-core";
-import { MARK_STROKE, MARKS } from "@botsman/tokens";
+import { type Bot, botInitial } from "@botsman/client-core";
+import { MARK_SHARE, MARK_STROKE, MARKS } from "@botsman/tokens";
 import { Image, StyleSheet, Text, View } from "react-native";
 import Svg, { Path } from "react-native-svg";
 import { fontFamilies, radius, useTheme } from "../theme";
@@ -13,9 +13,9 @@ export function Avatar({ bot, size = 40 }: { bot: Pick<Bot, "name" | "avatar">; 
   return (
     <View style={[styles.box, box, { backgroundColor: colors.card }]}>
       {mark === undefined ? (
-        <Text style={[styles.initial, { color: colors.foreground }]}>{bot.name.trim().charAt(0).toUpperCase()}</Text>
+        <Text style={[styles.initial, { color: colors.foreground }]}>{botInitial(bot.name)}</Text>
       ) : (
-        <MarkIcon paths={mark} size={Math.round(size * 0.5)} color={colors.foreground} />
+        <MarkIcon paths={mark} size={Math.round(size * MARK_SHARE)} color={colors.foreground} />
       )}
     </View>
   );

@@ -1,18 +1,21 @@
-import type { AlertSettings, DeviceSession, UsageReport } from "@botsman/protocol";
+import type { AlertSettings, DeviceSession } from "@botsman/protocol";
 import { liveSessions } from "../settings-view.ts";
+import { USAGE_DAYS, type UsageView, usageView } from "../usage-view.ts";
 import { useBotsmanClient } from "./client-context.tsx";
-import { useServerState } from "./hooks.ts";
+import { useBots, useServerState } from "./hooks.ts";
 import { type Action, useAction } from "./use-action.ts";
 import { type Loaded, useLoaded } from "./use-loaded.ts";
 
-// Spending over the last `days` days.
-export function useUsage(days: number): Loaded<UsageReport> {
+// The usage screen: spending over its period, undefined while it loads, and the period's length in days.
+export function useUsage(): { view: UsageView | undefined; error: string | undefined; days: number } {
   const client = useBotsmanClient();
-  return useLoaded(() => client.usage(days), [client, days]);
+  const bots = useBots();
+  const { value, error } = useLoaded(() => client.usage(USAGE_DAYS), [client]);
+  return { view: value === undefined ? undefined : usageView(value, bots), error, days: USAGE_DAYS };
 }
 
 // Every signed-in device, with this one marked.
-export function useSessions(): Loaded<DeviceSession[]> {
+function useSessions(): Loaded<DeviceSession[]> {
   const client = useBotsmanClient();
   return useLoaded(() => client.sessions(), [client]);
 }

@@ -1,5 +1,5 @@
-import { APPROVAL_WAITS, approvalWaitLabel, PERMISSION_MODES, type Bot, type BotUpdate } from "@botsman/client-core";
-import { useAction, useBot, useBotsmanClient } from "@botsman/client-core/react";
+import { APPROVAL_WAITS, approvalWaitLabel, type Bot } from "@botsman/client-core";
+import { useBotSettings } from "@botsman/client-core/react";
 import { useLocalSearchParams } from "expo-router";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 import { space, useTheme } from "../../src/theme";
@@ -8,19 +8,16 @@ import { ErrorText, Note, Page, pageStyles, SectionTitle, Segmented, ToggleRow }
 // How much a bot may do without asking: its permission mode, how long approvals wait, and network access.
 export default function BotSettingsScreen() {
   const { botId } = useLocalSearchParams<{ botId: string }>();
-  const bot = useBot(botId);
-  const client = useBotsmanClient();
-  const save = useAction((change: BotUpdate) => client.updateBot(botId, change));
+  const { bot, modes, modeNote, change, error } = useBotSettings(botId);
   if (bot === undefined) return <Page title="Bot settings"><Note>This bot no longer exists.</Note></Page>;
-  const mode = PERMISSION_MODES.find((option) => option.mode === bot.permissionMode)!;
   return (
     <Page title={bot.name} subtitle="Bot settings">
       <SectionTitle>Permissions</SectionTitle>
-      <Segmented label="Permission mode" options={PERMISSION_MODES.map((option) => ({ value: option.mode, label: option.label }))} value={bot.permissionMode} onChange={(permissionMode) => void save.run({ permissionMode })} />
-      <Note>{`${mode.note} Memory edits always ask, in every mode.`}</Note>
-      <ApprovalWait bot={bot} onChange={(approvalWaitMs) => void save.run({ approvalWaitMs })} />
-      <ToggleRow title="Network" detail="Commands run by this bot can reach the internet" on={bot.network} onChange={(network) => void save.run({ network })} />
-      <ErrorText>{save.error}</ErrorText>
+      <Segmented label="Permission mode" options={modes} value={bot.permissionMode} onChange={(permissionMode) => change({ permissionMode })} />
+      <Note>{modeNote}</Note>
+      <ApprovalWait bot={bot} onChange={(approvalWaitMs) => change({ approvalWaitMs })} />
+      <ToggleRow title="Network" detail="Commands run by this bot can reach the internet" on={bot.network} onChange={(network) => change({ network })} />
+      <ErrorText>{error}</ErrorText>
     </Page>
   );
 }

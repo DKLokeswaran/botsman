@@ -1,6 +1,41 @@
 import type { Bot, UsageReport } from "@botsman/protocol";
+import { formatCost } from "./format.ts";
 
 const DAY_MS = 24 * 3_600_000;
+
+// The days the usage screen covers.
+export const USAGE_DAYS = 14;
+
+// A day's bar is never shorter than this, and a day that cost nothing is drawn faded.
+const SHORTEST_BAR = 3;
+const FADED = 0.25;
+
+// The usage screen: the total, a bar per day with the dates under its ends, and a meter per bot, all ready to draw.
+export type UsageView = {
+  total: string;
+  days: { day: string; label: string; cost: string; height: Percent; opacity: number }[];
+  ends: { first: string | undefined; last: string | undefined };
+  bots: { name: string; cost: string; width: Percent }[];
+  // Whether no bot replied in the period. A period of free replies isn't empty.
+  empty: boolean;
+};
+
+type Percent = `${number}%`;
+
+export function usageView(report: UsageReport, bots: readonly Bot[]): UsageView {
+  const days = usageDays(report, USAGE_DAYS);
+  return {
+    total: formatCost(report.total.cost),
+    days: days.map(({ day, label, cost, share }) => ({ day, label, cost: formatCost(cost), height: `${Math.max(SHORTEST_BAR, percent(share))}%`, opacity: cost === 0 ? FADED : 1 })),
+    ends: { first: days[0]?.label, last: days.at(-1)?.label },
+    bots: usageBots(report, bots).map(({ name, cost, share }) => ({ name, cost: formatCost(cost), width: `${percent(share)}%` })),
+    empty: report.bots.length === 0,
+  };
+}
+
+function percent(share: number): number {
+  return Math.round(share * 100);
+}
 
 export type UsageDay = { day: string; label: string; cost: number; share: number };
 export type UsageBot = { name: string; cost: number; share: number };

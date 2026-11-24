@@ -1,6 +1,6 @@
 import type { ChatMessage, LiveState, LiveTool, ModelRef, ToolCall, Usage } from "@botsman/protocol";
 import type { ChatState, PendingSend } from "./chat-state.ts";
-import { formatMessageTime } from "./format.ts";
+import { formatMessageTime, formatUsage } from "./format.ts";
 
 // One tool call as a chat shows it: what ran, how far it got, and its result once there is one.
 export type ToolLine = {
@@ -211,8 +211,16 @@ export function showsWorking(run: RunItem): boolean {
   return run.working && (run.steps.length === 0 || run.steps.at(-1)!.kind === "text") && !run.steps.some((step) => step.id === `${LIVE_ID}-text`);
 }
 
-// What Copy puts on the clipboard for a run: everything the bot said, without its thinking or tool calls.
-export function runText(run: RunItem): string {
+// The line under a finished run: its tokens and cost, and what Copy puts on the clipboard. Either is undefined when the
+// run has none, and a run with neither, or one still working, has no line.
+export function runFooter(run: RunItem): { usage: string | undefined; copyText: string | undefined } | undefined {
+  const usage = run.usage === null ? undefined : formatUsage(run.usage);
+  const copyText = runText(run) || undefined;
+  return run.working || (usage === undefined && copyText === undefined) ? undefined : { usage, copyText };
+}
+
+// Everything the bot said in a run, without its thinking or tool calls.
+function runText(run: RunItem): string {
   return run.steps.flatMap((step) => (step.kind === "text" ? [step.text.trim()] : [])).join("\n\n");
 }
 
