@@ -2,7 +2,7 @@
 import stylelint from "stylelint";
 
 const ruleName = "botsman/no-remote-css";
-const messages = stylelint.utils.ruleMessages(ruleName, { remote: "Fonts and styles ship inside the apps. Add fonts to the tokens package instead." });
+const messages = stylelint.utils.ruleMessages(ruleName, { remote: "Fonts and styles ship inside the apps. Add fonts to the tokens package, and other styles as a package instead." });
 // An http(s) or protocol-relative address, bare or inside url().
 const REMOTE = /(^|["'(\s])(https?:)?\/\//;
 
