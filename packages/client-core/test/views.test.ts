@@ -1,6 +1,6 @@
 import type { Approval, Bot, DeviceSession, UsageReport } from "@botsman/protocol";
 import { describe, expect, it, test } from "vitest";
-import { isThemeMode, resolveTheme, memoryDiff, chatFromCache, chatToCache, emptyChat, emptyServerState, serverFromCache, serverToCache, backgroundLine, backgroundSteps, exactCommand, liveSessions, slashMatches, usageBots, usageDays, usageView, updateView, UPDATE_NEEDED, connectionLine, needsYouLine, memoryEditView, runFooter, modelChoices, type RunItem, botInitial, botNameProblem, noteNameProblem, permissionNote, isBusy, opensOutside } from "../src/index.ts";
+import { isThemeMode, resolveTheme, memoryDiff, chatFromCache, chatToCache, emptyChat, emptyServerState, serverFromCache, serverToCache, backgroundLine, backgroundSteps, exactCommand, liveSessions, slashMatches, usageBots, usageDays, usageView, updateView, UPDATE_NEEDED, connectionLine, needsYouLine, memoryEditView, runFooter, modelChoices, type RunItem, botInitial, botNameProblem, noteNameProblem, permissionNote, isBusy, opensOutside, approvalWaitChoices, serverHost } from "../src/index.ts";
 
 const zero = { inputTokens: 0, outputTokens: 0, cacheReadTokens: 0, cacheWriteTokens: 0, totalTokens: 0, cost: 0 };
 const cost = (value: number) => ({ ...zero, cost: value });
@@ -212,4 +212,16 @@ describe("bot forms", () => {
     expect(botInitial(" atlas")).toBe("A");
     expect(permissionNote("off")).toBe("Actions outside this bot's folder run without asking. Memory edits always ask, in every mode.");
   });
+});
+
+test("the approval waits mark the bot's own, and add it when it is outside the usual ones", () => {
+  expect(approvalWaitChoices(60 * 60_000).filter((wait) => wait.chosen)).toEqual([{ label: "1 hour", ms: 60 * 60_000, chosen: true }]);
+  const own = approvalWaitChoices(5 * 60_000);
+  expect(own[0]).toEqual({ label: "5 minutes", ms: 5 * 60_000, chosen: true });
+  expect(own).toHaveLength(approvalWaitChoices(60 * 60_000).length + 1);
+});
+
+test("the server is named by its host and port", () => {
+  expect(serverHost("https://bots.example.com")).toBe("bots.example.com");
+  expect(serverHost("http://localhost:8787/")).toBe("localhost:8787");
 });

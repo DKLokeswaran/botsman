@@ -28,11 +28,11 @@ export function NewBotScreen() {
 
 // The bot's default model, or none.
 function ModelSelect({ draft }: { draft: ReturnType<typeof useNewBotDraft> }) {
-  const { models, setModel } = draft;
+  const { models, modelKey, chooseModel } = draft;
   return (
     <label className="flex flex-col gap-1.5 text-sm">
       <span className="font-medium">Default model</span>
-      <select className="rounded-lg border border-input bg-background px-3 py-2" value={models.find((model) => model.chosen)?.key ?? ""} onChange={(event) => setModel(models.find((model) => model.key === event.target.value)?.ref ?? null)}>
+      <select className="rounded-lg border border-input bg-background px-3 py-2" value={modelKey} onChange={(event) => chooseModel(event.target.value)}>
         <option value="">{draft.loading ? "Loading…" : "None yet"}</option>
         {models.map((model) => (
           <option key={model.key} value={model.key}>

@@ -1,4 +1,6 @@
 import type { AlertSettings, DeviceSession } from "@botsman/protocol";
+import type { AppController } from "../app-controller.ts";
+import { serverHost } from "../format.ts";
 import { liveSessions } from "../settings-view.ts";
 import { USAGE_DAYS, type UsageView, usageView } from "../usage-view.ts";
 import { useBotsmanClient } from "./client-context.tsx";
@@ -37,4 +39,19 @@ export function useAlertSettings(): { alertSettings: AlertSettings | undefined; 
   const { alertSettings } = useServerState();
   const save = useAction((kind: string, on: boolean) => client.updateAlertSettings({ [kind]: on }));
   return { alertSettings, save };
+}
+
+// The server this device is signed in to: its host, signing out, and changing to another where the app allows it. One
+// runs at a time.
+export function useServerAccount(app: AppController) {
+  const client = useBotsmanClient();
+  const signOut = useAction(() => client.session.signOut());
+  const changeServer = useAction(() => app.changeServer());
+  return {
+    host: serverHost(client.baseUrl),
+    signOut: () => void signOut.run(),
+    changeServer: app.canChangeServer ? () => void changeServer.run() : undefined,
+    busy: signOut.busy || changeServer.busy,
+    error: signOut.error ?? changeServer.error,
+  };
 }

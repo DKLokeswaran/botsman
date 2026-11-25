@@ -1,6 +1,6 @@
 import { BotLimits, type ModelInfo, type ModelRef } from "@botsman/protocol";
 import { useState } from "react";
-import { botNameProblem, modelChoices, suggestedModel } from "../bot-settings.ts";
+import { botNameProblem, type ModelChoice, modelChoices, suggestedModel } from "../bot-settings.ts";
 import { formatBytes } from "../format.ts";
 import { useBotsmanClient } from "./client-context.tsx";
 import { useBots } from "./use-server-state.ts";
@@ -9,7 +9,7 @@ import { useFreeSpace, useModels } from "./use-models.ts";
 
 // The new-bot form: its fields, the model (the suggested one until the owner picks, null for none), the folder's free
 // space, the first thing wrong (the name, then a folder the server refuses, then a failed create), and creating the bot.
-// `onCreated` gets the new bot's id, so each app opens its chat.
+// A model is chosen by its key, and the empty key is none. `onCreated` gets the new bot's id, so each app opens its chat.
 export function useNewBotDraft(onCreated: (botId: string) => void) {
   const client = useBotsmanClient();
   const main = useBots().find((bot) => bot.isMain);
@@ -21,6 +21,7 @@ export function useNewBotDraft(onCreated: (botId: string) => void) {
   const [folder, setFolder] = useState("");
   const space = useFreeSpace(folder);
   const model = picked === undefined ? suggestedModel(models, main?.defaultModel) : picked;
+  const choices = modelChoices(models, model);
   const problem = name === "" ? undefined : botNameProblem(name);
   const create = useAction(async () => {
     const bot = await client.createBot({ name: name.trim(), description: description.trim(), purpose: purpose.trim(), defaultModel: model, folder: folder.trim() });
@@ -35,10 +36,11 @@ export function useNewBotDraft(onCreated: (botId: string) => void) {
     purpose,
     setPurpose,
     limits: BotLimits,
-    models: modelChoices(models, model),
+    models: choices,
+    modelKey: chosenKey(choices),
     loading,
     modelHint: modelHint(models, loading),
-    setModel: setPicked,
+    chooseModel: (key: string) => setPicked(choices.find((choice) => choice.key === key)?.ref ?? null),
     folder,
     setFolder,
     folderHint: folderHint(space),
@@ -46,6 +48,11 @@ export function useNewBotDraft(onCreated: (botId: string) => void) {
     ready: name.trim() !== "" && problem === undefined && folderAllowed && !create.busy,
     create,
   };
+}
+
+// The key of the chosen model, or the empty key for none.
+function chosenKey(choices: readonly ModelChoice[]): string {
+  return choices.find((choice) => choice.chosen)?.key ?? "";
 }
 
 // What the model field says when there is nothing to choose.

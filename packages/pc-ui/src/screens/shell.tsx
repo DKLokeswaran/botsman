@@ -28,17 +28,17 @@ export function Shell({ app, client, notifications, autostart, theme }: { app: A
     <div className="flex h-screen">
       <UpdateDialog updates={app.updates} />
       <Sidebar openBotId={openBotId} />
-      <MainPane app={app} client={client} route={route} loading={status === "loading"} botId={openBotId} notifications={{ permission, ask: askForNotifications }} autostart={autostart} theme={theme} />
+      <MainPane app={app} route={route} loading={status === "loading"} botId={openBotId} notifications={{ permission, ask: askForNotifications }} autostart={autostart} theme={theme} />
     </div>
   );
 }
 
 // The page beside the bot list. Home is the main bot's chat.
-function MainPane({ app, client, route, loading, botId, notifications, autostart, theme }: { app: AppController; client: BotsmanClient; route: Route; loading: boolean; botId: string | undefined; notifications: NotificationChoice; autostart: Autostart | undefined; theme: ThemeChoice }) {
+function MainPane({ app, route, loading, botId, notifications, autostart, theme }: { app: AppController; route: Route; loading: boolean; botId: string | undefined; notifications: NotificationChoice; autostart: Autostart | undefined; theme: ThemeChoice }) {
   if (route.name === "new-bot") return <NewBotScreen />;
   if (route.name === "providers") return <ProvidersScreen />;
   if (route.name === "usage") return <UsageScreen />;
-  if (route.name === "settings") return <SettingsScreen app={app} client={client} notifications={notifications} autostart={autostart} theme={theme} />;
+  if (route.name === "settings") return <SettingsScreen app={app} notifications={notifications} autostart={autostart} theme={theme} />;
   if (loading || botId === undefined) return <p className="p-6 text-muted-foreground">Loading…</p>;
   return <BotPage route={route} botId={botId} />;
 }

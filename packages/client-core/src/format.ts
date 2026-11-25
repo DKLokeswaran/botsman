@@ -44,9 +44,14 @@ export function modelChipLabel(settings: ChatSettings, models: readonly ModelInf
   return `${info?.name ?? settings.model.modelId} · ${effortLabel(shownEffort(info, settings.thinkingLevel))}`;
 }
 
+// The server's address as the apps name it, without the scheme.
+export function serverHost(baseUrl: string): string {
+  return /^https?:\/\/([^/]+)/i.exec(baseUrl)?.[1] ?? baseUrl;
+}
+
 // How the connection to the server is doing, with the server's host where there is one to name.
 export function connectionLine(status: ConnectionStatus, baseUrl: string): string {
-  const host = /^https?:\/\/([^/]+)/i.exec(baseUrl)?.[1] ?? baseUrl;
+  const host = serverHost(baseUrl);
   if (status === "online") return `Connected to ${host}`;
   if (status === "reconnecting") return `Reconnecting to ${host}…`;
   return status === "connecting" ? "Connecting…" : "Offline";

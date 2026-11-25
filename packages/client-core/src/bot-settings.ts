@@ -18,7 +18,7 @@ export function permissionNote(mode: PermissionMode): string {
 }
 
 // How long an approval waits before it is refused. The server accepts one minute to seven days.
-export const APPROVAL_WAITS: readonly { label: string; ms: number }[] = [
+const APPROVAL_WAITS: readonly { label: string; ms: number }[] = [
   { label: "15 minutes", ms: 15 * MINUTE },
   { label: "1 hour", ms: HOUR },
   { label: "8 hours", ms: 8 * HOUR },
@@ -31,6 +31,12 @@ export function approvalWaitLabel(ms: number): string {
   const known = APPROVAL_WAITS.find((wait) => wait.ms === ms);
   if (known !== undefined) return known.label;
   return ms < HOUR ? `${Math.round(ms / MINUTE)} minutes` : `${Math.round(ms / HOUR)} hours`;
+}
+
+// The waits to choose from, with the bot's own first when it is outside the usual ones.
+export function approvalWaitChoices(current: number): { label: string; ms: number; chosen: boolean }[] {
+  const usual = APPROVAL_WAITS.map((wait) => ({ ...wait, chosen: wait.ms === current }));
+  return usual.some((wait) => wait.chosen) ? usual : [{ label: approvalWaitLabel(current), ms: current, chosen: true }, ...usual];
 }
 
 // Why a name can't be saved, or undefined when it can. The server refuses slashes, backslashes, and control characters.

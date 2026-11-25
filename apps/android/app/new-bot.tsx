@@ -33,7 +33,7 @@ function ModelList({ draft }: { draft: ReturnType<typeof useNewBotDraft> }) {
       {draft.loading ? <Note>Loading…</Note> : null}
       {draft.modelHint === undefined ? null : <Note>{draft.modelHint}</Note>}
       {draft.models.map((model) => (
-        <Pressable key={model.key} accessibilityRole="radio" accessibilityState={{ checked: model.chosen }} onPress={() => draft.setModel(model.ref)} style={[pageStyles.row, { borderColor: model.chosen ? colors.primary : colors.border }]}>
+        <Pressable key={model.key} accessibilityRole="radio" accessibilityState={{ checked: model.chosen }} onPress={() => draft.chooseModel(model.key)} style={[pageStyles.row, { borderColor: model.chosen ? colors.primary : colors.border }]}>
           <Text style={[pageStyles.small, { color: model.chosen ? colors.primary : colors.foreground }]}>{model.label}</Text>
         </Pressable>
       ))}
