@@ -18,6 +18,13 @@ module.exports = {
       "packages/client-core",
       "packages/protocol",
     ]),
+    {
+      name: "only-client-core-react-imports-react",
+      comment: "client-core is plain TypeScript outside src/react, so nothing else in it imports React or that folder.",
+      severity: "error",
+      from: { path: "^packages/client-core/src/(?!react/)" },
+      to: { path: "(^|/)node_modules/(@types/)?react/|^packages/client-core/src/react/" },
+    },
     onlyImports("server-code-imports-only-protocol", "The server's code imports only protocol.", "^server/(?!test/)", ["packages/protocol"]),
     onlyImports("server-tests-import-protocol-and-client-core", "The server's tests import only protocol and client-core, whose code applies and checks what the server sends.", "^server/test/", [
       "packages/protocol",

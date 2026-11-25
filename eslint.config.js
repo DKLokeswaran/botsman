@@ -46,7 +46,13 @@ export default [
   },
   {
     files: SCREENS,
-    rules: { "botsman/no-screen-io": "error" },
+    rules: {
+      complexity: ["error", 8],
+      "botsman/screen-complexity": ["warn", 6],
+      "botsman/no-screen-io": "error",
+      "botsman/no-screen-client-calls": "error",
+      "botsman/no-screen-array-logic": "error",
+    },
   },
   {
     files: typescriptIn(["server/src"]),

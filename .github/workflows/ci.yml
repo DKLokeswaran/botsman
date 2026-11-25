@@ -22,6 +22,9 @@ jobs:
       - uses: ./.github/actions/setup
       - run: pnpm -r typecheck
       - run: pnpm lint
+      - name: List the code copied between packages, without failing
+        run: pnpm lint:copies
+        continue-on-error: true
       - run: pnpm -r test
       - run: pnpm --filter @botsman/web build
       - name: Bundle the Android app's JavaScript

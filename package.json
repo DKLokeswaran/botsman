@@ -13,12 +13,14 @@
     "lint:imports": "depcruise packages apps server --config .dependency-cruiser.cjs",
     "lint:code": "eslint .",
     "lint:styles": "stylelint \"packages/*/src/**/*.css\" \"apps/*/src/**/*.css\" --allow-empty-input",
+    "lint:copies": "jscpd packages/client-core/src packages/pc-ui/src packages/protocol/src packages/tokens/src apps/android server/src --skipLocal --format typescript,tsx --min-tokens 50 --min-lines 3 --ignore \"**/node_modules/**\" --reporters console",
     "start": "pnpm --filter @botsman/server start"
   },
   "devDependencies": {
     "@typescript-eslint/parser": "8.72.1",
     "dependency-cruiser": "18.8.0",
     "eslint": "10.14.0",
+    "jscpd": "4.3.0",
     "stylelint": "18.0.0"
   }
 }
