@@ -115,6 +115,8 @@ TypeScript's `noUnusedLocals` and `noUnusedParameters` fail the type check on un
 
 `pnpm lint:copies` lists code copied between packages, with jscpd. It never fails a pull request, because the two apps' screens match in layout on purpose and it can't tell that from repeated logic. It isn't part of `pnpm lint`. CI runs it as its own step.
 
+CI runs every check even when an earlier one failed, with each linter as its own step, so one run shows every failure.
+
 Code that ships is `src/` in every package and app, and Android's `app/`. Tests, scripts, and config files are left out of the size rules. Client packages are `pc-ui` and the three apps.
 
 ## Versions and releases

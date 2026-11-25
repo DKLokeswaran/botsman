@@ -20,12 +20,26 @@ jobs:
     steps:
       - uses: actions/checkout@v7
       - uses: ./.github/actions/setup
-      - run: pnpm -r typecheck
-      - run: pnpm lint
+        id: setup
+      # Each check runs even when an earlier one failed, so one run shows every failure.
+      # `--no-sort` keeps checking packages that depend on a failed one. Tests run one package at a time, because the
+      # streaming tests time out on a busy machine.
+      - run: pnpm -r --no-bail --no-sort typecheck
+        if: ${{ !cancelled() && steps.setup.outcome == 'success' }}
+      - run: pnpm lint:imports
+        if: ${{ !cancelled() && steps.setup.outcome == 'success' }}
+      - run: pnpm lint:code
+        if: ${{ !cancelled() && steps.setup.outcome == 'success' }}
+      - run: pnpm lint:styles
+        if: ${{ !cancelled() && steps.setup.outcome == 'success' }}
       - name: List the code copied between packages, without failing
+        if: ${{ !cancelled() && steps.setup.outcome == 'success' }}
         run: pnpm lint:copies
         continue-on-error: true
-      - run: pnpm -r test
+      - run: pnpm -r --no-bail --no-sort --workspace-concurrency=1 test
+        if: ${{ !cancelled() && steps.setup.outcome == 'success' }}
       - run: pnpm --filter @botsman/web build
+        if: ${{ !cancelled() && steps.setup.outcome == 'success' }}
       - name: Bundle the Android app's JavaScript
+        if: ${{ !cancelled() && steps.setup.outcome == 'success' }}
         run: pnpm --filter @botsman/android bundle
