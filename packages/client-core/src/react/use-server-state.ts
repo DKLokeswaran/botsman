@@ -3,7 +3,6 @@ import { useMemo, useSyncExternalStore } from "react";
 import { type ServerState, sortBots } from "../server-state.ts";
 import type { Store } from "../store.ts";
 import type { ConnectionStatus } from "../stream-connection.ts";
-import type { UpdateChecker, UpdateInfo, UpdateState } from "../updates.ts";
 import { useBotsmanClient } from "./client-context.tsx";
 
 // Re-renders a screen whenever a store's value changes.
