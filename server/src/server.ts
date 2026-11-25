@@ -1,5 +1,5 @@
 import type { FastifyInstance } from "fastify";
-import { buildHttp } from "./api/http.ts";
+import { buildHttp, CLIENT_CLOSE_WAIT_MS } from "./api/http.ts";
 import { scheduleNightlyBackup } from "./backup/nightly.ts";
 import type { Config } from "./config.ts";
 import { createServices, type ServiceOptions, type Services } from "./services.ts";
@@ -21,8 +21,14 @@ export async function startBotsman(config: Config, options: ServiceOptions & { b
     http,
     async stop() {
       cancelBackups();
-      await http.close();
+      await closeHttp(http);
       await services.close();
     },
   };
+}
+
+// Lets open requests finish, then drops every connection still open, so no client can hold up a stop.
+async function closeHttp(http: FastifyInstance): Promise<void> {
+  const dropRest = setTimeout(() => http.server.closeAllConnections(), CLIENT_CLOSE_WAIT_MS);
+  await http.close().finally(() => clearTimeout(dropRest));
 }

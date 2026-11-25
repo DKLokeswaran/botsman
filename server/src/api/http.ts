@@ -30,6 +30,12 @@ declare module "fastify" {
 // The largest WebSocket message a client may send.
 const MAX_SOCKET_MESSAGE_BYTES = 64 * 1024;
 
+// How long a stopping server waits for clients before it drops their connections.
+export const CLIENT_CLOSE_WAIT_MS = 2_000;
+
+// `closeTimeout` is missing from @types/ws 8.18.1, so the options are a constant, which TypeScript doesn't check for extra keys.
+const SOCKET_OPTIONS = { maxPayload: MAX_SOCKET_MESSAGE_BYTES, closeTimeout: CLIENT_CLOSE_WAIT_MS };
+
 // The Fastify app: HTTPS only, JSON Schema validation through pi-schema, and bearer-token auth on every private route.
 export async function buildHttp(services: Services): Promise<FastifyInstance> {
   const { config } = services;
@@ -48,7 +54,7 @@ export async function buildHttp(services: Services): Promise<FastifyInstance> {
   app.addHook("onRequest", async (request) => authenticate(services, request));
 
   // Client messages are small; a large frame is refused before it is parsed.
-  await app.register(websocket, { options: { maxPayload: MAX_SOCKET_MESSAGE_BYTES } });
+  await app.register(websocket, { options: SOCKET_OPTIONS });
   registerSystemRoutes(app, services);
   registerDashboardRoutes(app, services);
   registerAuthRoutes(app, services);
