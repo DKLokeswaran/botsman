@@ -116,7 +116,7 @@ const styles = StyleSheet.create({
   screen: { flex: 1 },
   top: { flexDirection: "row", alignItems: "center", gap: space[4], paddingRight: space[4] },
   link: { fontFamily: fontFamilies.bodySemiBold, fontSize: 14 },
-  wordmark: { flex: 1, fontFamily: fontFamilies.display, fontSize: 18, letterSpacing: 6, paddingHorizontal: space[4], paddingVertical: space[4] },
+  wordmark: { flex: 1, fontFamily: fontFamilies.displayRegular, fontSize: 18, letterSpacing: 6, paddingHorizontal: space[4], paddingVertical: space[4] },
   list: { paddingHorizontal: space[2], paddingBottom: space[4] },
   section: { fontFamily: fontFamilies.bodySemiBold, fontSize: 14, paddingHorizontal: space[2], paddingTop: space[4], paddingBottom: space[2] },
   row: { flexDirection: "row", alignItems: "center", gap: space[3], paddingHorizontal: space[2], paddingVertical: space[3], borderRadius: radius.md },

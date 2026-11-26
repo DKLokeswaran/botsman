@@ -99,6 +99,11 @@ class AlertsService : Service() {
       }
     }
 
+    // OkHttp answers the server's close, and then reports onClosed, only when asked to.
+    override fun onClosing(webSocket: WebSocket, code: Int, reason: String) {
+      webSocket.close(1000, null)
+    }
+
     override fun onClosed(webSocket: WebSocket, code: Int, reason: String) {
       handler.post { retry() }
     }

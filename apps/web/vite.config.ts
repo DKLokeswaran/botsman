@@ -6,4 +6,6 @@ import { defineConfig } from "vite";
 export default defineConfig({
   base: "/app/",
   plugins: [react(), tailwindcss()],
+  // The server's content security policy blocks inline fonts, so fonts stay separate files at any size.
+  build: { assetsInlineLimit: (file) => (/\.(woff2?|ttf|otf|eot)$/.test(file) ? false : undefined) },
 });
