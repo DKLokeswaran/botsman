@@ -19,7 +19,7 @@
 | Windows app | Tauri 2.12.5, React 19.3.0, Vite 8.3.8, Tailwind 4.3.5, shadcn | Tray, small installer, and WebView2 |
 | Windows token storage | The `keyring` crate 4.2.0 | Writes to Windows Credential Manager from Rust |
 | Markdown on Windows and web | `react-markdown` 10.1.0 with `remark-gfm` 4.0.1 | Renders to React elements with no raw HTML, and covers tables |
-| Fonts | Orbitron, Inter, and Fragment Mono shipped inside each app, from the same complete `.ttf` files in `packages/tokens/fonts`. `fontFaces` in `tokens` lists them, and a new font goes there | Every app covers the same characters, so text looks the same on all of them. The apps draw the same offline, and ask no outside host for fonts |
+| Fonts | Orbitron, Inter, and Fragment Mono shipped inside each app, from the same complete `.ttf` files in `packages/tokens/fonts`. `fontFaces` in `tokens` lists them, and a new font goes there. The apps take each font's name and file path from it | Every app covers the same characters, so text looks the same on all of them. The apps draw the same offline, and ask no outside host for fonts |
 | Web dashboard | The same React screens in a browser, served by the server | No screens to build twice |
 | Android app | Expo 58.0.25, React Native 0.88.1. Native libraries at the versions `expo install` picks. | Native chat feel, and shares TypeScript with everything else |
 | Keyboard | `react-native-keyboard-controller` | Tracks the keyboard natively |
