@@ -39,6 +39,10 @@ A server installed before server releases existed has an install script that doe
 
 The server looks for a newer release when it starts and once a day after, with `git ls-remote` on the checkout's `origin`, so a server installed from a fork sees the fork's releases. `/api/health` reports the newest release it found as `latestVersion`. When it is newer than the running version, the server section of Settings, in both apps and the dashboard, says so and shows the command above. The "Update the server" screen, shown when an app is too new for the server, shows the same command, or `deploy/install.sh --preview <branch>` when the server is a preview server. The apps learn about a release when they connect, and can't update the server themselves.
 
+## Stopping
+
+On `SIGTERM`, which `systemctl --user stop` and a restart send, the server closes the apps' connections, then the bots and storage, and exits. It gives clients 2 seconds to close their WebSockets and finish open requests, then drops what's left, so an unreachable client can't hold up a stop. The limit is `CLIENT_CLOSE_WAIT_MS` in `server/src/api/http.ts`. The systemd unit kills a server that is still running after 30 seconds.
+
 ## Preview server
 
 A preview server runs a branch under test on the same machine as the real server, without touching the real server's service, port, or data.
