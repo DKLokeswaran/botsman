@@ -44,9 +44,13 @@ export function modelChipLabel(settings: ChatSettings, models: readonly ModelInf
   return `${info?.name ?? settings.model.modelId} · ${effortLabel(shownEffort(info, settings.thinkingLevel))}`;
 }
 
-// The server's address as the apps name it, without the scheme.
+// The server's host and port as the apps name it, or the address as typed when it isn't a full URL.
 export function serverHost(baseUrl: string): string {
-  return /^https?:\/\/([^/]+)/i.exec(baseUrl)?.[1] ?? baseUrl;
+  try {
+    return new URL(baseUrl).host;
+  } catch {
+    return baseUrl;
+  }
 }
 
 // How the connection to the server is doing, with the server's host where there is one to name.

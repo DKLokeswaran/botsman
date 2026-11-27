@@ -224,4 +224,6 @@ test("the approval waits mark the bot's own, and add it when it is outside the u
 test("the server is named by its host and port", () => {
   expect(serverHost("https://bots.example.com")).toBe("bots.example.com");
   expect(serverHost("http://localhost:8787/")).toBe("localhost:8787");
+  expect(serverHost("HTTPS://owner:secret@Bots.Example.com:443")).toBe("bots.example.com");
+  expect(serverHost("")).toBe("");
 });
