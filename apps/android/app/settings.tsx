@@ -1,5 +1,5 @@
 import { ALERT_CHOICES, THEME_MODES, deviceDetail, type DeviceSession } from "@botsman/client-core";
-import { useAlertSettings, useBotsmanClient, useDevices } from "@botsman/client-core/react";
+import { useAlertSettings, useDevices, useServerAccount } from "@botsman/client-core/react";
 import { router } from "expo-router";
 import { StyleSheet, Text, View } from "react-native";
 import { useAppController } from "../src/app-context";
@@ -13,11 +13,11 @@ import { ServerVersion } from "../src/ui/server-version";
 // Alerts, signed-in devices, providers, the theme, the server's and the app's versions, and the server this app uses.
 export default function SettingsScreen() {
   const app = useAppController();
-  const client = useBotsmanClient();
+  const account = useServerAccount(app);
   const { alertSettings, save } = useAlertSettings();
   const themeMode = useThemeMode();
   return (
-    <Page title="Settings" subtitle={new URL(client.baseUrl).host}>
+    <Page title="Settings" subtitle={account.host}>
       <SectionTitle>Alerts</SectionTitle>
       <Note>These apply to every device signed in to this server.</Note>
       {alertSettings === undefined ? <Note>This server doesn't keep alert settings yet.</Note> : null}
@@ -34,9 +34,10 @@ export default function SettingsScreen() {
       <ServerVersion app={app} />
       <SectionTitle>This app</SectionTitle>
       <AppVersion updates={app.updates} />
+      <ErrorText>{account.error}</ErrorText>
       <View style={styles.row}>
-        <Button label="Sign out" onPress={() => void client.session.signOut()} />
-        <Button label="Change server" onPress={() => void app.changeServer()} />
+        <Button label="Sign out" disabled={account.busy} onPress={account.signOut} />
+        {account.changeServer === undefined ? null : <Button label="Change server" disabled={account.busy} onPress={account.changeServer} />}
       </View>
     </Page>
   );

@@ -10,7 +10,7 @@ import { Button } from "./ui/button.tsx";
 // Where the owner writes. Enter sends in the first offered mode, and Shift+Enter starts a new line. A message starting
 // with / offers commands. Below the text: the attach and image buttons, the model chip that opens the model picker, and Send, or Queue, Steer, and Stop while the bot works.
 export function Composer({ chat, bot, settings, sendModes, busy }: { chat: ChatController; bot: Bot; settings: ChatSettings; sendModes: SendMode[]; busy: boolean }) {
-  const { text, setText, matches, empty, send, command, stop } = useComposer(chat, (screen, botId) => (window.location.hash = screenHref(screen, botId)));
+  const { text, setText, label, placeholder, matches, empty, send, command, stop } = useComposer(chat, bot.name, busy, (screen, botId) => (window.location.hash = screenHref(screen, botId)));
   const [picking, setPicking] = useState(false);
   const { models } = useModels();
   const grow = useAutoGrow(text);
@@ -32,8 +32,8 @@ export function Composer({ chat, bot, settings, sendModes, busy }: { chat: ChatC
         onKeyDown={onKeyDown}
         ref={grow}
         rows={1}
-        placeholder={busy ? "Queue a message" : `Message ${bot.name}`}
-        aria-label={`Message ${bot.name}`}
+        placeholder={placeholder}
+        aria-label={label}
         className="max-h-[40vh] resize-none overflow-y-auto bg-transparent px-1 py-1 outline-none placeholder:text-muted-foreground"
       />
       <div className="flex items-center gap-2">

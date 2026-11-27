@@ -1,6 +1,6 @@
-import type { Bot, DeviceSession, UsageReport } from "@botsman/protocol";
+import type { Approval, Bot, DeviceSession, UsageReport } from "@botsman/protocol";
 import { describe, expect, it, test } from "vitest";
-import { isThemeMode, resolveTheme, memoryDiff, chatFromCache, chatToCache, emptyChat, emptyServerState, serverFromCache, serverToCache, backgroundLine, backgroundSteps, exactCommand, liveSessions, slashMatches, usageBots, usageDays, opensOutside } from "../src/index.ts";
+import { isThemeMode, resolveTheme, memoryDiff, chatFromCache, chatToCache, emptyChat, emptyServerState, serverFromCache, serverToCache, backgroundLine, backgroundSteps, exactCommand, liveSessions, slashMatches, usageBots, usageDays, usageView, updateView, UPDATE_NEEDED, connectionLine, needsYouLine, memoryEditView, runFooter, modelChoices, type RunItem, botInitial, botNameProblem, noteNameProblem, permissionNote, isBusy, opensOutside, approvalWaitChoices, serverHost } from "../src/index.ts";
 
 const zero = { inputTokens: 0, outputTokens: 0, cacheReadTokens: 0, cacheWriteTokens: 0, totalTokens: 0, cost: 0 };
 const cost = (value: number) => ({ ...zero, cost: value });
@@ -126,4 +126,104 @@ describe("theme mode", () => {
     expect(resolveTheme("light", true)).toBe("light");
     expect(isThemeMode("sepia")).toBe(false);
   });
+});
+
+describe("usage screen", () => {
+  it("draws a short faded bar for a day that cost nothing, and sizes the rest", () => {
+    const since = Date.now() - 14 * 24 * 3_600_000;
+    const view = usageView({ since, total: cost(3), days: [], bots: [{ botId: "a", usage: cost(2) }, { botId: "b", usage: cost(1) }] }, [{ id: "a", name: "Atlas" }, { id: "b", name: "Bea" }] as Bot[]);
+    expect(view.total).toBe("$3.00");
+    expect(view.days).toHaveLength(14);
+    expect(view.days[0]).toMatchObject({ height: "3%", opacity: 0.25, cost: "$0.00" });
+    expect(view.bots).toEqual([{ name: "Atlas", cost: "$2.00", width: "100%" }, { name: "Bea", cost: "$1.00", width: "50%" }]);
+  });
+});
+
+describe("app updates", () => {
+  it("words each state, with the platform's own note while it installs", () => {
+    expect(updateView({ status: "none" }, "0.1.0", "Note.")).toBeUndefined();
+    expect(updateView({ status: "available", version: "0.2.0" }, "0.1.0", "Note.")).toMatchObject({ message: "Version 0.2.0 is ready to install. You're on 0.1.0.", install: "Install", error: undefined });
+    expect(updateView({ status: "available", version: "0.2.0" }, undefined, "Note.")?.message).toBe("Version 0.2.0 is ready to install.");
+    expect(updateView({ status: "installing", version: "0.2.0" }, "0.1.0", "Note.")).toMatchObject({ title: "Installing", message: "Installing 0.2.0. Note.", install: undefined });
+    expect(updateView({ status: "failed", version: "0.2.0", error: "No space" }, "0.1.0", "Note.")).toMatchObject({ error: "No space", install: "Try again" });
+  });
+
+  it("names the side to update", () => {
+    expect(UPDATE_NEEDED.update_server.title).toBe("Update the server");
+  });
+});
+
+describe("bot list lines", () => {
+  it("names the server's host while there is a connection to name", () => {
+    expect(connectionLine("online", "https://bots.example.com:8443")).toBe("Connected to bots.example.com:8443");
+    expect(connectionLine("reconnecting", "https://bots.example.com")).toBe("Reconnecting to bots.example.com…");
+    expect([connectionLine("connecting", "https://a"), connectionLine("offline", "https://a")]).toEqual(["Connecting…", "Offline"]);
+  });
+
+  it("says which bot asks, and for what", () => {
+    expect(needsYouLine({ memoryEdit: null }, "Atlas")).toBe("Atlas · Approval");
+    expect(needsYouLine({ memoryEdit: { file: "BOT_MEMORY.md", previous: "", content: "x" } }, undefined)).toBe("Bot · Memory edit");
+  });
+
+  it("counts compacting as busy", () => {
+    expect([isBusy({ running: false, compacting: true }), isBusy({ running: false, compacting: false })]).toEqual([true, false]);
+  });
+});
+
+describe("memory edit card", () => {
+  it("prefixes each changed line", () => {
+    const approval = { createdAt: 0, memoryEdit: { file: "BOT_MEMORY.md", previous: "a\nb", content: "a\nc" } } as Approval;
+    const view = memoryEditView(approval, "Atlas");
+    expect(view.title).toBe("Atlas wants to change BOT_MEMORY.md");
+    expect(view.lines.map((line) => line.text)).toEqual(["  a", "− b", "+ c"]);
+  });
+});
+
+describe("run footer", () => {
+  const run = { kind: "run", id: "r", at: null, steps: [], model: null, usage: null, error: null, working: false } as RunItem;
+
+  it("shows what a finished run has, and nothing while it works or has neither", () => {
+    expect(runFooter(run)).toBeUndefined();
+    expect(runFooter({ ...run, steps: [{ kind: "text", id: "t", text: " hi " }] })).toEqual({ usage: undefined, copyText: "hi" });
+    expect(runFooter({ ...run, working: true, steps: [{ kind: "text", id: "t", text: "hi" }] })).toBeUndefined();
+  });
+});
+
+describe("bot forms", () => {
+  const models = [{ provider: "a", id: "m1", name: "M1", contextWindow: 1, reasoning: false }, { provider: "b", id: "m1", name: "M1", contextWindow: 1, reasoning: false }];
+
+  it("marks the model in use by its provider too", () => {
+    expect(modelChoices(models, { provider: "b", modelId: "m1" })).toEqual([
+      { key: "a/m1", label: "M1 · a", chosen: false, ref: { provider: "a", modelId: "m1" } },
+      { key: "b/m1", label: "M1 · b", chosen: true, ref: { provider: "b", modelId: "m1" } },
+    ]);
+  });
+
+  it("holds names to the protocol's rules", () => {
+    expect(botNameProblem("a".repeat(60))).toBeUndefined();
+    expect(botNameProblem("a".repeat(61))).toBe("Keep the name to 60 characters.");
+    expect(["a/b", "a\\b", "a\nb"].map(botNameProblem)).toEqual(Array(3).fill("A name can't contain slashes or control characters."));
+    expect(noteNameProblem("x")).toBe("Use 4 to 120 characters, ending in .md.");
+    expect(noteNameProblem("a/b.md")).toMatch(/^Start with/);
+    expect(noteNameProblem("plan 1.md")).toBeUndefined();
+  });
+
+  it("draws the initial in upper case, and says memory edits always ask", () => {
+    expect(botInitial(" atlas")).toBe("A");
+    expect(permissionNote("off")).toBe("Actions outside this bot's folder run without asking. Memory edits always ask, in every mode.");
+  });
+});
+
+test("the approval waits mark the bot's own, and add it when it is outside the usual ones", () => {
+  expect(approvalWaitChoices(60 * 60_000).filter((wait) => wait.chosen)).toEqual([{ label: "1 hour", ms: 60 * 60_000, chosen: true }]);
+  const own = approvalWaitChoices(5 * 60_000);
+  expect(own[0]).toEqual({ label: "5 minutes", ms: 5 * 60_000, chosen: true });
+  expect(own).toHaveLength(approvalWaitChoices(60 * 60_000).length + 1);
+});
+
+test("the server is named by its host and port", () => {
+  expect(serverHost("https://bots.example.com")).toBe("bots.example.com");
+  expect(serverHost("http://localhost:8787/")).toBe("localhost:8787");
+  expect(serverHost("HTTPS://owner:secret@Bots.Example.com:443")).toBe("bots.example.com");
+  expect(serverHost("")).toBe("");
 });

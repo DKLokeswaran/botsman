@@ -1,6 +1,6 @@
 import type { Provider, ProviderLogin } from "@botsman/protocol";
 import { useBotsmanClient } from "./client-context.tsx";
-import { useServerState } from "./hooks.ts";
+import { useServerState } from "./use-server-state.ts";
 import { useLoaded } from "./use-loaded.ts";
 
 // Every provider and whether it is connected, loaded again when one is connected or removed. A failed load shows none.

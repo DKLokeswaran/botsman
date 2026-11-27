@@ -1,3 +1,5 @@
+import { builtinRules } from "eslint/use-at-your-own-risk";
+
 // The repo's own ESLint rules. eslint.config.js decides which files each rule checks, and
 // docs/decisions/stack.md#code-rules explains them.
 
@@ -73,6 +75,17 @@ export default {
       "Identifier[name=/^(localStorage|sessionStorage|indexedDB)$/]",
       "ImportDeclaration[source.value=/^expo-(sqlite|secure-store)$/]",
     ]),
+    "no-screen-client-calls": banned("Bans calls to the server's client in screens.", "Screens hold no logic. Call the server from a client-core hook.", [
+      'CallExpression[callee.object.name="client"]',
+      'CallExpression[callee.object.property.name="client"]',
+      'CallExpression[callee.object.object.name="client"]',
+      'CallExpression[callee.object.object.property.name="client"]',
+    ]),
+    "no-screen-array-logic": banned("Bans picking and combining data in screens.", "Screens hold no logic. Pick, sort, and combine data in client-core.", [
+      "CallExpression[callee.property.name=/^(filter|find|findIndex|findLast|findLastIndex|some|every|reduce|reduceRight|sort|toSorted)$/]",
+    ]),
+    // ESLint's own rule under a second name, so screens have a lower limit that warns beside the one that fails.
+    "screen-complexity": builtinRules.get("complexity"),
     "env-only-in-config": banned("Keeps environment reads in the server's config module.", "Read the environment only in server/src/config.ts.", [
       'MemberExpression[object.name="process"][property.name="env"]',
     ]),

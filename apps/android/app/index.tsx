@@ -1,12 +1,10 @@
-import { botRowText, formatCountdown, type Approval, type Bot } from "@botsman/client-core";
-import { useAppName, useBotActivity, useBots, useConnectionStatus, useNeedsYou, useNow, useServerState } from "@botsman/client-core/react";
+import type { Approval, Bot } from "@botsman/client-core";
+import { useAppName, useBotRow, useBots, useConnectionLine, useNeedsYou, useNeedsYouRow, useServerState } from "@botsman/client-core/react";
 import { router } from "expo-router";
 import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { fontFamilies, radius, space, useTheme } from "../src/theme";
 import { Avatar } from "../src/ui/avatar";
-
-const CONNECTION_LABELS = { offline: "Offline", connecting: "Connecting…", online: "Connected", reconnecting: "Reconnecting…" };
 
 // The phone's home screen: what needs the owner, then the bots, with the main bot first.
 export default function BotListScreen() {
@@ -15,8 +13,7 @@ export default function BotListScreen() {
   const { status } = useServerState();
   const bots = useBots();
   const needsYou = useNeedsYou();
-  const connection = useConnectionStatus();
-  const waitingBots = new Set(needsYou.map((approval) => approval.botId));
+  const connection = useConnectionLine();
   return (
     <SafeAreaView style={styles.screen}>
       <View style={styles.top}>
@@ -31,20 +28,20 @@ export default function BotListScreen() {
       <ScrollView contentContainerStyle={styles.list}>
         {needsYou.length === 0 ? null : <SectionTitle>Needs you</SectionTitle>}
         {needsYou.map((approval) => (
-          <NeedsYouRow key={approval.id} approval={approval} bot={bots.find((bot) => bot.id === approval.botId)} />
+          <NeedsYouRow key={approval.id} approval={approval} />
         ))}
         <SectionTitle>Bots</SectionTitle>
         {status === "loading" ? <Text style={[styles.sub, { color: colors.mutedForeground }]}>Loading…</Text> : null}
         {bots.map((bot) => (
-          <BotRow key={bot.id} bot={bot} needsYou={waitingBots.has(bot.id)} />
+          <BotRow key={bot.id} bot={bot} />
         ))}
         <Pressable accessibilityRole="button" onPress={() => router.push("/new-bot")} style={styles.newBot}>
           <Text style={[styles.needs, { color: colors.primary }]}>New bot</Text>
         </Pressable>
       </ScrollView>
       <View style={[styles.footer, { borderTopColor: colors.border }]}>
-        <Text accessibilityRole="text" style={[styles.status, { color: colors.mutedForeground }]}>
-          {CONNECTION_LABELS[connection]}
+        <Text numberOfLines={1} accessibilityRole="text" style={[styles.status, { color: colors.mutedForeground }]}>
+          {connection}
         </Text>
       </View>
     </SafeAreaView>
@@ -60,29 +57,28 @@ function SectionTitle({ children }: { children: string }) {
   return <Text style={[styles.section, { color: colors.primary }]}>{children}</Text>;
 }
 
-function NeedsYouRow({ approval, bot }: { approval: Approval; bot: Bot | undefined }) {
+function NeedsYouRow({ approval }: { approval: Approval }) {
   const { colors } = useTheme();
-  const now = useNow();
-  const kind = approval.memoryEdit === null ? "Approval" : "Memory edit";
+  const { line, countdown } = useNeedsYouRow(approval);
   return (
     <Pressable accessibilityRole="button" onPress={() => openChat(approval.botId)} android_ripple={{ color: colors.accent }} style={styles.row}>
       <View style={[styles.dot, { backgroundColor: colors.primary }]} />
       <View style={styles.rowText}>
         <Text style={[styles.sub, { color: colors.mutedForeground }]}>
-          {bot?.name ?? "Bot"} · {kind}
+          {line}
         </Text>
         <Text numberOfLines={1} style={[styles.rowTitle, { color: colors.foreground }]}>
           {approval.description}
         </Text>
       </View>
-      <Text style={[styles.mono, { color: colors.mutedForeground }]}>{formatCountdown(approval.expiresAt, now)}</Text>
+      <Text style={[styles.mono, { color: colors.mutedForeground }]}>{countdown}</Text>
     </Pressable>
   );
 }
 
-function BotRow({ bot, needsYou }: { bot: Bot; needsYou: boolean }) {
+function BotRow({ bot }: { bot: Bot }) {
   const { colors } = useTheme();
-  const text = botRowText(bot.description, useBotActivity(bot.id), useNow(60_000));
+  const row = useBotRow(bot);
   return (
     <Pressable accessibilityRole="button" onPress={() => openChat(bot.id)} android_ripple={{ color: colors.accent }} style={styles.row}>
       <Avatar bot={bot} size={44} />
@@ -94,21 +90,21 @@ function BotRow({ bot, needsYou }: { bot: Bot; needsYou: boolean }) {
           {bot.isMain ? <Text style={[styles.sub, { color: colors.mutedForeground }]}>Main</Text> : null}
         </View>
         <Text numberOfLines={1} style={[styles.rowTitle, { color: colors.mutedForeground }]}>
-          {text.subtitle}
+          {row.subtitle}
         </Text>
       </View>
       <View style={styles.rowEnd}>
-        <Text style={[styles.sub, { color: colors.mutedForeground }]}>{text.time}</Text>
-        {text.working ? (
+        <Text style={[styles.sub, { color: colors.mutedForeground }]}>{row.time}</Text>
+        {row.working ? (
           <View style={styles.working}>
             <View style={[styles.dot, { backgroundColor: colors.primary }]} />
             <Text style={[styles.needs, { color: colors.foreground }]}>Working</Text>
           </View>
         ) : null}
-        {needsYou ? <Text style={[styles.needs, { color: colors.foreground }]}>Needs you</Text> : null}
-        {text.unread === "" ? null : (
-          <Text accessibilityLabel={`${text.unread} unread`} style={[styles.badge, { backgroundColor: colors.primary, color: colors.primaryForeground }]}>
-            {text.unread}
+        {row.needsYou ? <Text style={[styles.needs, { color: colors.foreground }]}>Needs you</Text> : null}
+        {row.unread === "" ? null : (
+          <Text accessibilityLabel={`${row.unread} unread`} style={[styles.badge, { backgroundColor: colors.primary, color: colors.primaryForeground }]}>
+            {row.unread}
           </Text>
         )}
       </View>

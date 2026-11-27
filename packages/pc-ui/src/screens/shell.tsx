@@ -1,5 +1,5 @@
-import { type AppController, type BotsmanClient, botRowText, formatCountdown, type Approval, type Bot } from "@botsman/client-core";
-import { useAppName, useBotActivity, useBots, useConnectionStatus, useNeedsYou, useNow, useServerState } from "@botsman/client-core/react";
+import type { AppController, Approval, Bot, BotsmanClient } from "@botsman/client-core";
+import { useAppName, useBotRow, useBots, useConnectionLine, useNeedsYou, useNeedsYouRow, useServerState } from "@botsman/client-core/react";
 import { Avatar } from "../components/avatar.tsx";
 import { UpdateDialog } from "../components/update-dialog.tsx";
 import type { Autostart, PageNotifications } from "../platform.ts";
@@ -27,18 +27,18 @@ export function Shell({ app, client, notifications, autostart, theme }: { app: A
   return (
     <div className="flex h-screen">
       <UpdateDialog updates={app.updates} />
-      <Sidebar app={app} client={client} openBotId={openBotId} />
-      <MainPane app={app} client={client} route={route} loading={status === "loading"} botId={openBotId} notifications={{ permission, ask: askForNotifications }} autostart={autostart} theme={theme} />
+      <Sidebar openBotId={openBotId} />
+      <MainPane app={app} route={route} loading={status === "loading"} botId={openBotId} notifications={{ permission, ask: askForNotifications }} autostart={autostart} theme={theme} />
     </div>
   );
 }
 
 // The page beside the bot list. Home is the main bot's chat.
-function MainPane({ app, client, route, loading, botId, notifications, autostart, theme }: { app: AppController; client: BotsmanClient; route: Route; loading: boolean; botId: string | undefined; notifications: NotificationChoice; autostart: Autostart | undefined; theme: ThemeChoice }) {
+function MainPane({ app, route, loading, botId, notifications, autostart, theme }: { app: AppController; route: Route; loading: boolean; botId: string | undefined; notifications: NotificationChoice; autostart: Autostart | undefined; theme: ThemeChoice }) {
   if (route.name === "new-bot") return <NewBotScreen />;
   if (route.name === "providers") return <ProvidersScreen />;
   if (route.name === "usage") return <UsageScreen />;
-  if (route.name === "settings") return <SettingsScreen app={app} client={client} notifications={notifications} autostart={autostart} theme={theme} />;
+  if (route.name === "settings") return <SettingsScreen app={app} notifications={notifications} autostart={autostart} theme={theme} />;
   if (loading || botId === undefined) return <p className="p-6 text-muted-foreground">Loading…</p>;
   return <BotPage route={route} botId={botId} />;
 }
@@ -53,11 +53,10 @@ function BotPage({ route, botId }: { route: Route; botId: string }) {
   return <ChatScreen key={botId} botId={botId} />;
 }
 
-function Sidebar({ app, client, openBotId }: { app: AppController; client: BotsmanClient; openBotId: string | undefined }) {
+function Sidebar({ openBotId }: { openBotId: string | undefined }) {
   const appName = useAppName();
   const bots = useBots();
   const needsYou = useNeedsYou();
-  const waitingBots = new Set(needsYou.map((approval) => approval.botId));
   return (
     <aside className="flex w-[300px] shrink-0 flex-col border-r border-border">
       <div className="px-4 py-4 font-display text-lg tracking-[0.3em] uppercase">{appName}</div>
@@ -66,19 +65,19 @@ function Sidebar({ app, client, openBotId }: { app: AppController; client: Botsm
           <>
             <SectionTitle>Needs you</SectionTitle>
             {needsYou.map((approval) => (
-              <NeedsYouRow key={approval.id} approval={approval} bot={bots.find((bot) => bot.id === approval.botId)} />
+              <NeedsYouRow key={approval.id} approval={approval} />
             ))}
           </>
         )}
         <SectionTitle>Bots</SectionTitle>
         {bots.map((bot) => (
-          <BotRow key={bot.id} bot={bot} open={bot.id === openBotId} needsYou={waitingBots.has(bot.id)} />
+          <BotRow key={bot.id} bot={bot} open={bot.id === openBotId} />
         ))}
         <a href="#/new-bot" className="mt-1 block rounded-lg px-2 py-2 text-sm font-semibold text-primary hover:bg-accent">
           New bot
         </a>
       </nav>
-      <SidebarFooter app={app} client={client} />
+      <SidebarFooter />
     </aside>
   );
 }
@@ -87,25 +86,22 @@ function SectionTitle({ children }: { children: string }) {
   return <h2 className="px-2 pt-4 pb-2 text-sm font-semibold text-primary">{children}</h2>;
 }
 
-function NeedsYouRow({ approval, bot }: { approval: Approval; bot: Bot | undefined }) {
-  const now = useNow();
-  const kind = approval.memoryEdit === null ? "Approval" : "Memory edit";
+function NeedsYouRow({ approval }: { approval: Approval }) {
+  const { line, countdown } = useNeedsYouRow(approval);
   return (
     <a href={chatHref(approval.botId)} className="flex items-start gap-3 rounded-lg px-2 py-2 hover:bg-accent">
       <span aria-hidden className="mt-2 size-1.5 shrink-0 rounded-full bg-primary" />
       <span className="min-w-0 flex-1">
-        <span className="block text-xs text-muted-foreground">
-          {bot?.name ?? "Bot"} · {kind}
-        </span>
+        <span className="block text-xs text-muted-foreground">{line}</span>
         <span className="block truncate text-sm">{approval.description}</span>
       </span>
-      <span className="font-mono text-xs text-muted-foreground">{formatCountdown(approval.expiresAt, now)}</span>
+      <span className="font-mono text-xs text-muted-foreground">{countdown}</span>
     </a>
   );
 }
 
-function BotRow({ bot, open, needsYou }: { bot: Bot; open: boolean; needsYou: boolean }) {
-  const text = botRowText(bot.description, useBotActivity(bot.id), useNow(60_000));
+function BotRow({ bot, open }: { bot: Bot; open: boolean }) {
+  const row = useBotRow(bot);
   return (
     <a href={chatHref(bot.id)} aria-current={open ? "page" : undefined} className={`flex items-center gap-3 rounded-lg px-2 py-2 hover:bg-accent ${open ? "bg-accent" : ""}`}>
       <Avatar bot={bot} />
@@ -114,20 +110,20 @@ function BotRow({ bot, open, needsYou }: { bot: Bot; open: boolean; needsYou: bo
           <span className="truncate font-display text-sm font-bold uppercase">{bot.name}</span>
           {bot.isMain ? <span className="text-xs text-muted-foreground">Main</span> : null}
         </span>
-        <span className="block truncate text-sm text-muted-foreground">{text.subtitle}</span>
+        <span className="block truncate text-sm text-muted-foreground">{row.subtitle}</span>
       </span>
       <span className="flex shrink-0 flex-col items-end gap-1">
-        <span className="text-xs text-muted-foreground">{text.time}</span>
-        {text.working ? (
+        <span className="text-xs text-muted-foreground">{row.time}</span>
+        {row.working ? (
           <span className="flex items-center gap-1 text-xs font-semibold">
             <span aria-hidden className="size-1.5 animate-pulse rounded-full bg-primary" />
             Working
           </span>
         ) : null}
-        {needsYou ? <span className="text-xs font-semibold">Needs you</span> : null}
-        {text.unread === "" ? null : (
-          <span aria-label={`${text.unread} unread`} className="min-w-5 rounded-full bg-primary px-1.5 text-center font-mono text-xs text-primary-foreground">
-            {text.unread}
+        {row.needsYou ? <span className="text-xs font-semibold">Needs you</span> : null}
+        {row.unread === "" ? null : (
+          <span aria-label={`${row.unread} unread`} className="min-w-5 rounded-full bg-primary px-1.5 text-center font-mono text-xs text-primary-foreground">
+            {row.unread}
           </span>
         )}
       </span>
@@ -135,11 +131,8 @@ function BotRow({ bot, open, needsYou }: { bot: Bot; open: boolean; needsYou: bo
   );
 }
 
-const CONNECTION_LABELS = { offline: "Offline", connecting: "Connecting…", online: "Connected to", reconnecting: "Reconnecting to" };
-
-function SidebarFooter({ app, client }: { app: AppController; client: BotsmanClient }) {
-  const status = useConnectionStatus();
-  const host = new URL(client.baseUrl).host;
+function SidebarFooter() {
+  const connection = useConnectionLine();
   return (
     <footer className="flex flex-col gap-2 border-t border-border p-3">
       <nav className="flex gap-1">
@@ -151,7 +144,7 @@ function SidebarFooter({ app, client }: { app: AppController; client: BotsmanCli
         </a>
       </nav>
       <p className="truncate text-xs text-muted-foreground" role="status">
-        {CONNECTION_LABELS[status]} {status === "online" || status === "reconnecting" ? host : ""}
+        {connection}
       </p>
     </footer>
   );

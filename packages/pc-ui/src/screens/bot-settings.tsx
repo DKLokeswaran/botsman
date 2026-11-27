@@ -1,35 +1,29 @@
-import { APPROVAL_WAITS, approvalWaitLabel, PERMISSION_MODES, type Bot, type BotUpdate } from "@botsman/client-core";
-import { useAction, useBot, useBotsmanClient } from "@botsman/client-core/react";
+import { useBotSettings } from "@botsman/client-core/react";
 import { ErrorText, Page, Segmented, ToggleRow } from "../components/page.tsx";
 import { botInfoHref } from "../use-route.ts";
 
 // How much a bot may do without asking: its permission mode, how long approvals wait, and network access.
 export function BotSettingsScreen({ botId }: { botId: string }) {
-  const bot = useBot(botId);
-  const client = useBotsmanClient();
-  const save = useAction((change: BotUpdate) => client.updateBot(botId, change));
+  const { bot, modes, modeNote, waits, change, error } = useBotSettings(botId);
   if (bot === undefined) return <p className="p-6 text-muted-foreground">This bot no longer exists.</p>;
-  const mode = PERMISSION_MODES.find((option) => option.mode === bot.permissionMode)!;
   return (
     <Page title={bot.name} subtitle="Bot settings" back={botInfoHref(bot.id)}>
       <h2 className="font-display text-sm font-bold uppercase">Permissions</h2>
-      <Segmented label="Permission mode" options={PERMISSION_MODES.map((option) => ({ value: option.mode, label: option.label }))} value={bot.permissionMode} onChange={(mode) => void save.run({ permissionMode: mode })} />
-      <p className="text-sm text-muted-foreground">{mode.note} Memory edits always ask, in every mode.</p>
-      <ApprovalWait bot={bot} onChange={(approvalWaitMs) => void save.run({ approvalWaitMs })} />
-      <ToggleRow title="Network" detail="Commands run by this bot can reach the internet" on={bot.network} onChange={(network) => void save.run({ network })} />
-      <ErrorText>{save.error}</ErrorText>
+      <Segmented label="Permission mode" options={modes} value={bot.permissionMode} onChange={(permissionMode) => change({ permissionMode })} />
+      <p className="text-sm text-muted-foreground">{modeNote}</p>
+      <ApprovalWait ms={bot.approvalWaitMs} waits={waits} onChange={(approvalWaitMs) => change({ approvalWaitMs })} />
+      <ToggleRow title="Network" detail="Commands run by this bot can reach the internet" on={bot.network} onChange={(network) => change({ network })} />
+      <ErrorText>{error}</ErrorText>
     </Page>
   );
 }
 
-function ApprovalWait({ bot, onChange }: { bot: Bot; onChange: (ms: number) => void }) {
-  const known = APPROVAL_WAITS.some((wait) => wait.ms === bot.approvalWaitMs);
+function ApprovalWait({ ms, waits, onChange }: { ms: number; waits: ReturnType<typeof useBotSettings>["waits"]; onChange: (ms: number) => void }) {
   return (
     <label className="flex flex-col gap-1.5 text-sm">
       <span className="font-medium">Approval wait</span>
-      <select className="rounded-lg border border-input bg-background px-3 py-2" value={bot.approvalWaitMs} onChange={(event) => onChange(Number(event.target.value))}>
-        {known ? null : <option value={bot.approvalWaitMs}>{approvalWaitLabel(bot.approvalWaitMs)}</option>}
-        {APPROVAL_WAITS.map((wait) => (
+      <select className="rounded-lg border border-input bg-background px-3 py-2" value={ms} onChange={(event) => onChange(Number(event.target.value))}>
+        {waits.map((wait) => (
           <option key={wait.ms} value={wait.ms}>
             {wait.label}
           </option>

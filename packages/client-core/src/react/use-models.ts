@@ -1,6 +1,6 @@
 import type { FreeSpace, ModelInfo } from "@botsman/protocol";
 import { useBotsmanClient } from "./client-context.tsx";
-import { useServerState } from "./hooks.ts";
+import { useServerState } from "./use-server-state.ts";
 import { useLoaded } from "./use-loaded.ts";
 
 const FOLDER_CHECK_DELAY_MS = 400;

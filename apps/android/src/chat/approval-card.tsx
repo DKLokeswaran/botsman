@@ -1,5 +1,5 @@
-import { formatCountdown, memoryDiff, memoryEditText, type Approval } from "@botsman/client-core";
-import { useAction, useApproval, useBot, useBotsmanClient, useNow } from "@botsman/client-core/react";
+import type { Approval } from "@botsman/client-core";
+import { useApproval, useApprovalCard, useMemoryEditCard } from "@botsman/client-core/react";
 import { ScrollView, StyleSheet, Text, View } from "react-native";
 import { fontFamilies, radius, space, useTheme } from "../theme";
 import { Button } from "../ui/button";
@@ -15,31 +15,24 @@ export function ApprovalCard({ approvalId }: { approvalId: string }) {
 // A bot asking to change one of its memory files: what it adds and removes, and Confirm or Reject.
 function MemoryEditCard({ approval }: { approval: Approval }) {
   const { colors } = useTheme();
-  const client = useBotsmanClient();
-  const now = useNow();
-  const bot = useBot(approval.botId);
-  const answer = useAction((decision: "allow_once" | "deny") => client.answerApproval(approval.id, decision));
-  const edit = approval.memoryEdit!;
-  const text = memoryEditText(approval, bot?.name ?? "The bot");
-  const lines = memoryDiff(edit.previous, edit.content);
+  const { title, source, lines, countdown, answer } = useMemoryEditCard(approval);
   const lineColor = { added: colors.green, removed: colors.destructive, same: colors.mutedForeground };
   return (
     <View accessibilityLabel="Memory edit" style={[styles.card, { backgroundColor: colors.card, borderColor: colors.primary }]}>
       <View style={styles.header}>
         <Text style={[styles.kicker, { color: colors.primary }]}>Needs you · Memory edit</Text>
-        <Text style={[styles.mono, { color: colors.mutedForeground }]}>{formatCountdown(approval.expiresAt, now)}</Text>
+        <Text style={[styles.mono, { color: colors.mutedForeground }]}>{countdown}</Text>
       </View>
-      <Text style={[styles.heading, { color: colors.foreground }]}>{text.title}</Text>
+      <Text style={[styles.heading, { color: colors.foreground }]}>{title}</Text>
       <ScrollView style={[styles.command, { backgroundColor: colors.background, borderColor: colors.border }]} nestedScrollEnabled>
         {lines.length === 0 ? <Text style={[styles.mono, { color: colors.mutedForeground }]}>No change</Text> : null}
         {lines.map((line, index) => (
           <Text key={index} selectable style={[styles.mono, { color: lineColor[line.kind] }]}>
-            {line.kind === "added" ? "+ " : line.kind === "removed" ? "− " : "  "}
             {line.text}
           </Text>
         ))}
       </ScrollView>
-      <Text style={[styles.small, { color: colors.mutedForeground }]}>{text.source}</Text>
+      <Text style={[styles.small, { color: colors.mutedForeground }]}>{source}</Text>
       {answer.error === undefined ? null : <Text style={[styles.body, { color: colors.destructive }]}>{answer.error}</Text>}
       <View style={styles.answers}>
         <Button label="Confirm" variant="primary" disabled={answer.busy} onPress={() => void answer.run("allow_once")} />
@@ -51,14 +44,12 @@ function MemoryEditCard({ approval }: { approval: Approval }) {
 
 function ApprovalDetails({ approval }: { approval: Approval }) {
   const { colors } = useTheme();
-  const client = useBotsmanClient();
-  const now = useNow();
-  const answer = useAction((decision: "allow_once" | "allow_chat" | "deny") => client.answerApproval(approval.id, decision));
+  const { countdown, answer } = useApprovalCard(approval);
   return (
     <View accessibilityLabel="Approval" style={[styles.card, { backgroundColor: colors.card, borderColor: colors.primary }]}>
       <View style={styles.header}>
         <Text style={[styles.title, { color: colors.primary }]}>NEEDS YOUR APPROVAL</Text>
-        <Text style={[styles.mono, { color: colors.mutedForeground }]}>{formatCountdown(approval.expiresAt, now)}</Text>
+        <Text style={[styles.mono, { color: colors.mutedForeground }]}>{countdown}</Text>
       </View>
       <Text style={[styles.body, { color: colors.foreground }]}>{approval.description}</Text>
       <Text style={[styles.body, { color: colors.mutedForeground }]}>{approval.reason}</Text>

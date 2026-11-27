@@ -18,7 +18,7 @@ export function Composer({ chat, bot, settings, sendModes, busy }: { chat: ChatC
   const [picking, setPicking] = useState(false);
   // The box grows with the text up to 40% of the screen, then scrolls.
   const maxHeight = useWindowDimensions().height * 0.4;
-  const { text, setText, matches, empty, send, command, stop } = useComposer(chat, openScreen);
+  const { text, setText, label, placeholder, matches, empty, send, command, stop } = useComposer(chat, bot.name, busy, openScreen);
 
   return (
     <View style={[styles.composer, { backgroundColor: colors.card, borderColor: colors.border }]}>
@@ -28,9 +28,9 @@ export function Composer({ chat, bot, settings, sendModes, busy }: { chat: ChatC
         value={text}
         onChangeText={setText}
         multiline
-        placeholder={busy ? "Queue a message" : `Message ${bot.name}`}
+        placeholder={placeholder}
         placeholderTextColor={colors.mutedForeground}
-        accessibilityLabel={`Message ${bot.name}`}
+        accessibilityLabel={label}
         style={[styles.input, { color: colors.foreground, maxHeight }]}
       />
       <View style={styles.actions}>

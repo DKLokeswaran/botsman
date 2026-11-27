@@ -1,29 +1,29 @@
-import { asksToUpdate, type UpdateChecker } from "@botsman/client-core";
-import { useDeclinedUpdate, useUpdateInfo, useUpdateState } from "@botsman/client-core/react";
+import type { UpdateChecker } from "@botsman/client-core";
+import { useUpdateDialog } from "@botsman/client-core/react";
 import { Modal, StyleSheet, Text, View } from "react-native";
 import { fontFamilies, radius, space, useTheme } from "../theme";
 import { Button } from "./button";
 
+const INSTALLING_NOTE = "Android asks you to confirm.";
+
 // "Update available": asks once per new version, with Not now and Install. Settings keeps Install for later.
 export function UpdateDialog({ updates }: { updates: UpdateChecker | undefined }) {
   const { colors } = useTheme();
-  const state = useUpdateState(updates);
-  const declined = useDeclinedUpdate(updates);
-  const info = useUpdateInfo(updates);
-  if (updates === undefined || state.status === "none" || !asksToUpdate(state, declined)) return null;
+  const dialog = useUpdateDialog(updates, INSTALLING_NOTE);
+  if (updates === undefined || dialog === undefined) return null;
   return (
     <Modal visible transparent animationType="fade" onRequestClose={() => updates.notNow()}>
       <View style={styles.backdrop}>
         <View accessibilityRole="alert" style={[styles.dialog, { backgroundColor: colors.card, borderColor: colors.border }]}>
-          <Text style={[styles.title, { color: colors.foreground }]}>{state.status === "installing" ? "INSTALLING" : "UPDATE AVAILABLE"}</Text>
+          <Text style={[styles.title, { color: colors.foreground }]}>{dialog.title.toUpperCase()}</Text>
           <Text style={[styles.body, { color: colors.foreground }]}>
-            {state.status === "installing" ? `Installing ${state.version}. Android asks you to confirm.` : `Version ${state.version} is ready to install.${info.installed === undefined ? "" : ` You're on ${info.installed}.`}`}
+            {dialog.message}
           </Text>
-          {state.status === "failed" ? <Text style={[styles.body, { color: colors.destructive }]}>{state.error}</Text> : null}
-          {state.status === "installing" ? null : (
+          {dialog.error === undefined ? null : <Text style={[styles.body, { color: colors.destructive }]}>{dialog.error}</Text>}
+          {dialog.install === undefined ? null : (
             <View style={styles.buttons}>
               <Button label="Not now" onPress={() => updates.notNow()} />
-              <Button label={state.status === "failed" ? "Try again" : "Install"} variant="primary" onPress={() => void updates.install()} />
+              <Button label={dialog.install} variant="primary" onPress={() => void updates.install()} />
             </View>
           )}
         </View>

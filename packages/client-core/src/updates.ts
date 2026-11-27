@@ -90,6 +90,26 @@ export class UpdateChecker {
   }
 }
 
+// An update as the dialog and the notice show it. `install` is the button's label, undefined while the update installs.
+export type UpdateView = { title: string; message: string; notice: string; error: string | undefined; install: string | undefined };
+
+// What to show for an update, or undefined when there is none. `installingNote` is what the app's platform does while
+// it installs.
+export function updateView(state: UpdateState, installed: string | undefined, installingNote: string): UpdateView | undefined {
+  if (state.status === "none") return undefined;
+  if (state.status === "installing") return { title: "Installing", message: `Installing ${state.version}. ${installingNote}`, notice: `Installing ${state.version}…`, error: undefined, install: undefined };
+  const notice = `Version ${state.version} is ready to install.`;
+  const current = installed === undefined ? "" : ` You're on ${installed}.`;
+  const failed = state.status === "failed";
+  return { title: "Update available", message: notice + current, notice, error: failed ? state.error : undefined, install: failed ? "Try again" : "Install" };
+}
+
+// What the screen that blocks the app says, by the side the owner has to update.
+export const UPDATE_NEEDED = {
+  update_app: { title: "Update the app", lede: "This app is too old for your server. Install the newest version of the app, then open it again." },
+  update_server: { title: "Update the server", lede: "Your server is older than this app. Update the server, then try again." },
+} as const;
+
 // The version line in settings, such as "Botsman 0.1.6 · Up to date".
 export function versionLine(appName: string, info: UpdateInfo, state: UpdateState): string {
   const name = info.installed === undefined ? appName : `${appName} ${info.installed}`;

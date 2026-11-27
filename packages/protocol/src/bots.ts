@@ -15,10 +15,13 @@ export const ModelRef = obj({
 });
 export type ModelRef = Static<typeof ModelRef>;
 
+// The most characters each field the owner fills in for a bot may have. `photo` counts the photo's data URL.
+export const BotLimits = { name: 60, description: 500, purpose: 6000, photo: 400_000 } as const;
+
 // A bot's picture: one of the built-in marks, or an uploaded photo as a data URL.
 export const Avatar = union([
   obj({ kind: lit("mark"), mark: str({ minLength: 1, maxLength: 64 }) }),
-  obj({ kind: lit("photo"), dataUrl: str({ pattern: "^data:image/(png|jpeg|webp);base64,", maxLength: 400_000 }) }),
+  obj({ kind: lit("photo"), dataUrl: str({ pattern: "^data:image/(png|jpeg|webp);base64,", maxLength: BotLimits.photo }) }),
 ]);
 export type Avatar = Static<typeof Avatar>;
 
@@ -44,13 +47,15 @@ export type Bot = Static<typeof Bot>;
 export const BotList = obj({ bots: arr(Bot) });
 export type BotList = Static<typeof BotList>;
 
-export const BotName = str({ minLength: 1, maxLength: 60, pattern: "^[^/\\\\\\u0000-\\u001f]+$" });
+// A bot name holds no slashes, backslashes, or control characters.
+export const BOT_NAME_PATTERN = "^[^/\\\\\\u0000-\\u001f]+$";
+export const BotName = str({ minLength: 1, maxLength: BotLimits.name, pattern: BOT_NAME_PATTERN });
 
 // What the owner fills in when creating a bot. `purpose` seeds BOT_PROFILE.md; an empty folder means the default.
 export const BotCreate = obj({
   name: BotName,
-  description: opt(str({ maxLength: 500 })),
-  purpose: opt(str({ maxLength: 6000 })),
+  description: opt(str({ maxLength: BotLimits.description })),
+  purpose: opt(str({ maxLength: BotLimits.purpose })),
   defaultModel: opt(nullable(ModelRef)),
   folder: opt(str({ maxLength: 4096 })),
 });
@@ -58,7 +63,7 @@ export type BotCreate = Static<typeof BotCreate>;
 
 export const BotUpdate = obj({
   name: opt(BotName),
-  description: opt(str({ maxLength: 500 })),
+  description: opt(str({ maxLength: BotLimits.description })),
   avatar: opt(nullable(Avatar)),
   defaultModel: opt(nullable(ModelRef)),
   thinkingLevel: opt(ThinkingLevel),

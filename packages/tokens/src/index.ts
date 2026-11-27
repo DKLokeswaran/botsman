@@ -104,6 +104,12 @@ export const fontFaces = {
 
 type FontFace = (typeof fontFaces)[keyof typeof fontFaces];
 
+// Where each font file is, from the tokens package's folder.
+const fontPath = (face: FontFace) => `fonts/${face.file}.ttf`;
+
+// Every font file's path, from the tokens package's folder, for builds that embed the files.
+export const fontFiles = Object.values(fontFaces).map(fontPath);
+
 export const radius = { md: 4, lg: 8 } as const;
 
 // The 4-pixel spacing scale.
@@ -118,13 +124,13 @@ export function cssVariable(key: keyof Palette): string {
 }
 
 // The CSS rule that loads one font file. It covers every character in the file.
-function fontFaceCss({ family, weight, file }: FontFace): string {
+function fontFaceCss(face: FontFace): string {
   const lines = [
-    `  font-family: "${family}";`,
+    `  font-family: "${face.family}";`,
     "  font-style: normal;",
-    `  font-weight: ${weight};`,
+    `  font-weight: ${face.weight};`,
     "  font-display: swap;",
-    `  src: url("./fonts/${file}.ttf") format("truetype");`,
+    `  src: url("./${fontPath(face)}") format("truetype");`,
   ];
   return `@font-face {\n${lines.join("\n")}\n}\n`;
 }

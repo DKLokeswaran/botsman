@@ -1,10 +1,10 @@
 import { existsSync, linkSync, mkdirSync, readdirSync, readFileSync, renameSync, rmSync, statSync, writeFileSync } from "node:fs";
 import path from "node:path";
-import type { Note, NoteInfo, NoteSearchHit } from "@botsman/protocol";
+import { NOTE_NAME_PATTERN, type Note, type NoteInfo, type NoteSearchHit } from "@botsman/protocol";
 import { badRequest, conflict, notFound } from "../errors.ts";
 import { type Database, type Row, transaction } from "../store/database.ts";
 
-const NOTE_NAME = /^[A-Za-z0-9][A-Za-z0-9 ._-]*\.md$/;
+const NOTE_NAME = new RegExp(NOTE_NAME_PATTERN);
 
 // A bot's notes: Markdown files in bots/<id>/notes/, with an FTS5 keyword index in server.db.
 // The index can be rebuilt from the files at any time; it catches up on changed files before each search.

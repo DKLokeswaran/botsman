@@ -1,5 +1,5 @@
-import { ALERT_CHOICES, THEME_MODES, type ThemeMode, type AppController, type BotsmanClient, deviceDetail, type DeviceSession } from "@botsman/client-core";
-import { useAlertSettings, useDevices } from "@botsman/client-core/react";
+import { ALERT_CHOICES, THEME_MODES, type ThemeMode, type AppController, deviceDetail, type DeviceSession } from "@botsman/client-core";
+import { useAlertSettings, useDevices, useServerAccount } from "@botsman/client-core/react";
 import { ErrorText, LinkRow, Page, Segmented, ToggleRow } from "../components/page.tsx";
 import { Button } from "../components/ui/button.tsx";
 import { AppVersion } from "../components/app-version.tsx";
@@ -14,10 +14,11 @@ export type NotificationChoice = { permission: NotificationPermission; ask: (() 
 export type ThemeChoice = [ThemeMode, (mode: ThemeMode) => void];
 
 // Alerts, signed-in devices, providers, the theme, the server's and the app's versions, and the server this app uses.
-export function SettingsScreen({ app, client, notifications, autostart, theme }: { app: AppController; client: BotsmanClient; notifications: NotificationChoice; autostart: Autostart | undefined; theme: ThemeChoice }) {
+export function SettingsScreen({ app, notifications, autostart, theme }: { app: AppController; notifications: NotificationChoice; autostart: Autostart | undefined; theme: ThemeChoice }) {
   const { alertSettings, save } = useAlertSettings();
+  const account = useServerAccount(app);
   return (
-    <Page title="Settings" subtitle={new URL(client.baseUrl).host} back="#/">
+    <Page title="Settings" subtitle={account.host} back="#/">
       <h2 className="font-display text-sm font-bold uppercase">Alerts</h2>
       <p className="text-sm text-muted-foreground">These apply to every device signed in to this server.</p>
       {alertSettings === undefined ? <p className="text-sm text-muted-foreground">This server doesn't keep alert settings yet.</p> : null}
@@ -35,9 +36,16 @@ export function SettingsScreen({ app, client, notifications, autostart, theme }:
       <ServerVersion app={app} />
       <h2 className="font-display text-sm font-bold uppercase">This app</h2>
       <AppVersion updates={app.updates} />
+      <ErrorText>{account.error}</ErrorText>
       <div className="flex gap-2">
-        <Button onClick={() => void client.session.signOut()}>Sign out</Button>
-        {app.canChangeServer ? <Button onClick={() => void app.changeServer()}>Change server</Button> : null}
+        <Button disabled={account.busy} onClick={account.signOut}>
+          Sign out
+        </Button>
+        {account.changeServer === undefined ? null : (
+          <Button disabled={account.busy} onClick={account.changeServer}>
+            Change server
+          </Button>
+        )}
       </div>
     </Page>
   );

@@ -1,5 +1,5 @@
-import { botNameProblem, modelDefaultLabel, photoAvatar, type Avatar as AvatarValue, type Bot } from "@botsman/client-core";
-import { useAction, useBot, useBotsmanClient } from "@botsman/client-core/react";
+import { modelDefaultLabel, type Bot } from "@botsman/client-core";
+import { useBot, useBotNameForm, useBotPhoto, useDeleteBot } from "@botsman/client-core/react";
 import { MARK_IDS, MARKS } from "@botsman/tokens";
 import { useRef, useState } from "react";
 import { Avatar, MarkIcon } from "../components/avatar.tsx";
@@ -45,62 +45,56 @@ function ModelDefault({ bot }: { bot: Bot }) {
 }
 
 function FacePicker({ bot }: { bot: Bot }) {
-  const client = useBotsmanClient();
+  const photo = useBotPhoto(bot);
   const input = useRef<HTMLInputElement>(null);
-  const save = useAction((avatar: AvatarValue | null) => client.updateBot(bot.id, { avatar }));
-  const upload = useAction(async (file: File) => client.updateBot(bot.id, { avatar: photoAvatar(await shrinkPhoto(file)) }));
+  const uploadFile = (file: File | undefined) => file && photo.upload(() => shrinkPhoto(file));
   return (
     <div className="flex flex-col gap-3">
       <div className="flex items-center gap-4">
         <Avatar bot={bot} size={96} />
         <div className="flex flex-col gap-2">
-          <Button variant="primary" disabled={upload.busy} onClick={() => input.current?.click()}>
+          <Button variant="primary" disabled={photo.uploading} onClick={() => input.current?.click()}>
             Upload a photo
           </Button>
-          {bot.avatar === null ? null : (
-            <Button variant="text" onClick={() => void save.run(null)}>
+          {photo.canClear ? (
+            <Button variant="text" onClick={() => photo.choose(null)}>
               Use the initial
             </Button>
-          )}
+          ) : null}
         </div>
-        <input ref={input} type="file" accept="image/png,image/jpeg,image/webp" hidden onChange={(event) => event.target.files?.[0] && void upload.run(event.target.files[0])} />
+        <input ref={input} type="file" accept="image/png,image/jpeg,image/webp" hidden onChange={(event) => uploadFile(event.target.files?.[0])} />
       </div>
       <p className="text-xs text-muted-foreground">Or choose</p>
       <div className="flex flex-wrap gap-2">
         {MARK_IDS.map((mark) => {
-          const chosen = bot.avatar?.kind === "mark" && bot.avatar.mark === mark;
+          const chosen = photo.chosenMark === mark;
           return (
-            <button key={mark} type="button" aria-label={mark} aria-pressed={chosen} onClick={() => void save.run({ kind: "mark", mark })} className={`flex size-11 items-center justify-center rounded-lg border ${chosen ? "border-primary text-primary" : "border-border"} hover:bg-accent`}>
+            <button key={mark} type="button" aria-label={mark} aria-pressed={chosen} onClick={() => photo.choose({ kind: "mark", mark })} className={`flex size-11 items-center justify-center rounded-lg border ${chosen ? "border-primary text-primary" : "border-border"} hover:bg-accent`}>
               <MarkIcon paths={MARKS[mark]!} size={22} />
             </button>
           );
         })}
       </div>
-      <ErrorText>{save.error ?? upload.error}</ErrorText>
+      <ErrorText>{photo.error}</ErrorText>
     </div>
   );
 }
 
 function NameForm({ bot }: { bot: Bot }) {
-  const client = useBotsmanClient();
-  const [name, setName] = useState(bot.name);
-  const [description, setDescription] = useState(bot.description);
-  const problem = botNameProblem(name);
-  const changed = name.trim() !== bot.name || description.trim() !== bot.description;
-  const save = useAction(() => client.updateBot(bot.id, { name: name.trim(), description: description.trim() }));
+  const form = useBotNameForm(bot);
   return (
     <form
       className="flex flex-col gap-3"
       onSubmit={(event) => {
         event.preventDefault();
-        void save.run();
+        form.submit();
       }}
     >
-      <Field label="Name" value={name} maxLength={60} onChange={(event) => setName(event.target.value)} />
-      <Field label="Description" value={description} maxLength={500} onChange={(event) => setDescription(event.target.value)} />
-      <ErrorText>{changed ? (problem ?? save.error) : save.error}</ErrorText>
-      {changed ? (
-        <Button type="submit" variant="primary" className="self-start" disabled={problem !== undefined || save.busy}>
+      <Field label="Name" value={form.name} maxLength={form.limits.name} onChange={(event) => form.setName(event.target.value)} />
+      <Field label="Description" value={form.description} maxLength={form.limits.description} onChange={(event) => form.setDescription(event.target.value)} />
+      <ErrorText>{form.error}</ErrorText>
+      {form.changed ? (
+        <Button type="submit" variant="primary" className="self-start" disabled={!form.ready}>
           Save
         </Button>
       ) : null}
@@ -109,12 +103,7 @@ function NameForm({ bot }: { bot: Bot }) {
 }
 
 function DeleteBot({ bot }: { bot: Bot }) {
-  const client = useBotsmanClient();
-  const [asking, setAsking] = useState(false);
-  const remove = useAction(async () => {
-    await client.deleteBot(bot.id);
-    window.location.hash = "";
-  });
+  const { asking, setAsking, question, remove, busy, error } = useDeleteBot(bot, () => (window.location.hash = ""));
   if (bot.isMain) return <p className="text-xs text-muted-foreground">The main bot can't be deleted.</p>;
   if (!asking)
     return (
@@ -124,10 +113,10 @@ function DeleteBot({ bot }: { bot: Bot }) {
     );
   return (
     <div className="flex flex-col gap-2 rounded-lg border border-destructive p-3 text-sm">
-      <p>Delete {bot.name}? It leaves the apps, and its data stays on the server. The main bot can restore it.</p>
-      <ErrorText>{remove.error}</ErrorText>
+      <p>{question}</p>
+      <ErrorText>{error}</ErrorText>
       <div className="flex gap-2">
-        <Button variant="danger" disabled={remove.busy} onClick={() => void remove.run()}>
+        <Button variant="danger" disabled={busy} onClick={remove}>
           Delete
         </Button>
         <Button variant="text" onClick={() => setAsking(false)}>

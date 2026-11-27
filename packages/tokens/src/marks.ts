@@ -1,6 +1,9 @@
 // The built-in bot marks: line drawings on a 24 by 24 grid, drawn with a 1.7 stroke, round caps and joins, no fill.
 export const MARK_STROKE = 1.7;
 
+// How much of a bot's picture its mark fills.
+export const MARK_SHARE = 0.5;
+
 export const MARKS: Record<string, readonly string[]> = {
   junior: ["M8 12a4 4 0 1 0 8 0a4 4 0 1 0 -8 0"],
   atlas: ["M4.5 18.5 12 5.5 19.5 18.5 Z"],

@@ -19,7 +19,7 @@ export default function MemoryScreen() {
       {pending.map((approval) => (
         <ApprovalCard key={approval.id} approvalId={approval.id} />
       ))}
-      <Segmented label="Memory file" options={MEMORY_FILES.map((candidate) => ({ value: candidate.name, label: candidate.name.replace(".md", "").replace("_", " ") }))} value={open} onChange={setOpen} />
+      <Segmented label="Memory file" options={MEMORY_FILES.map((candidate) => ({ value: candidate.name, label: candidate.label }))} value={open} onChange={setOpen} />
       <Note>{info.about}</Note>
       <ErrorText>{memory.error}</ErrorText>
       {file === undefined ? <Note>Loading…</Note> : <FileEditor key={`${file.name}\n${file.content}`} botId={bot.id} file={file} label={`${file.name} · ${memoryAudience(info.shared, bot.name)}`} saved={saved} onSaved={onSaved} onEdit={onEdit} />}

@@ -1,5 +1,5 @@
-import type { Bot } from "@botsman/client-core";
-import { MARK_STROKE, MARKS } from "@botsman/tokens";
+import { type Bot, botInitial } from "@botsman/client-core";
+import { MARK_SHARE, MARK_STROKE, MARKS } from "@botsman/tokens";
 
 // A bot's picture: its uploaded photo, its chosen mark, or a square with its initial.
 export function Avatar({ bot, size = 40 }: { bot: Pick<Bot, "name" | "avatar">; size?: number }) {
@@ -7,8 +7,8 @@ export function Avatar({ bot, size = 40 }: { bot: Pick<Bot, "name" | "avatar">; 
   if (bot.avatar?.kind === "photo") return <img src={bot.avatar.dataUrl} alt="" style={box} className="shrink-0 rounded-lg border border-border object-cover" />;
   const mark = bot.avatar?.kind === "mark" ? MARKS[bot.avatar.mark] : undefined;
   return (
-    <span style={box} aria-hidden className="flex shrink-0 items-center justify-center rounded-lg border border-border bg-card font-display text-sm font-bold uppercase">
-      {mark === undefined ? bot.name.trim().charAt(0) : <MarkIcon paths={mark} size={Math.round(size * 0.5)} />}
+    <span style={box} aria-hidden className="flex shrink-0 items-center justify-center rounded-lg border border-border bg-card font-display text-sm font-bold">
+      {mark === undefined ? botInitial(bot.name) : <MarkIcon paths={mark} size={Math.round(size * MARK_SHARE)} />}
     </span>
   );
 }

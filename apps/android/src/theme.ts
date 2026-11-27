@@ -3,16 +3,12 @@ import { fontFaces, type Palette, palettes, radius, space } from "@botsman/token
 import { createContext, useContext } from "react";
 import { useColorScheme } from "react-native";
 
-// The font files the build embeds, named as Android knows them.
-export const fontFamilies = {
-  displayRegular: fontFaces.displayRegular.file,
-  display: fontFaces.display.file,
-  displayBlack: fontFaces.displayBlack.file,
-  body: fontFaces.body.file,
-  bodyMedium: fontFaces.bodyMedium.file,
-  bodySemiBold: fontFaces.bodySemiBold.file,
-  mono: fontFaces.mono.file,
-} as const;
+type FontFaces = typeof fontFaces;
+
+// Every font the tokens list, named as Android knows it: by its file name.
+export const fontFamilies = Object.fromEntries(Object.entries(fontFaces).map(([key, face]) => [key, face.file])) as {
+  [Key in keyof FontFaces]: FontFaces[Key]["file"];
+};
 
 export type Theme = { colors: Palette; dark: boolean };
 

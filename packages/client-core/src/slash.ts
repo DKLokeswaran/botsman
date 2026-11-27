@@ -3,7 +3,7 @@ import type { ChatController } from "./chat-controller.ts";
 export type SlashCommand = { name: string; hint: string };
 
 // Commands for actions with no button. Skills arrive with M4.
-export const SLASH_COMMANDS: readonly SlashCommand[] = [
+const SLASH_COMMANDS: readonly SlashCommand[] = [
   { name: "compact", hint: "Summarize this chat into the context" },
   { name: "clear", hint: "Clear this chat's context" },
   { name: "memory", hint: "Open this bot's memory files" },

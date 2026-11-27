@@ -1,4 +1,4 @@
-import type { Avatar, Bot, ModelInfo, ModelRef, PermissionMode } from "@botsman/protocol";
+import { type Avatar, type Bot, BOT_NAME_PATTERN, BotLimits, type ModelInfo, type ModelRef, type PermissionMode } from "@botsman/protocol";
 import { effortLabel } from "./format.ts";
 
 // What each permission mode does, as bot settings explains it. Smart says it runs like Off until the classifier exists.
@@ -11,8 +11,14 @@ export const PERMISSION_MODES: readonly { mode: PermissionMode; label: string; n
 const MINUTE = 60_000;
 const HOUR = 60 * MINUTE;
 
+// The line under a bot's permission mode. Memory edits ask whatever the mode.
+export function permissionNote(mode: PermissionMode): string {
+  const chosen = PERMISSION_MODES.find((option) => option.mode === mode)!;
+  return `${chosen.note} Memory edits always ask, in every mode.`;
+}
+
 // How long an approval waits before it is refused. The server accepts one minute to seven days.
-export const APPROVAL_WAITS: readonly { label: string; ms: number }[] = [
+const APPROVAL_WAITS: readonly { label: string; ms: number }[] = [
   { label: "15 minutes", ms: 15 * MINUTE },
   { label: "1 hour", ms: HOUR },
   { label: "8 hours", ms: 8 * HOUR },
@@ -27,35 +33,57 @@ export function approvalWaitLabel(ms: number): string {
   return ms < HOUR ? `${Math.round(ms / MINUTE)} minutes` : `${Math.round(ms / HOUR)} hours`;
 }
 
+// The waits to choose from, with the bot's own first when it is outside the usual ones.
+export function approvalWaitChoices(current: number): { label: string; ms: number; chosen: boolean }[] {
+  const usual = APPROVAL_WAITS.map((wait) => ({ ...wait, chosen: wait.ms === current }));
+  return usual.some((wait) => wait.chosen) ? usual : [{ label: approvalWaitLabel(current), ms: current, chosen: true }, ...usual];
+}
+
 // Why a name can't be saved, or undefined when it can. The server refuses slashes, backslashes, and control characters.
 export function botNameProblem(name: string): string | undefined {
   const trimmed = name.trim();
   if (trimmed === "") return "Give the bot a name.";
-  if (trimmed.length > 60) return "Keep the name to 60 characters.";
-  if (/[/\\\u0000-\u001f]/.test(trimmed)) return "A name can't contain slashes or control characters.";
+  if (trimmed.length > BotLimits.name) return `Keep the name to ${BotLimits.name} characters.`;
+  if (!new RegExp(BOT_NAME_PATTERN).test(trimmed)) return "A name can't contain slashes or control characters.";
   return undefined;
 }
 
-// The largest photo the server stores, as a data URL. Apps shrink a picked photo to fit well under this.
-export const PHOTO_LIMIT = 400_000;
+// The square and the JPEG quality apps shrink a picked photo to, well under the largest photo the server stores.
 export const PHOTO_SIZE = 256;
+export const PHOTO_QUALITY = 0.85;
 
 // A picked photo as an avatar, or an error when it is still too large after shrinking.
 export function photoAvatar(dataUrl: string): Avatar {
-  if (dataUrl.length > PHOTO_LIMIT) throw new Error("That photo is too large. Try another.");
+  if (dataUrl.length > BotLimits.photo) throw new Error("That photo is too large. Try another.");
   return { kind: "photo", dataUrl };
+}
+
+// What a bot's picture shows when it has no photo or mark.
+export function botInitial(name: string): string {
+  return name.trim().charAt(0).toUpperCase();
 }
 
 // The model a new bot starts with: the main bot's default when it is still connected, else the first connected model.
 export function suggestedModel(models: readonly ModelInfo[], mainDefault: ModelRef | null | undefined): ModelRef | null {
   const main = models.find((model) => sameModel(model, mainDefault ?? null));
   const pick = main ?? models[0];
-  return pick === undefined ? null : { provider: pick.provider, modelId: pick.id };
+  return pick === undefined ? null : modelRef(pick);
 }
 
-// A model as a picker lists it.
-export function modelLabel(model: ModelInfo): string {
-  return `${model.name} · ${model.provider}`;
+// A model as a picker lists it, marked when it is the one in use.
+export type ModelChoice = { key: string; label: string; chosen: boolean; ref: ModelRef };
+
+export function modelChoices(models: readonly ModelInfo[], current: ModelRef | null): ModelChoice[] {
+  return models.map((model) => ({
+    key: `${model.provider}/${model.id}`,
+    label: `${model.name} · ${model.provider}`,
+    chosen: sameModel(model, current),
+    ref: modelRef(model),
+  }));
+}
+
+function modelRef(model: ModelInfo): ModelRef {
+  return { provider: model.provider, modelId: model.id };
 }
 
 export function sameModel(model: ModelInfo, ref: ModelRef | null): boolean {

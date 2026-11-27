@@ -1,5 +1,5 @@
-import { type Bot, chatSubtitle, contextTokens, modelProblem } from "@botsman/client-core";
-import { useBot, useChat, useConnectionStatus, useModels } from "@botsman/client-core/react";
+import type { Bot } from "@botsman/client-core";
+import { useBot, useChat } from "@botsman/client-core/react";
 import { useEffect, useRef } from "react";
 import { Avatar } from "../components/avatar.tsx";
 import { ChatItemView } from "../components/chat-items.tsx";
@@ -10,17 +10,13 @@ import { botInfoHref } from "../use-route.ts";
 // One bot's chat with the owner.
 export function ChatScreen({ botId }: { botId: string }) {
   const bot = useBot(botId);
-  const { chat, state, items, sendModes } = useChat(botId);
-  const reconnecting = useConnectionStatus() === "reconnecting";
+  const { chat, state, items, sendModes, busy, reconnecting, subtitle, problem } = useChat(botId);
   const scroller = useStickToBottom(items);
-  const { models, loading } = useModels();
-  const problem = loading || state.status === "loading" ? undefined : modelProblem(models, state.settings.model);
 
   if (bot === undefined) return <p className="p-6 text-muted-foreground">This bot no longer exists.</p>;
-  const busy = state.live.running || state.live.compacting;
   return (
     <section className="flex h-full min-w-0 flex-1 flex-col">
-      <ChatHeader bot={bot} subtitle={chatSubtitle(state.settings, state.totals.usage.cost, models, contextTokens(state.messages))} />
+      <ChatHeader bot={bot} subtitle={subtitle} />
       {reconnecting ? (
         <p role="status" className="border-b border-border bg-card px-4 py-1.5 text-center text-xs text-primary">
           Reconnecting…

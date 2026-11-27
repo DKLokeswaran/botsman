@@ -68,6 +68,3 @@ export type LoginAnswer = Static<typeof LoginAnswer>;
 
 export const LoginParams = obj({ loginId: str({ minLength: 1 }) });
 export type LoginParams = Static<typeof LoginParams>;
-
-export const LoginStart = obj({ method: opt(oneOf(["oauth"])) });
-export type LoginStart = Static<typeof LoginStart>;

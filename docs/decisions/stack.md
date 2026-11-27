@@ -19,7 +19,7 @@
 | Windows app | Tauri 2.12.5, React 19.3.0, Vite 8.3.8, Tailwind 4.3.5, shadcn | Tray, small installer, and WebView2 |
 | Windows token storage | The `keyring` crate 4.2.0 | Writes to Windows Credential Manager from Rust |
 | Markdown on Windows and web | `react-markdown` 10.1.0 with `remark-gfm` 4.0.1 | Renders to React elements with no raw HTML, and covers tables |
-| Fonts | Orbitron, Inter, and Fragment Mono shipped inside each app, from the same complete `.ttf` files in `packages/tokens/fonts`. `fontFaces` in `tokens` lists them, and a new font goes there | Every app covers the same characters, so text looks the same on all of them. The apps draw the same offline, and ask no outside host for fonts |
+| Fonts | Orbitron, Inter, and Fragment Mono shipped inside each app, from the same complete `.ttf` files in `packages/tokens/fonts`. `fontFaces` in `tokens` lists them, and a new font goes there. The apps take each font's name and file path from it | Every app covers the same characters, so text looks the same on all of them. The apps draw the same offline, and ask no outside host for fonts |
 | Web dashboard | The same React screens in a browser, served by the server | No screens to build twice |
 | Android app | Expo 58.0.25, React Native 0.88.1. Native libraries at the versions `expo install` picks. | Native chat feel, and shares TypeScript with everything else |
 | Keyboard | `react-native-keyboard-controller` | Tracks the keyboard natively |
@@ -36,6 +36,7 @@
 | Type checks | TypeScript 6.0.3, `tsc` with no emit | Checks the sources Node runs as they are |
 | Import rules | dependency-cruiser 18.8.0 | Checks where each import resolves, so a relative path can't get around a rule. One command for agents and CI. See [import rules](#import-rules). |
 | Code rules | ESLint 10.14.0 with `@typescript-eslint/parser` 8.72.1, and stylelint 18.0.0 | Only the rules below, most of them the repo's own, with no shared rule sets. See [code rules](#code-rules). |
+| Copied code | jscpd 4.3.0 | Compares files across packages, which ESLint can't. It only reports. See [code rules](#code-rules). |
 
 ## Repo layout
 
@@ -84,6 +85,7 @@ flowchart LR
 10. Only the server's `engine` module imports Pi Durable. The server's tests may import it to test the engine.
 11. Only the server and `protocol` import Pi packages, and `protocol` imports only `pi-schema`. Apps never see Pi's formats, so a Pi upgrade changes no client code.
 12. Code that ships imports only its own package's dependencies. Tests, scripts, config files, and type-only imports may use devDependencies, and a peerDependency also listed as a devDependency for type checks counts as a dependency.
+13. In `client-core/src`, only the `react` folder imports React, and nothing outside that folder imports from it. The rest stays plain TypeScript, so the server's tests use it and it is tested without rendering.
 
 The re-exports behind rules 6 and 8 carry types only, through `export type *`, so the protocol's and `client-core`'s functions stay out of the screens and shells.
 
@@ -96,6 +98,7 @@ The re-exports behind rules 6 and 8 carry types only, through `export type *`, s
 | Rule | Where | Why |
 | --- | --- | --- |
 | Complexity at most 10 | Code that ships | Functions stay small enough to read. |
+| Complexity at most 8, with a warning above 6 | Screens and their components on both apps | A screen that branches more than this is usually deciding something. It only warns above 6, because showing and hiding parts of a screen also counts. |
 | At most 50 lines per function, not counting blank lines and comments | Code that ships | Same reason. |
 | A warning for a named function that only passes its parameters to another function | Code that ships | Small functions shouldn't turn into wrappers that add no meaning. It warns rather than fails, because some wrappers hide a private member on purpose. |
 | No `eval`, `new Function`, or code in a string passed to a timer | All TypeScript | A string from a bot or a web page must never run as code. |
@@ -104,7 +107,15 @@ The re-exports behind rules 6 and 8 carry types only, through `export type *`, s
 | No hex colours | Client packages and stylesheets outside `tokens` | Colours come from the `tokens` package. |
 | The app's name is never written out | Client packages | It comes from `APP_NAME`, so a preview build says Botsman Preview. |
 | No `fetch`, `WebSocket`, `localStorage`, `sessionStorage`, `indexedDB`, `expo-sqlite`, or `expo-secure-store` | Screens and their components on both apps | Screens hold no logic. They reach the network and storage through `client-core` and the platform shells. |
+| No call on the server's client, such as `client.updateBot()` | Screens and their components on both apps | The hook in `client-core` that makes the call also holds its busy state, its error, and what it sends, so the apps don't repeat them. |
+| No `filter`, `find`, `some`, `every`, `reduce`, `sort`, or their variants | Screens and their components on both apps | Choosing and combining data is logic. `map` is allowed, because it draws a list. |
 | `process.env` only in `server/src/config.ts` | The server's code | The server reads its settings in one place and never reads provider keys from its environment. |
+
+TypeScript's `noUnusedLocals` and `noUnusedParameters` fail the type check on unused imports, variables, and parameters.
+
+`pnpm lint:copies` lists code copied between packages, with jscpd. It never fails a pull request, because the two apps' screens match in layout on purpose and it can't tell that from repeated logic. It isn't part of `pnpm lint`. CI runs it as its own step.
+
+CI runs every check even when an earlier one failed, with each linter as its own step, so one run shows every failure.
 
 Code that ships is `src/` in every package and app, and Android's `app/`. Tests, scripts, and config files are left out of the size rules. Client packages are `pc-ui` and the three apps.
 

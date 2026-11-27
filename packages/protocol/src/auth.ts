@@ -4,10 +4,13 @@ import { BotCreate } from "./bots.ts";
 export const SetupStatus = obj({ needsSetup: bool() });
 export type SetupStatus = Static<typeof SetupStatus>;
 
+// The fewest characters an owner password may have.
+export const SHORTEST_PASSWORD = 12;
+
 // First-run setup: the owner's password and the main bot. `cookie` asks for the session in cookies, as the web
 // dashboard does, and the reply is then a SessionInfo.
 export const SetupRequest = obj({
-  password: str({ minLength: 12, maxLength: 1024 }),
+  password: str({ minLength: SHORTEST_PASSWORD, maxLength: 1024 }),
   deviceName: str({ minLength: 1, maxLength: 100 }),
   mainBot: BotCreate,
   cookie: opt(bool()),

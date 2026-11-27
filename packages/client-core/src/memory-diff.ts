@@ -2,6 +2,9 @@ import type { Approval } from "@botsman/protocol";
 
 export type DiffLine = { kind: "same" | "added" | "removed"; text: string };
 
+// What a memory edit's card writes before each line.
+const LINE_PREFIXES: Record<DiffLine["kind"], string> = { added: "+ ", removed: "− ", same: "  " };
+
 const CONTEXT_LINES = 2;
 
 // The lines a memory edit adds and removes, against the file when the bot asked, with a little unchanged context
@@ -47,9 +50,12 @@ function trimContext(lines: DiffLine[]): DiffLine[] {
   return lines.filter((line, index) => line.kind !== "same" || near(index));
 }
 
-// The heading and source line of a memory edit's card, as the mockup words them.
-export function memoryEditText(approval: Approval, botName: string): { title: string; source: string } {
-  const file = approval.memoryEdit?.file ?? "a memory file";
+// A memory edit's card: its heading and source line, as the mockup words them, and the lines the edit changes, each
+// with its prefix.
+export function memoryEditView(approval: Approval, botName: string): { title: string; source: string; lines: DiffLine[] } {
+  const edit = approval.memoryEdit;
+  const file = edit?.file ?? "a memory file";
+  const lines = edit === null ? [] : memoryDiff(edit.previous, edit.content);
   const time = new Date(approval.createdAt).toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" });
-  return { title: `${botName} wants to change ${file}`, source: `From: the chat · ${time}. ${botName} keeps working on other things while this waits.` };
+  return { title: `${botName} wants to change ${file}`, source: `From: the chat · ${time}. ${botName} keeps working on other things while this waits.`, lines: lines.map((line) => ({ ...line, text: LINE_PREFIXES[line.kind] + line.text })) };
 }

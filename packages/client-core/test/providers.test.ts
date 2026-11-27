@@ -1,6 +1,6 @@
 import type { ProviderLogin } from "@botsman/protocol";
 import { describe, expect, it } from "vitest";
-import { effortChoices, loginView, modelProblem, shownEffort } from "../src/index.ts";
+import { connectLabel, connectMethods, effortChoices, loginLine, loginView, modelProblem, shownEffort } from "../src/index.ts";
 
 const login = (change: Partial<ProviderLogin>): ProviderLogin => ({ id: "l1", providerId: "p", status: "running", steps: [], pendingPrompt: null, error: null, ...change });
 
@@ -50,5 +50,22 @@ describe("model problems", () => {
     expect(shownEffort(model, "medium")).toBe("high");
     expect(shownEffort(model, "max")).toBe("high");
     expect(shownEffort(model, "low")).toBe("low");
+  });
+});
+
+describe("provider connection", () => {
+  it("says how a sign-in is going and how it ended", () => {
+    const line = (change: Partial<ProviderLogin>) => loginLine(loginView(login(change)));
+    expect(line({})).toBeUndefined();
+    expect(line({ steps: [{ type: "progress", message: "Waiting" }] })).toEqual({ tone: "muted", text: "Waiting" });
+    expect(line({ status: "succeeded" })).toEqual({ tone: "good", text: "Connected." });
+    expect(line({ status: "cancelled" })).toEqual({ tone: "bad", text: "The sign-in stopped." });
+    expect(line({ status: "failed", error: "Denied" })).toEqual({ tone: "bad", text: "Denied" });
+  });
+
+  it("labels the form's button, and offers a switch only between two ways", () => {
+    expect([connectLabel({ connected: true }, true), connectLabel({ connected: true }, false), connectLabel({ connected: false }, false)]).toEqual(["Close", "Replace", "Connect"]);
+    expect(connectMethods({ methods: ["api_key"], oauthLabel: null })).toBeUndefined();
+    expect(connectMethods({ methods: ["api_key", "oauth"], oauthLabel: null })).toEqual([{ value: "api_key", label: "API key" }, { value: "oauth", label: "Sign in" }]);
   });
 });

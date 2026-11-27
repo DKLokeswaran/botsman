@@ -1,5 +1,5 @@
-import { formatCountdown, memoryDiff, memoryEditText, type Approval } from "@botsman/client-core";
-import { useAction, useApproval, useBot, useBotsmanClient, useNow } from "@botsman/client-core/react";
+import type { Approval } from "@botsman/client-core";
+import { useApproval, useApprovalCard, useMemoryEditCard } from "@botsman/client-core/react";
 import { Button } from "./ui/button.tsx";
 
 // A tool call waiting for the owner: why the bot asks, the full command, the time left, and the answers.
@@ -11,32 +11,25 @@ export function ApprovalCard({ approvalId }: { approvalId: string }) {
 
 // A bot asking to change one of its memory files: what it adds and removes, and Confirm or Reject.
 function MemoryEditCard({ approval }: { approval: Approval }) {
-  const client = useBotsmanClient();
-  const now = useNow();
-  const bot = useBot(approval.botId);
-  const answer = useAction((decision: "allow_once" | "deny") => client.answerApproval(approval.id, decision));
-  const edit = approval.memoryEdit!;
-  const text = memoryEditText(approval, bot?.name ?? "The bot");
-  const lines = memoryDiff(edit.previous, edit.content);
+  const { title, source, lines, countdown, answer } = useMemoryEditCard(approval);
   return (
     <section aria-label="Memory edit" className="flex flex-col gap-3 rounded-xl border border-primary bg-card p-4">
       <header className="flex items-baseline justify-between gap-4">
         <span className="text-xs font-semibold text-primary">Needs you · Memory edit</span>
         <span className="font-mono text-xs text-muted-foreground" title="Time left to answer">
-          {formatCountdown(approval.expiresAt, now)}
+          {countdown}
         </span>
       </header>
-      <h3 className="text-base font-semibold">{text.title}</h3>
+      <h3 className="text-base font-semibold">{title}</h3>
       <div className="flex max-h-64 flex-col overflow-auto rounded-lg border border-border bg-background py-1 font-mono text-xs">
         {lines.length === 0 ? <span className="px-3 py-0.5 text-muted-foreground">No change</span> : null}
         {lines.map((line, index) => (
           <span key={index} className={`px-3 py-0.5 whitespace-pre-wrap ${line.kind === "added" ? "bg-green/15 text-green" : line.kind === "removed" ? "bg-destructive/15 text-destructive" : "text-muted-foreground"}`}>
-            {line.kind === "added" ? "+ " : line.kind === "removed" ? "− " : "  "}
             {line.text}
           </span>
         ))}
       </div>
-      <p className="text-xs text-muted-foreground">{text.source}</p>
+      <p className="text-xs text-muted-foreground">{source}</p>
       {answer.error === undefined ? null : <p className="text-sm text-destructive">{answer.error}</p>}
       <div className="flex gap-2">
         <Button variant="primary" disabled={answer.busy} onClick={() => void answer.run("allow_once")}>
@@ -51,15 +44,13 @@ function MemoryEditCard({ approval }: { approval: Approval }) {
 }
 
 function ApprovalDetails({ approval }: { approval: Approval }) {
-  const client = useBotsmanClient();
-  const now = useNow();
-  const answer = useAction((decision: "allow_once" | "allow_chat" | "deny") => client.answerApproval(approval.id, decision));
+  const { countdown, answer } = useApprovalCard(approval);
   return (
     <section aria-label="Approval" className="flex flex-col gap-3 rounded-xl border border-primary bg-card p-4">
       <header className="flex items-baseline justify-between gap-4">
         <h3 className="font-display text-sm font-bold uppercase text-primary">Needs your approval</h3>
         <span className="font-mono text-xs text-muted-foreground" title="Time left to answer">
-          {formatCountdown(approval.expiresAt, now)}
+          {countdown}
         </span>
       </header>
       <p className="text-sm">{approval.description}</p>

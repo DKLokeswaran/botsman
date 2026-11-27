@@ -1,7 +1,6 @@
-import { type ChatController, effortChoices, effortLabel, modelLabel, PICKER_SCOPES, type PickerScope, pickerValue, sameModel, shownEffort, type Bot, type ChatSettings, type ModelRef, type ThinkingLevel } from "@botsman/client-core";
-import { useAction, useBotsmanClient, useModels } from "@botsman/client-core/react";
+import type { Bot, ChatController, ChatSettings } from "@botsman/client-core";
+import { useModelPicker } from "@botsman/client-core/react";
 import { router } from "expo-router";
-import { useState } from "react";
 import { Modal, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { fontFamilies, radius, space, useTheme } from "../theme";
@@ -11,39 +10,29 @@ import { ErrorText, Note, Segmented } from "./page";
 // changes only the bot's default.
 export function ModelSheet({ visible, bot, chat, onClose }: { visible: boolean; bot: Bot; chat?: { controller: ChatController; settings: ChatSettings }; onClose: () => void }) {
   const { colors } = useTheme();
-  const client = useBotsmanClient();
-  const { models, loading } = useModels();
-  const [scope, setScope] = useState<PickerScope>(chat === undefined ? "bot" : "chat");
-  const value = pickerValue(scope, chat?.settings ?? { model: bot.defaultModel, thinkingLevel: bot.thinkingLevel }, bot);
-  const save = useAction((change: { model?: ModelRef | null; thinkingLevel?: ThinkingLevel }) =>
-    scope === "chat" && chat !== undefined ? chat.controller.changeSettings(change) : client.updateBot(bot.id, { defaultModel: change.model, thinkingLevel: change.thinkingLevel }),
-  );
-  const current = models.find((model) => sameModel(model, value.model));
+  const picker = useModelPicker(bot, chat);
   return (
     <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
       <Pressable accessibilityLabel="Close" style={styles.backdrop} onPress={onClose} />
       <SafeAreaView edges={["bottom"]} style={[styles.sheet, { backgroundColor: colors.card, borderColor: colors.border }]}>
         <View style={styles.body}>
-          {chat === undefined ? null : <Segmented label="Applies to" options={PICKER_SCOPES} value={scope} onChange={setScope} />}
-          <Note>{value.note}</Note>
+          {picker.scopes === undefined ? null : <Segmented label="Applies to" options={picker.scopes} value={picker.scope} onChange={picker.setScope} />}
+          <Note>{picker.note}</Note>
           <Text style={[styles.label, { color: colors.foreground }]}>Model</Text>
-          {loading ? <Note>Loading…</Note> : null}
+          {picker.loading ? <Note>Loading…</Note> : null}
           <ScrollView style={styles.models} nestedScrollEnabled>
-            {models.map((model) => {
-              const chosen = sameModel(model, value.model);
-              return (
-                <Pressable key={`${model.provider}/${model.id}`} accessibilityRole="radio" accessibilityState={{ checked: chosen }} onPress={() => void save.run({ model: { provider: model.provider, modelId: model.id } })} style={styles.option}>
-                  <Text style={[styles.optionText, { color: chosen ? colors.primary : colors.foreground }]}>
-                    {chosen ? "● " : "○ "}
-                    {modelLabel(model)}
-                  </Text>
-                </Pressable>
-              );
-            })}
+            {picker.models.map((model) => (
+              <Pressable key={model.key} accessibilityRole="radio" accessibilityState={{ checked: model.chosen }} onPress={() => picker.pickModel(model.ref)} style={styles.option}>
+                <Text style={[styles.optionText, { color: model.chosen ? colors.primary : colors.foreground }]}>
+                  {model.chosen ? "● " : "○ "}
+                  {model.label}
+                </Text>
+              </Pressable>
+            ))}
           </ScrollView>
           <Text style={[styles.label, { color: colors.foreground }]}>Reasoning effort</Text>
-          <EffortChips model={current} thinkingLevel={value.thinkingLevel} onPick={(level) => void save.run({ thinkingLevel: level })} />
-          <ErrorText>{save.error}</ErrorText>
+          <EffortChips efforts={picker.efforts} onPick={picker.pickEffort} />
+          <ErrorText>{picker.error}</ErrorText>
           <Pressable accessibilityRole="button" onPress={() => (onClose(), router.push("/providers"))} hitSlop={8} style={styles.footer}>
             <Text style={[styles.optionText, { color: colors.primary }]}>Connect a provider</Text>
           </Pressable>
@@ -53,21 +42,18 @@ export function ModelSheet({ visible, bot, chat, onClose }: { visible: boolean; 
   );
 }
 
-type Model = ReturnType<typeof useModels>["models"][number];
+type Picker = ReturnType<typeof useModelPicker>;
 
 // The reasoning efforts the model offers, with the one in use marked.
-function EffortChips({ model, thinkingLevel, onPick }: { model: Model | undefined; thinkingLevel: ThinkingLevel; onPick: (level: ThinkingLevel) => void }) {
+function EffortChips({ efforts, onPick }: { efforts: Picker["efforts"]; onPick: Picker["pickEffort"] }) {
   const { colors } = useTheme();
   return (
     <View style={styles.chips}>
-      {effortChoices(model).map((level) => {
-        const chosen = level === shownEffort(model, thinkingLevel);
-        return (
-          <Pressable key={level} accessibilityRole="radio" accessibilityState={{ checked: chosen }} onPress={() => onPick(level)} style={[styles.chip, { borderColor: chosen ? colors.primary : colors.border }]}>
-            <Text style={[styles.chipText, { color: chosen ? colors.primary : colors.foreground }]}>{effortLabel(level)}</Text>
-          </Pressable>
-        );
-      })}
+      {efforts.map(({ level, label, chosen }) => (
+        <Pressable key={level} accessibilityRole="radio" accessibilityState={{ checked: chosen }} onPress={() => onPick(level)} style={[styles.chip, { borderColor: chosen ? colors.primary : colors.border }]}>
+          <Text style={[styles.chipText, { color: chosen ? colors.primary : colors.foreground }]}>{label}</Text>
+        </Pressable>
+      ))}
     </View>
   );
 }

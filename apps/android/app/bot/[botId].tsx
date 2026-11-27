@@ -1,5 +1,5 @@
-import { botNameProblem, modelDefaultLabel, photoAvatar, type Avatar as AvatarValue, type Bot } from "@botsman/client-core";
-import { useAction, useBot, useBotsmanClient } from "@botsman/client-core/react";
+import { modelDefaultLabel, type Bot } from "@botsman/client-core";
+import { useBot, useBotNameForm, useBotPhoto, useDeleteBot } from "@botsman/client-core/react";
 import { MARK_IDS, MARKS } from "@botsman/tokens";
 import { router, useLocalSearchParams } from "expo-router";
 import { useState } from "react";
@@ -32,50 +32,40 @@ export default function BotInfoScreen() {
 
 function FacePicker({ bot }: { bot: Bot }) {
   const { colors } = useTheme();
-  const client = useBotsmanClient();
-  const save = useAction((avatar: AvatarValue | null) => client.updateBot(bot.id, { avatar }));
-  const upload = useAction(async () => {
-    const dataUrl = await pickPhoto();
-    if (dataUrl !== undefined) await client.updateBot(bot.id, { avatar: photoAvatar(dataUrl) });
-  });
+  const photo = useBotPhoto(bot);
   return (
     <View style={styles.group}>
       <View style={styles.hero}>
         <Avatar bot={bot} size={96} />
         <View style={styles.group}>
-          <Button label="Upload a photo" variant="primary" disabled={upload.busy} onPress={() => void upload.run()} />
-          {bot.avatar === null ? null : <Button label="Use the initial" variant="text" onPress={() => void save.run(null)} />}
+          <Button label="Upload a photo" variant="primary" disabled={photo.uploading} onPress={() => photo.upload(pickPhoto)} />
+          {photo.canClear ? <Button label="Use the initial" variant="text" onPress={() => photo.choose(null)} /> : null}
         </View>
       </View>
       <Note>Or choose</Note>
       <View style={styles.marks}>
         {MARK_IDS.map((mark) => {
-          const chosen = bot.avatar?.kind === "mark" && bot.avatar.mark === mark;
+          const chosen = photo.chosenMark === mark;
           return (
-            <Pressable key={mark} accessibilityRole="button" accessibilityLabel={mark} accessibilityState={{ selected: chosen }} onPress={() => void save.run({ kind: "mark", mark })} style={[styles.mark, { borderColor: chosen ? colors.primary : colors.border }]}>
+            <Pressable key={mark} accessibilityRole="button" accessibilityLabel={mark} accessibilityState={{ selected: chosen }} onPress={() => photo.choose({ kind: "mark", mark })} style={[styles.mark, { borderColor: chosen ? colors.primary : colors.border }]}>
               <MarkIcon paths={MARKS[mark]!} size={22} color={chosen ? colors.primary : colors.foreground} />
             </Pressable>
           );
         })}
       </View>
-      <ErrorText>{save.error ?? upload.error}</ErrorText>
+      <ErrorText>{photo.error}</ErrorText>
     </View>
   );
 }
 
 function NameForm({ bot }: { bot: Bot }) {
-  const client = useBotsmanClient();
-  const [name, setName] = useState(bot.name);
-  const [description, setDescription] = useState(bot.description);
-  const problem = botNameProblem(name);
-  const changed = name.trim() !== bot.name || description.trim() !== bot.description;
-  const save = useAction(() => client.updateBot(bot.id, { name: name.trim(), description: description.trim() }));
+  const form = useBotNameForm(bot);
   return (
     <View style={styles.group}>
-      <Field label="Name" value={name} maxLength={60} autoCapitalize="words" onChangeText={setName} />
-      <Field label="Description" value={description} maxLength={500} autoCapitalize="sentences" onChangeText={setDescription} />
-      <ErrorText>{changed ? (problem ?? save.error) : save.error}</ErrorText>
-      {changed ? <Button label="Save" variant="primary" disabled={problem !== undefined || save.busy} onPress={() => void save.run()} /> : null}
+      <Field label="Name" value={form.name} maxLength={form.limits.name} autoCapitalize="words" onChangeText={form.setName} />
+      <Field label="Description" value={form.description} maxLength={form.limits.description} autoCapitalize="sentences" onChangeText={form.setDescription} />
+      <ErrorText>{form.error}</ErrorText>
+      {form.changed ? <Button label="Save" variant="primary" disabled={!form.ready} onPress={form.submit} /> : null}
     </View>
   );
 }
@@ -94,20 +84,15 @@ function ModelDefault({ bot }: { bot: Bot }) {
 
 function DeleteBot({ bot }: { bot: Bot }) {
   const { colors } = useTheme();
-  const client = useBotsmanClient();
-  const [asking, setAsking] = useState(false);
-  const remove = useAction(async () => {
-    await client.deleteBot(bot.id);
-    router.dismissAll();
-  });
+  const { asking, setAsking, question, remove, busy, error } = useDeleteBot(bot, () => router.dismissAll());
   if (bot.isMain) return <Note>The main bot can't be deleted.</Note>;
   if (!asking) return <Button label="Delete bot" variant="danger" onPress={() => setAsking(true)} />;
   return (
     <View style={[styles.confirm, { borderColor: colors.destructive }]}>
-      <Note>{`Delete ${bot.name}? It leaves the apps, and its data stays on the server. The main bot can restore it.`}</Note>
-      <ErrorText>{remove.error}</ErrorText>
+      <Note>{question}</Note>
+      <ErrorText>{error}</ErrorText>
       <View style={styles.hero}>
-        <Button label="Delete" variant="danger" disabled={remove.busy} onPress={() => void remove.run()} />
+        <Button label="Delete" variant="danger" disabled={busy} onPress={remove} />
         <Button label="Cancel" variant="text" onPress={() => setAsking(false)} />
       </View>
     </View>

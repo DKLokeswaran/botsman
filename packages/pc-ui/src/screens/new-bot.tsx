@@ -1,4 +1,3 @@
-import { modelLabel, sameModel, type ModelInfo, type ModelRef } from "@botsman/client-core";
 import { useNewBotDraft } from "@botsman/client-core/react";
 import { ErrorText, Page } from "../components/page.tsx";
 import { Button } from "../components/ui/button.tsx";
@@ -11,40 +10,37 @@ export function NewBotScreen() {
   return (
     <Page title="New bot" back="#/">
       <p className="text-sm text-muted-foreground">The bot gets its own folder, its own files, and its own chat. It starts with Manual permissions.</p>
-      <Field label="Name" value={name} maxLength={60} onChange={(event) => setName(event.target.value)} />
-      <Field label="Description" placeholder="Shown in the bot list" value={description} maxLength={500} onChange={(event) => setDescription(event.target.value)} />
+      <Field label="Name" value={name} maxLength={draft.limits.name} onChange={(event) => setName(event.target.value)} />
+      <Field label="Description" placeholder="Shown in the bot list" value={description} maxLength={draft.limits.description} onChange={(event) => setDescription(event.target.value)} />
       <label className="flex flex-col gap-1.5 text-sm">
         <span className="font-medium">Purpose</span>
-        <textarea rows={6} maxLength={6000} placeholder="What this bot is for. Saved as BOT_PROFILE.md." className="rounded-lg border border-input bg-background px-3 py-2 outline-none focus:border-ring" value={purpose} onChange={(event) => setPurpose(event.target.value)} />
+        <textarea rows={6} maxLength={draft.limits.purpose} placeholder="What this bot is for. Saved as BOT_PROFILE.md." className="rounded-lg border border-input bg-background px-3 py-2 outline-none focus:border-ring" value={purpose} onChange={(event) => setPurpose(event.target.value)} />
       </label>
-      <ModelSelect models={draft.models} loading={draft.loading} value={draft.model} onChange={draft.setModel} />
+      <ModelSelect draft={draft} />
       <Field label="Folder on the server" placeholder="~/.botsman/workspaces/<id>" spellCheck={false} value={folder} onChange={(event) => setFolder(event.target.value)} hint={draft.folderHint} />
       <ErrorText>{draft.error}</ErrorText>
-      <Button variant="primary" className="self-start" disabled={!draft.ready || draft.create.busy} onClick={() => void draft.create.run()}>
+      <Button variant="primary" className="self-start" disabled={!draft.ready} onClick={() => void draft.create.run()}>
         Create bot
       </Button>
     </Page>
   );
 }
 
-function ModelSelect({ models, loading, value, onChange }: { models: ModelInfo[]; loading: boolean; value: ModelRef | null; onChange: (model: ModelRef | null) => void }) {
-  const chosen = models.findIndex((model) => sameModel(model, value));
+// The bot's default model, or none.
+function ModelSelect({ draft }: { draft: ReturnType<typeof useNewBotDraft> }) {
+  const { models, modelKey, chooseModel } = draft;
   return (
     <label className="flex flex-col gap-1.5 text-sm">
       <span className="font-medium">Default model</span>
-      <select className="rounded-lg border border-input bg-background px-3 py-2" value={chosen} onChange={(event) => onChange(toRef(models[Number(event.target.value)]))}>
-        <option value={-1}>{loading ? "Loading…" : "None yet"}</option>
-        {models.map((model, index) => (
-          <option key={`${model.provider}/${model.id}`} value={index}>
-            {modelLabel(model)}
+      <select className="rounded-lg border border-input bg-background px-3 py-2" value={modelKey} onChange={(event) => chooseModel(event.target.value)}>
+        <option value="">{draft.loading ? "Loading…" : "None yet"}</option>
+        {models.map((model) => (
+          <option key={model.key} value={model.key}>
+            {model.label}
           </option>
         ))}
       </select>
-      {!loading && models.length === 0 ? <span className="text-xs text-muted-foreground">Connect a model provider to choose a model.</span> : null}
+      {draft.modelHint === undefined ? null : <span className="text-xs text-muted-foreground">{draft.modelHint}</span>}
     </label>
   );
-}
-
-function toRef(model: ModelInfo | undefined): ModelRef | null {
-  return model === undefined ? null : { provider: model.provider, modelId: model.id };
 }

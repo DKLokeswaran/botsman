@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import type { BackgroundAlerts, BackgroundStatus } from "../background-alerts.ts";
-import { useStore } from "./hooks.ts";
+import { useStore } from "./use-server-state.ts";
 
 const STATUS_POLL_MS = 3_000;
 

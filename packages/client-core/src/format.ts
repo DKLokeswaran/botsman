@@ -1,6 +1,7 @@
-import type { Bot, BotActivity, ChatMessage, ChatSettings, ModelInfo, Usage } from "@botsman/protocol";
+import type { Approval, Bot, BotActivity, ChatMessage, ChatSettings, ModelInfo, Usage } from "@botsman/protocol";
 import { sameModel } from "./bot-settings.ts";
 import { shownEffort } from "./providers.ts";
+import type { ConnectionStatus } from "./stream-connection.ts";
 
 // Time left until a moment, as `47:10`, or `1:02:05` past an hour. Never below zero.
 export function formatCountdown(until: number, now: number): string {
@@ -41,6 +42,28 @@ export function modelChipLabel(settings: ChatSettings, models: readonly ModelInf
   if (settings.model === null) return "Choose a model";
   const info = models.find((candidate) => sameModel(candidate, settings.model));
   return `${info?.name ?? settings.model.modelId} · ${effortLabel(shownEffort(info, settings.thinkingLevel))}`;
+}
+
+// The server's host and port as the apps name it, or the address as typed when it isn't a full URL.
+export function serverHost(baseUrl: string): string {
+  try {
+    return new URL(baseUrl).host;
+  } catch {
+    return baseUrl;
+  }
+}
+
+// How the connection to the server is doing, with the server's host where there is one to name.
+export function connectionLine(status: ConnectionStatus, baseUrl: string): string {
+  const host = serverHost(baseUrl);
+  if (status === "online") return `Connected to ${host}`;
+  if (status === "reconnecting") return `Reconnecting to ${host}…`;
+  return status === "connecting" ? "Connecting…" : "Offline";
+}
+
+// The small line over an approval in the Needs you list: which bot asks, and for what.
+export function needsYouLine(approval: Pick<Approval, "memoryEdit">, botName: string | undefined): string {
+  return `${botName ?? "Bot"} · ${approval.memoryEdit === null ? "Approval" : "Memory edit"}`;
 }
 
 // A context window as a short round number, such as 200k or 1M.
@@ -88,7 +111,7 @@ export function botRowText(description: string, activity: BotActivity | undefine
 }
 
 // An unread count as a badge shows it, or empty when nothing is unread.
-export function formatUnread(count: number): string {
+function formatUnread(count: number): string {
   if (count <= 0) return "";
   return count > 99 ? "99+" : String(count);
 }

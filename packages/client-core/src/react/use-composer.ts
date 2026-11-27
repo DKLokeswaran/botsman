@@ -5,9 +5,10 @@ import { exactCommand, runCommand, type SlashCommand, type SlashScreen, slashMat
 import { useAction } from "./use-action.ts";
 
 // The message box's text and what it does: sending in a mode, running a command typed or picked from the list, and
-// stopping the reply. `matches` lists the commands for a message that starts with /. `openScreen` takes the owner to
+// stopping the reply. `matches` lists the commands for a message that starts with /, and `placeholder` says what a message
+// does while the bot is busy. `openScreen` takes the owner to
 // the screen a command opens.
-export function useComposer(chat: ChatController, openScreen: (screen: SlashScreen, botId: string) => void) {
+export function useComposer(chat: ChatController, botName: string, busy: boolean, openScreen: (screen: SlashScreen, botId: string) => void) {
   const [text, setText] = useState("");
   const stop = useAction(() => chat.stop());
   const command = useAction(async (picked: SlashCommand) => {
@@ -26,5 +27,6 @@ export function useComposer(chat: ChatController, openScreen: (screen: SlashScre
     void chat.send(message, mode);
   };
 
-  return { text, setText, matches: slashMatches(text), empty: text.trim() === "", send, command, stop };
+  const label = `Message ${botName}`;
+  return { text, setText, label, placeholder: busy ? "Queue a message" : label, matches: slashMatches(text), empty: text.trim() === "", send, command, stop };
 }

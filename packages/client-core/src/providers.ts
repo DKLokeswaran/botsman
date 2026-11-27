@@ -1,4 +1,4 @@
-import type { Bot, ChatSettings, LoginStep, ModelInfo, ModelRef, ProviderLogin, ThinkingLevel } from "@botsman/protocol";
+import type { Bot, ChatSettings, LoginStep, ModelInfo, ModelRef, Provider, ProviderLogin, ThinkingLevel } from "@botsman/protocol";
 import { ThinkingLevels } from "@botsman/protocol";
 import { sameModel } from "./bot-settings.ts";
 
@@ -29,6 +29,25 @@ export function loginView(login: ProviderLogin): LoginView {
     outcome: login.status === "succeeded" ? "connected" : login.status,
     error: login.error ?? undefined,
   };
+}
+
+// The line a sign-in ends with, or its progress while it runs, and how the line should read.
+export function loginLine(view: LoginView): { tone: "muted" | "good" | "bad"; text: string } | undefined {
+  if (view.outcome === "connected") return { tone: "good", text: "Connected." };
+  if (view.outcome !== "running") return { tone: "bad", text: view.error ?? "The sign-in stopped." };
+  return view.progress === undefined ? undefined : { tone: "muted", text: view.progress };
+}
+
+// The button that opens and closes a provider's Connect form.
+export function connectLabel(provider: Pick<Provider, "connected">, open: boolean): string {
+  if (open) return "Close";
+  return provider.connected ? "Replace" : "Connect";
+}
+
+// The ways to connect a provider, as its form's switch labels them, or undefined when there is nothing to switch.
+export function connectMethods(provider: Pick<Provider, "methods" | "oauthLabel">): { value: Provider["methods"][number]; label: string }[] | undefined {
+  if (provider.methods.length < 2) return undefined;
+  return provider.methods.map((value) => ({ value, label: value === "api_key" ? "API key" : (provider.oauthLabel ?? "Sign in") }));
 }
 
 // A provider's status line in the list.
